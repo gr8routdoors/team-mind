@@ -1,0 +1,16 @@
+# agent-os/specs/index.yml
+# Master index of all specs with status
+#
+# Statuses:
+#   in_requirements - Gathering requirements, shaping scope
+#   in_design       - Architectural design phase
+#   in_progress     - Implementation underway
+#   complete        - All stories pass verification
+#   archived        - No longer active (completed or abandoned)
+#
+# Note: Archived specs are moved to _archive/ directory
+
+specs:
+  
+
+# Next spec number: 001

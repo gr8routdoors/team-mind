@@ -1,0 +1,89 @@
+# Standards Index
+# Used by /inject-standards to find relevant conventions for the current task.
+#
+# Tags enable efficient filtering by skill, activity, and language.
+# Usage: Skills read this file and filter by tags to inject applicable standards.
+
+standards:
+  guardrails:
+    path: guardrails.md
+    tags: [all]
+    description: Anti-patterns and lessons learned — what NOT to do
+
+  best-practices:
+    path: best-practices.md
+    tags: [coding, reviewing]
+    description: Core principles — SOLID, YAGNI, TDD, error handling
+
+  code-style:
+    path: code-style.md
+    tags: [coding, reviewing]
+    description: General formatting, references language-specific guides
+    children:
+      java:
+        path: code-style/java.md
+        tags: [coding, reviewing, java]
+        description: Java conventions — naming, formatting, Javadoc
+      go:
+        path: code-style/go.md
+        tags: [coding, reviewing, go]
+        description: Go conventions — naming, formatting, error handling
+
+  tech-stack:
+    path: tech-stack.md
+    tags: [architecture, planning]
+    description: Approved technologies and infrastructure
+
+  testing:
+    path: testing.md
+    tags: [coding, testing, reviewing]
+    description: TDD principles, coverage expectations, test patterns
+
+  bdd:
+    path: bdd.md
+    tags: [testing, planning, java, go]
+    description: BDD conventions — AC format, coverage patterns, Go/Java frameworks
+
+  git:
+    path: git.md
+    tags: [committing]
+    description: Conventional commits, branch naming, PR conventions
+
+  observability:
+    path: observability.md
+    tags: [coding, reviewing, operations]
+    description: Logging, metrics, tracing instrumentation for Splunk
+
+# =============================================================================
+# Tag Reference
+# =============================================================================
+#
+# Skills → Recommended Tags:
+#   /shape-spec           → [planning, architecture]
+#   /continue-spec        → [planning, architecture]
+#   /derive-acs           → [planning, testing]
+#   /generate-bdd-tests   → [testing, java, go]
+#   /investigate          → [all]
+#   /plan-product         → [planning, architecture]
+#   /inject-standards     → varies by activity (see below)
+#
+# Activities → Tags:
+#   Writing Java code     → [coding, java]
+#   Writing Go code       → [coding, go]
+#   Writing tests         → [coding, testing]
+#   Code review           → [reviewing, java] or [reviewing, go]
+#   Making commits        → [committing]
+#   Architecture work     → [architecture, planning]
+#   Operations/debugging  → [operations]
+#
+# Tag Definitions:
+#   all          - Always relevant (guardrails)
+#   coding       - Writing new code
+#   reviewing    - Reviewing code (PRs, pair programming)
+#   testing      - Writing or reviewing tests
+#   committing   - Making git commits
+#   planning     - Specs, architecture decisions
+#   architecture - System design, tech choices
+#   operations   - Logging, monitoring, debugging
+#   java         - Java-specific standards
+#   go           - Go-specific standards

@@ -1,0 +1,11 @@
+# IDE files
+.vscode/
+.idea/
+.cursor/
+
+# Local environment files
+.env
+.envrc
+
+# MCP server caches
+.serena/
