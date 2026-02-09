@@ -26,6 +26,14 @@
 **Don't:** Start implementing features without a written specification.
 **Instead:** Use `/shape-spec` to create spec documentation first.
 
+### GR-C03: Don't Disable Tests
+**Don't:** Don't disable tests that fail as a result of a change.
+**Instead:** Triage why the test is failing to understand if the change has defects.
+
+### GR-C04: Don't Change Test Expectations To Get Them To Pass
+**Don't:** Don't change a test's expectations to get them to pass, unless specifically instructed to do so.
+**Instead:** Triage why the test is failing to understand if the change has defects.
+
 ---
 
 ## Data
