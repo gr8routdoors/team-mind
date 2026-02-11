@@ -120,7 +120,7 @@ Based on what was learned, update other artifacts:
 
 ### Step 4: Update Priorities (if needed)
 
-If work is complete or priorities shifted:
+If spec is complete or priorities shifted:
 - Update `agent-os/product/roadmap.md`
 - Move completed items, add new items
 
