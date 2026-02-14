@@ -56,20 +56,94 @@ The discipline enforcement features (subagent-per-story, two-stage code review, 
 - [ ] **Lean profile** — Single agent, no agent code review, lighter verification (confirm tests pass but skip the full evidence-gathering ritual). For experienced teams with strong CI pipelines and review culture who primarily want the spec structure and session memory. Minimal token overhead beyond baseline.
 - [ ] **Profile-aware skill behavior** — `/dispatch-subagents` checks profile: in `full` mode it spawns fresh subagents; in `team`/`lean` mode it executes stories inline. `/request-code-review` checks profile: in `full` mode it dispatches reviewers; in `team`/`lean` mode it skips. `/verify-completion` checks profile: in `full`/`team` mode it does full evidence gathering; in `lean` mode it does a lighter check. Anti-rationalization tables and hard gates remain active in all profiles — they're essentially free (just text the agent reads).
 
+### Python tooling foundation
+
+Lit SDLC ships with a `pyproject.toml` at root and uses [UV](https://github.com/astral-sh/uv) for dependency management. Python tools live in a `tools/` directory and work out of the box — no separate install step. This gives the framework executable tooling alongside the declarative markdown/YAML content, enabling deterministic scripts that are testable with pytest.
+
+- [ ] **`pyproject.toml` + UV setup** — Add `pyproject.toml` to the repo root with UV as the package manager. Define the `tools/` directory as a Python package. Include core dependencies (PyYAML, python-frontmatter, Click) and dev dependencies (pytest, ruff). Document the convention in a standard so agents know to use UV.
+- [ ] **Standards index validator** (`tools/validate_standards.py`) — Parse `standards/index.yml`, verify all referenced files exist, validate tag syntax, check for orphaned standard files not in the index. First concrete tool demonstrating the pattern.
+- [ ] **Install validation script** (`tools/validate_install.py`) — Verify directory structure, check all skill files present, validate AGENTS.md has required sections. Used by `/clean-install` skill under the hood.
+- [ ] **Session frontmatter parser** (`tools/parse_session.py`) — Parse enhanced session summaries with YAML frontmatter (session_id, tokens_used, cost_usd, status, stories_completed/remaining). Foundation for autonomous execution and session analytics.
+- [ ] **`/clean-install` delegates to Python** — The skill handles the interactive conversation; the Python script handles the deterministic file operations (reset templates, remove specs, validate structure). Best of both: conversational UX + reliable execution.
+
+### Upgrade and contribution workflow
+
+Once you clone Lit SDLC into your project, the framework files and your project-specific content live in the same repo. Upstream improvements (new skills, updated standards, bug fixes) are currently impossible to adopt without manually diffing and copying files. Going the other direction — contributing enhancements you develop in your project back to the Lit SDLC source repo — is equally manual. This needs a proper solution.
+
+- [ ] **Framework vs. project boundary** — Establish a clear, machine-enforceable boundary between framework files (skills, standards templates, tools, core guardrails) and project-specific files (product docs, specs, sessions, AGENTS.md customizations, project-specific standards). This could be a manifest file (`framework-manifest.yml`) listing every framework-owned file and its version hash, or a directory convention, or both. `/clean-install` already needs this boundary — the upgrade system builds on the same concept.
+- [ ] **`/upgrade` skill** — Check the upstream Lit SDLC repo for changes, diff against the local framework files, and present the user with a clear summary: what's new, what's changed, what conflicts with local modifications. For clean upgrades (no local modifications to framework files), apply automatically. For conflicts, walk the user through each one interactively — show the upstream change, show the local modification, ask which to keep or how to merge. Think `git merge` UX but for framework files specifically.
+- [ ] **Upgrade Python tooling** (`tools/upgrade.py`) — The deterministic side of the upgrade skill. Fetch upstream manifest, compare hashes, identify changed/new/removed framework files, detect local modifications to framework files, generate a diff report. The skill handles the conversation; the tool handles the file comparison.
+- [ ] **`/contribute-upstream` skill** — For enhancements made in a project repo that should flow back to the Lit SDLC source. Identify which framework files have been modified locally (new skills, updated standards, improved guardrails), extract them into a clean PR-ready format against the upstream repo, and help the user write a contribution summary. Could generate a patch set or prepare a branch in a local clone of the source repo.
+- [ ] **Version tagging** — Tag Lit SDLC releases with semantic versions. The manifest tracks which version is installed. The upgrade skill can show "you're on v2.1.0, v2.2.0 is available" and present a changelog. This also enables projects to pin to a known-good version and upgrade deliberately.
+
 ### Other distribution items
 
 - [ ] Getting started guide and documentation
-- [ ] Automated skill testing framework
+- [ ] Automated skill testing framework (can leverage Python tooling + pytest)
+- [ ] **`autonomous` operating profile** — Extends the profile system with a fourth profile for fully autonomous execution. Includes everything in `full` plus: session frontmatter for handoff continuity, cost budget enforcement, structured exit reasons, and "Next Agent Should" sections in session summaries. Skills check for this profile and produce machine-readable output where needed.
 
-## Phase 4: Advanced Workflows (Future)
+## Phase 4: Advanced Workflows
 
 - [ ] Deployment and release management (GAP-002)
 - [ ] Hotfix / emergency workflow (GAP-003)
-- [ ] Story dependency tracking (GAP-004)
+- [ ] Story dependency tracking with `depends_on` field in stories.yml (GAP-004)
 - [ ] Refactoring / tech debt workflow (GAP-005)
 - [ ] NFR tracking integration (GAP-007)
 - [ ] External tool integration patterns (GAP-010)
 - [ ] Component documentation skill (GAP-011)
+- [ ] Enhanced `/start-session` with handoff resumption — Read YAML frontmatter from previous session summaries and resume from where the last agent left off. Support "Proposed Actions" from prior session.
+- [ ] Enhanced `/end-session` with structured frontmatter — Produce YAML frontmatter (session_id, spec, tokens_used, cost_usd, status, exit_reason, stories_completed/remaining, files_modified, git_state) plus "Next Agent Should" and "Proposed Actions" sections.
+- [ ] Additional unattended guardrails (GR-U07 through GR-U12) — Don't install new dependencies without rationale, don't modify files outside spec scope, don't bypass tests, don't retry failing approach >3 times, write handoff before 80% context budget, don't modify shared config without flagging.
+
+## Phase 5: Autonomous Execution
+
+The framework supports a spectrum from fully interactive to fully autonomous. Phase 5 builds the orchestration layer that reads Lit SDLC artifacts (roadmap, specs, stories) as a work queue and dispatches AI agents to execute stories on a schedule, with security isolation, cost controls, and audit trails. The orchestrator is built as Python tooling in the `tools/` directory — not a separate project.
+
+Reference architecture: [autonomous-agents-plan-original.md](context/architecture/autonomous-agents-plan-original.md) (imported from the original ALIT-SDLC project)
+
+### Phase 5.0: Core orchestrator
+
+- [ ] **Artifact parsers** (`tools/orchestrator/parsers/`) — Parse roadmap.md, specs/index.yml, stories.yml (with `depends_on` and `claimed_by` fields), session summaries, and standards index. All parsers testable with pytest.
+- [ ] **Task selection algorithm** (`tools/orchestrator/task_selector.py`) — Priority-ordered, story-level selection with dependency DAG. Only select stories whose dependencies are all `passing`. Mark selected stories as `claimed_by: <session_id>`.
+- [ ] **Context builder** (`tools/orchestrator/context_builder.py`) — Assemble agent prompts from spec README, story ACs, relevant standards (via index tags), architecture docs, and previous session summaries. Keeps prompt focused and within context window limits.
+- [ ] **Claude Code SDK driver** (`tools/orchestrator/drivers/claude_code.py`) — Wrap the Claude Code SDK. Inject `/start-session` at the beginning and `/end-session` before context budget exhaustion. Include token budget callback for cost enforcement.
+- [ ] **Orchestrator core loop + CLI** (`tools/orchestrator/main.py`) — Click-based CLI with `run-cycle` command. One cycle: parse artifacts → select task → build context → dispatch agent → collect results → update story status. Idempotent — safe to run repeatedly.
+- [ ] **Audit logging** (`tools/orchestrator/audit.py`) — Append-only JSON lines log. Record every cycle: timestamp, story selected, agent session_id, tokens_used, cost_usd, outcome, files_modified.
+- [ ] **Cost enforcement** (`tools/orchestrator/cost_enforcer.py`) — Per-session, per-day, per-spec, and monthly token/cost budgets. Graceful handling when budget exhausted (complete current story, don't start new ones).
+- [ ] **Git management** (`tools/orchestrator/git_manager.py`) — Create branch per session, commit agent work, push. No worktrees in Phase 5.0 (single agent at a time).
+- [ ] **Systemd timer / cron scheduling** — Run `orchestrator run-cycle` on a schedule. Document setup for both systemd and cron.
+
+### Phase 5.1: Security isolation + GitHub integration
+
+- [ ] Docker container per session with resource limits
+- [ ] Bash allowlist — restrict which commands agents can run
+- [ ] Git worktree isolation per session
+- [ ] Network policy per container
+- [ ] Volume permissions (append-only for audit, read-only for standards)
+- [ ] `/sync-github` skill — Automated PR creation, CI status monitoring, review feedback collection
+
+### Phase 5.2: Multi-driver + enterprise integration
+
+- [ ] **Cursor driver** (`tools/orchestrator/drivers/cursor.py`) — Cursor CLI headless mode (`cursor agent "prompt" --print --force --output-format stream-json`). Generate `.cursor/rules/` from lit-sdlc standards. Agent-agnostic: same orchestrator, different driver.
+- [ ] `/sync-confluence` skill — Read docs from Confluence, publish updated specs back
+- [ ] `/sync-jira` skill — Bi-directional ticket sync (Jira epic ↔ spec, Jira story ↔ lit-sdlc story)
+- [ ] `/notify-teams` skill — Alerts, approval workflows, stuck agent notifications
+
+### Phase 5.3: Multi-agent + approvals
+
+- [ ] Concurrent agent execution with serialized merge strategy
+- [ ] Three-tier file permissions: forbidden / propose_only / agent_writable
+- [ ] Three-tier skill permissions: human_only / propose_only / autonomous
+- [ ] Approval queue (Teams, Slack, or web UI) for proposed actions
+- [ ] Stuck detection + kill switch for runaway agents
+
+### Phase 5.4: Self-improving
+
+- [ ] Auto-guardrail generation from failure patterns
+- [ ] Automated standards discovery from successful sessions
+- [ ] Adaptive scheduling based on historical cycle performance
+- [ ] Cross-session learning — aggregate patterns across specs
+- [ ] Cost ROI reporting per spec
 
 ## Blocked
 
@@ -82,3 +156,7 @@ _None currently._
 - Automated spec-to-issue-tracker sync
 - Metrics dashboard for spec completion tracking
 - Plugin system for custom skills
+- Observability dashboard (Grafana or custom HTML) for autonomous execution
+- `/rollback-spec` skill for reverting failed autonomous work
+- Credential rotation with secrets sidecar for containerized agents
+- Role-based permission tiers for team-scale autonomous execution

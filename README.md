@@ -1,8 +1,8 @@
 # Lit SDLC
 
-**A file-based framework that makes AI coding agents reliable.**
+**A file-based framework that makes AI coding agents reliable — from interactive pairing to fully autonomous execution.**
 
-AI agents write code fast but ship broken, inconsistent, incomplete work. They forget context between sessions, ignore conventions, skip testing, and declare "done" without evidence. Lit SDLC fixes this by wrapping the entire software development lifecycle in structured markdown and YAML files that agents read and follow — no runtime, no server, no dependencies. Just drop the files into your repo.
+AI agents write code fast but ship broken, inconsistent, incomplete work. They forget context between sessions, ignore conventions, skip testing, and declare "done" without evidence. Lit SDLC fixes this by wrapping the entire software development lifecycle in structured markdown and YAML files that agents read and follow. The framework supports a spectrum from interactive development (human + agent pairing) to fully autonomous execution (orchestrator dispatches agents on a schedule with security isolation and cost controls). Same skills, same specs, same standards — different operating modes.
 
 > **Meta note:** This repository uses Lit SDLC to manage its own development. The [product roadmap](agent-os/product/roadmap.md), [active specs](agent-os/specs/index.yml), and [session history](agent-os/context/sessions/) are all real artifacts produced by the framework's own workflows. What you see here is a working example.
 
@@ -305,9 +305,13 @@ For **brownfield projects** (existing codebases with docs scattered across Confl
 
 ## Current Status
 
-Lit SDLC is actively developing itself using its own framework. Phase 1 (Foundation) and Phase 2 (Discipline Enforcement) are complete. Phase 3 (Distribution) is up next — centered on a `/clean-install` skill that resets the repo to a clean skeleton and walks you through setup, with an `/onboard-project` skill for brownfield adoption that guides ingestion and vetting of existing documentation from tools like Confluence and Google Docs.
+Lit SDLC is actively developing itself using its own framework. Phase 1 (Foundation) and Phase 2 (Discipline Enforcement) are complete. The [roadmap](agent-os/product/roadmap.md) has five phases:
 
-The [roadmap](agent-os/product/roadmap.md) tracks all phases. Known gaps and future work items are documented in [gaps.md](agent-os/gaps.md). The first spec, [SPEC-001: Adopt Superpowers Discipline Patterns](agent-os/specs/SPEC-001-adopt-superpowers-discipline/README.md), added anti-rationalization tables, hard gates, verification enforcement, subagent-driven development, two-stage code review, CSO rules, and git worktree standards — all inspired by analysis of the [Superpowers](https://github.com/NickBaynworker/superpowers) framework.
+- **Phase 3 (Distribution)** — `/clean-install` skill, `/onboard-project` for brownfield adoption, operating profiles (full/team/lean/autonomous), Python tooling foundation with UV
+- **Phase 4 (Advanced Workflows)** — Enhanced session handoff, additional unattended guardrails, deployment and hotfix workflows
+- **Phase 5 (Autonomous Execution)** — Python orchestrator that reads Lit SDLC artifacts as a work queue, dispatches AI agents on a schedule, with security isolation (Docker, bash allowlists, network policies), cost controls, audit trails, multi-driver support (Claude Code + Cursor), and enterprise integrations (GitHub, Confluence, Jira, Teams). Reference architecture: [autonomous-agents-plan](agent-os/context/architecture/autonomous-agents-plan-original.md)
+
+Known gaps and future work items are documented in [gaps.md](agent-os/gaps.md). The first spec, [SPEC-001: Adopt Superpowers Discipline Patterns](agent-os/specs/SPEC-001-adopt-superpowers-discipline/README.md), added anti-rationalization tables, hard gates, verification enforcement, subagent-driven development, two-stage code review, CSO rules, and git worktree standards — all inspired by analysis of the [Superpowers](https://github.com/NickBaynworker/superpowers) framework.
 
 ---
 
@@ -330,4 +334,5 @@ The [gaps.md](agent-os/gaps.md) file documents every known gap, open question, a
 | [Standards Index](agent-os/standards/index.yml) | All conventions, tagged |
 | [Gaps](agent-os/gaps.md) | Known gaps and open questions |
 | [Specs](agent-os/specs/index.yml) | Active feature work |
+| [Autonomous Execution Reference](agent-os/context/architecture/autonomous-agents-plan-original.md) | Architecture blueprint for Phase 5 |
 | [agent-os v3](https://github.com/buildermethods/agent-os) | Upstream framework |
