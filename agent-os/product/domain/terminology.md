@@ -50,3 +50,12 @@
 |------|-----------|
 | **Interactive Mode** | Developer present. Agent asks questions and iterates. |
 | **Unattended Mode** | Agent works autonomously. Must follow guardrails GR-U01 through GR-U06. |
+
+## Operating Profiles (Future)
+
+| Term | Definition |
+|------|-----------|
+| **Operating Profile** | A configuration setting in AGENTS.md (`operating_profile: full\|team\|lean`) that tunes skill behavior to match a team's workflow. Not yet implemented — see `SPEC-002/future-profiles.md` for the vision. |
+| **Full Profile** | (Future) Subagent per story, two-stage agent review, full verification. Target: solo dev or AI-heavy teams. |
+| **Team Profile** | (Future) Single agent, skip agent review (humans review PRs), full verification. Target: teams with human PR review. |
+| **Lean Profile** | (Future) Single agent, no agent review, lighter verification. Target: experienced teams with strong CI. |

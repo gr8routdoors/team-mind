@@ -1,0 +1,87 @@
+# Stories for SPEC-003: Framework Distribution
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: pyproject.toml + UV setup
+    description: Add pyproject.toml with UV package management, tools/ directory structure, core and dev dependencies
+    status: failing
+    verified_by: null
+
+  STORY-002:
+    name: Standards index validator
+    description: Create tools/validate_standards.py — parse index.yml, verify files exist, validate tags, check for orphans
+    status: failing
+    verified_by: null
+
+  STORY-003:
+    name: Install validation script
+    description: Create tools/validate_install.py — verify directory structure, skill files, AGENTS.md sections
+    status: failing
+    verified_by: null
+
+  STORY-004:
+    name: Framework/project boundary manifest
+    description: Create framework-manifest.yml listing all framework-owned files with version hashes, plus manifest tooling
+    status: failing
+    verified_by: null
+
+  STORY-005:
+    name: /upgrade skill + upgrade tooling
+    description: Create /upgrade skill and tools/upgrade.py for diffing and applying upstream framework changes
+    status: failing
+    verified_by: null
+
+  STORY-006:
+    name: /contribute-upstream skill
+    description: Create skill to identify local framework modifications and package them for upstream contribution
+    status: failing
+    verified_by: null
+
+  STORY-007:
+    name: Version tagging
+    description: Establish semantic versioning convention, integrate version into manifest, support changelog generation
+    status: failing
+    verified_by: null
+
+  STORY-008:
+    name: Minimal AGENTS.md redesign
+    description: Redesign AGENTS.md as boot loader — strip framework docs, keep only project config and startup instruction
+    status: failing
+    verified_by: null
+
+  STORY-009:
+    name: /clean-install skill
+    description: Create skill for resetting repo to clean skeleton with interactive setup wizard and install validation
+    status: failing
+    verified_by: null
+
+  STORY-010:
+    name: /onboard-project skill
+    description: Create skill for brownfield adoption — content ingestion, quality assessment, transformation, feature mapping, gap analysis
+    status: failing
+    verified_by: null
+
+  STORY-011:
+    name: Getting started guide
+    description: Write user-facing walkthrough covering install, first session, and common workflows
+    status: failing
+    verified_by: null
+
+verification:
+  criteria:
+    - pyproject.toml valid and UV resolves dependencies
+    - tools/validate_standards.py catches invalid index entries
+    - tools/validate_install.py catches missing files/directories
+    - framework-manifest.yml accurately lists all framework files
+    - /upgrade detects upstream changes and handles conflicts
+    - /contribute-upstream identifies local modifications
+    - Version tags follow semantic versioning
+    - AGENTS.md is minimal boot loader format
+    - /clean-install produces valid clean skeleton
+    - /onboard-project successfully ingests and structures sample content
+    - Getting started guide is approachable for new users
+    - All new skills have CSO-compliant descriptions
+    - All new skills include anti-rationalization tables
+  completed: false
+  completed_date: null

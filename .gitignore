@@ -9,3 +9,6 @@
 
 # MCP server caches
 .serena/
+
+# Garbage OSX files
+.DS_Store

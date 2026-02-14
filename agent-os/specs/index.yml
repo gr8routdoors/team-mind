@@ -18,4 +18,18 @@ specs:
     stories: 7
     stories_complete: 0
 
-# Next spec number: 002
+  SPEC-002:
+    name: Developer Workflow
+    status: in_progress
+    created: 2026-02-14
+    stories: 2
+    stories_complete: 1
+
+  SPEC-003:
+    name: Framework Distribution
+    status: in_requirements
+    created: 2026-02-14
+    stories: 11
+    stories_complete: 0
+
+# Next spec number: 004

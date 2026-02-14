@@ -1,0 +1,26 @@
+# Stories for SPEC-002: Developer Workflow
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: /commit skill
+    description: Create standalone skill for context-aware conventional git commits with selective staging and atomic commit enforcement
+    status: passing
+    verified_by: AC verification — all 5 ACs pass (context-aware spec/ad-hoc, selective staging, atomic enforcement, conventional format)
+
+  STORY-002:
+    name: /ship-pr skill
+    description: Create skill that assembles PR from Lit SDLC artifacts (spec, story, ACs, verification evidence) with git hygiene
+    status: failing
+    verified_by: null
+
+verification:
+  criteria:
+    - All skills have CSO-compliant descriptions
+    - All skills include anti-rationalization tables
+    - /commit produces conventional commit messages from spec context
+    - /commit handles work outside specs (ad hoc changes)
+    - /ship-pr creates well-described PR from spec artifacts
+    - /ship-pr handles uncommitted changes by calling /commit first
+  completed: false
+  completed_date: null

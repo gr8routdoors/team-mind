@@ -99,10 +99,6 @@ Adopting Lit SDLC in an existing ("brownfield") project is currently painful. Th
 
 - [ ] **Getting started guide** — A walkthrough for new users covering: what Lit SDLC is (link to README), how to install it (link to `/clean-install` or manual steps), first session workflow (`/bootstrap` → `/start-session` → `/shape-spec`), and common patterns. Should be approachable for someone who has never used a context engineering framework.
 
-### 3.9 — Automated skill testing framework
-
-- [ ] **Skill testing framework** — A pytest-based system for testing skills. Define expected inputs (trigger conditions, project state) and assert expected outputs (files created, content patterns, workflow steps followed). Leverages the Python tooling from 3.2. Enables regression testing when skills are modified — critical for the `/upgrade` workflow in 3.3 where upstream skill changes need to be validated against project customizations.
-
 ## Phase 4: Advanced Workflows
 
 - [ ] Deployment and release management (GAP-002)
@@ -172,6 +168,7 @@ _None currently._
 
 ## Ideas / Backlog
 
+- Automated skill testing framework — pytest-based system for testing skills (expected inputs → expected outputs), enables regression testing for upgrades
 - Multi-language BDD support beyond Go and Java
 - CI/CD pipeline integration patterns
 - Automated spec-to-issue-tracker sync
