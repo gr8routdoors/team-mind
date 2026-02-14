@@ -1,6 +1,6 @@
 ---
 name: investigate
-description: Investigate bugs, performance issues, or understand existing behavior - document findings for future sessions
+description: Use when debugging, diagnosing performance, or understanding existing behavior
 triggers:
   - "investigate"
   - "debug"
@@ -13,6 +13,18 @@ triggers:
 # Investigate
 
 Investigate bugs, performance issues, or understand existing behavior. Document findings for future sessions.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping investigation:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "I already know the cause" | Certainty before investigation is the root of all bugs. You'll fix the wrong thing. | Form hypotheses but verify them through investigation. |
+| "There's no time to investigate" | No time to investigate = spending days on the wrong fix. | 30 minutes of investigation saves hours of rework. |
+| "I'll just look at the code" | Looking isn't investigating. You'll miss context, gotchas, and trade-offs documented elsewhere. | Follow the full process to gather complete context. |
+| "Documentation can wait until later" | Later never comes. You'll forget findings. Next session will repeat the investigation. | Document findings immediately so knowledge persists. |
+| "This is a one-off issue, not worth documenting" | One-off today is a recurring problem tomorrow. Document it to prevent repetition. | Even small findings go into component-details or guardrails. |
 
 ## Process
 

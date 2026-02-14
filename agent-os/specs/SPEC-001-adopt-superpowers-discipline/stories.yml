@@ -1,0 +1,58 @@
+# Stories for SPEC-001: Adopt Superpowers Discipline Patterns
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Anti-rationalization sections in all skills
+    description: Add rationalization tables to all 12 existing skills
+    status: failing
+    verified_by: null
+
+  STORY-002:
+    name: Verify-completion skill
+    description: Create skill enforcing evidence-before-claims verification
+    status: failing
+    verified_by: null
+
+  STORY-003:
+    name: Dispatch-subagents skill
+    description: Create subagent-driven development skill with prompt templates
+    status: failing
+    verified_by: null
+
+  STORY-004:
+    name: Hard gates in workflow skills
+    description: Add hard gates to shape-spec, derive-acs, generate-bdd-tests, continue-spec
+    status: failing
+    verified_by: null
+
+  STORY-005:
+    name: CSO standard and description audit
+    description: Create CSO standard and audit all skill descriptions for compliance
+    status: failing
+    verified_by: null
+
+  STORY-006:
+    name: Code review skills
+    description: Create request-code-review and receive-code-review skills
+    status: failing
+    verified_by: null
+
+  STORY-007:
+    name: Git worktrees standard
+    description: Create git worktrees standard for branch isolation
+    status: failing
+    verified_by: null
+
+verification:
+  criteria:
+    - All 12 existing skills have anti-rationalization sections
+    - verify-completion skill exists and follows conventions
+    - dispatch-subagents skill exists with 3 prompt templates
+    - Hard gates present in 4 workflow skills
+    - CSO standard exists and all descriptions are compliant
+    - Code review skills exist (request + receive)
+    - git-worktrees standard exists with index entry
+    - AGENTS.md, guardrails.md, gaps.md updated
+  completed: false
+  completed_date: null

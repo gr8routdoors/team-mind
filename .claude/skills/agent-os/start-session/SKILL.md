@@ -1,6 +1,6 @@
 ---
 name: start-session
-description: Session startup ritual - loads priorities, context, and spec status before any work begins
+description: Use at the beginning of every new working session
 triggers:
   - "starting work"
   - "new session"
@@ -19,6 +19,18 @@ This skill prevents:
 - Missing context from previous sessions
 - Duplicating completed work
 - Losing track of in-progress stories
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping session startup:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "Nothing has changed since yesterday" | Context decays. Priorities shift, specs are updated, failures are discovered. | Load context to verify state hasn't changed. |
+| "I remember what we're working on" | You don't. Memory is unreliable. Priorities in your head contradict priorities in the roadmap. | Load the roadmap and recent sessions to confirm. |
+| "Starting up takes too long" | Startup takes 5 minutes. False starts from missing context take hours. | Run the process; it pays for itself immediately. |
+| "I'll just look at the spec" | Specs are static. They don't capture blockers, learnings, or decisions made after spec creation. | Load the spec AND recent sessions for complete picture. |
+| "We didn't make decisions in the last session worth reviewing" | Even small decisions compound. Skipping this means you'll remake decisions. | Load sessions to see all reasoning and avoid repetition. |
 
 ## Process
 

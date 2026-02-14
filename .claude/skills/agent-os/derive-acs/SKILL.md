@@ -1,6 +1,6 @@
 ---
 name: derive-acs
-description: Generate acceptance criteria from requirements and architectural design
+description: Use when a spec has requirements and design but needs acceptance criteria
 triggers:
   - "derive acs"
   - "generate acs"
@@ -11,6 +11,24 @@ triggers:
 # Derive ACs
 
 Generate acceptance criteria from requirements and architectural design.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping AC derivation:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "Tests are enough without ACs" | Tests without ACs document what the code does, not what it should do. You end up testing the wrong things. | Derive ACs first, then generate tests from them. |
+| "The ACs are obvious" | Obvious to whom? Discovering edge cases is the whole point. Skipping this means bugs in corner cases. | Run the discovery process to surface hidden scenarios. |
+| "We can write ACs while coding" | You won't. You'll write tests for happy paths and miss edge cases. | Invest 30 minutes in AC discovery before coding starts. |
+| "The design already covers acceptance" | Design describes the architecture, not the business rules. ACs enforce what the feature must do. | Create ACs to bridge design and testable behavior. |
+| "I'll just validate manually" | Manual validation doesn't scale. It's expensive, unreliable, and doesn't prevent regression. | Write automated checks from ACs to catch regressions immediately. |
+
+## HARD GATE
+
+⛔ **DO NOT generate BDD tests or write implementation code** until acceptance criteria have been presented to the user and explicitly approved.
+
+ACs drive tests, tests drive code. Generating tests from unapproved ACs means building the wrong thing faster. Get approval first.
 
 ## Prerequisites
 

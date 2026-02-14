@@ -14,11 +14,11 @@
 | BDD workflow | ✅ Clear | — |
 | Context preservation | ✅ Clear | — |
 | Standards system | ✅ Clear | — |
-| Code review / PR | ❓ Missing | TBD |
+| Code review / PR | ✅ Resolved | — |
 | Deployment | ❓ Missing | TBD |
 | Hotfix workflow | ❓ Missing | TBD |
 | Story dependencies | ❓ Missing | TBD |
-| Multi-agent coordination | ❓ Unclear | TBD |
+| Multi-agent coordination | ✅ Resolved | — |
 | NFR tracking | ❓ Unclear | TBD |
 | Refactoring workflow | ❓ Unclear | TBD |
 | External tool integration | ❓ Missing | TBD |
@@ -307,12 +307,12 @@ Add example content with clear markers:
 
 | Gap ID | Status | Resolved Date | Resolution |
 |--------|--------|---------------|------------|
-| GAP-001 | Open | — | — |
+| GAP-001 | Resolved | 2026-02-14 | SPEC-001: Created request-code-review and receive-code-review skills |
 | GAP-002 | Open | — | — |
 | GAP-003 | Open | — | — |
 | GAP-004 | Open | — | — |
 | GAP-005 | Open | — | — |
-| GAP-006 | Open | — | — |
+| GAP-006 | Resolved | 2026-02-14 | SPEC-001: Created dispatch-subagents skill with implementer + reviewer prompts |
 | GAP-007 | Open | — | — |
 | GAP-008 | Open | — | — |
 | GAP-009 | Open | — | — |
@@ -322,4 +322,4 @@ Add example content with clear markers:
 
 ---
 
-_Last updated: 2026-02-07_
+_Last updated: 2026-02-14_

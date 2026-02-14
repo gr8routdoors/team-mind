@@ -18,6 +18,8 @@ Use the `/inject-standards` skill to load relevant standards for your current ta
 | `standards/guardrails.md` | What NOT to do — anti-patterns and lessons learned |
 | `standards/code-style.md` | Code conventions and patterns |
 | `standards/testing.md` | Testing requirements and patterns |
+| `standards/cso.md` | Claude Search Optimization — rules for skill descriptions |
+| `standards/git-worktrees.md` | Branch isolation pattern for safe development work |
 
 ### Standards vs Skills
 
@@ -56,11 +58,23 @@ For unattended work, review `standards/guardrails.md` — Unattended Mode sectio
 | Shaping | `/shape-spec` | New feature or significant change (creates spec) |
 | Acceptance Criteria | `/derive-acs` | Generate ACs from requirements (standalone) |
 | BDD Tests | `/generate-bdd-tests` | Transform ACs into test scaffolding |
+| Implementation | `/dispatch-subagents` | Execute stories with subagent-driven development |
+| Code Review | `/request-code-review` | Two-stage review (spec compliance + code quality) |
+| Review Feedback | `/receive-code-review` | Handle review feedback with technical rigor |
 | Continuing Work | `/continue-spec` | Resume work on existing spec |
 | Investigation | `/investigate` | Bugs, performance, understanding behavior |
+| Verification | `/verify-completion` | **Before ANY completion claim** — evidence before assertions |
 | End of Session | `/end-session` | Context preservation, session summary |
 
 Before implementation, run `/inject-standards` to load applicable conventions.
+
+### Discipline Enforcement
+
+Every skill includes anti-rationalization sections and hard gates. These prevent agents from skipping critical steps. Key principles:
+- **Anti-rationalization tables**: Each skill lists common excuses agents make to skip it, with counter-arguments
+- **Hard gates**: Explicit blocking points that prevent premature progression (e.g., no code until design approved)
+- **Verification**: No completion claims without running verification commands and citing evidence
+- **CSO compliance**: Skill descriptions only state triggering conditions (see `standards/cso.md`)
 
 ### Quick Start for New Sessions
 
@@ -130,6 +144,10 @@ Each skill is a directory with a `SKILL.md` file:
 | `continue-spec/` | Resume work on existing spec |
 | `derive-acs/` | Generate acceptance criteria from requirements |
 | `generate-bdd-tests/` | Transform ACs into BDD test scaffolding (Go/Java) |
+| `dispatch-subagents/` | Execute stories with fresh subagents + two-stage review |
+| `request-code-review/` | Dispatch code review (spec compliance + code quality) |
+| `receive-code-review/` | Handle review feedback with technical rigor |
+| `verify-completion/` | **Mandatory** — Evidence before completion claims |
 | `investigate/` | Investigate bugs, performance, or behavior |
 | `end-session/` | Context preservation at session end |
 | `plan-product/` | Strategic product planning |

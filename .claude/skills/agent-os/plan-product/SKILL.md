@@ -1,6 +1,6 @@
 ---
 name: plan-product
-description: Establish foundational product documentation - creates mission, roadmap, and tech stack files
+description: Use when a project needs foundational product documentation
 triggers:
   - "plan product"
   - "product planning"
@@ -17,6 +17,18 @@ Establish foundational product documentation through an interactive conversation
 - **Always use AskUserQuestion tool** when asking the user anything
 - **Keep it lightweight** — gather enough to create useful docs without over-documenting
 - **One question at a time** — don't overwhelm with multiple questions
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping product planning:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "We can figure it out as we go" | You can't. Without a mission, you build features that conflict with each other. | Define mission, roadmap, and tech stack upfront. |
+| "A mission statement is overhead" | No. A mission statement prevents wasted work. It's the filter for every feature decision. | Spend 15 minutes defining mission; save weeks of misdirected work. |
+| "We don't need a roadmap yet" | A roadmap tells you what to work on next. Without it, you'll build random features. | Create a roadmap to prioritize work and prevent churn. |
+| "The tech stack is obvious" | Not to the next person. And not to you in 6 months. Decisions fade; documentation persists. | Document tech stack so it's visible to all agents. |
+| "Product docs slow down development" | No. Unclear product slows down development. You build features that don't fit together. | Invest 1 hour in product planning to save weeks of rework. |
 
 ## Process
 

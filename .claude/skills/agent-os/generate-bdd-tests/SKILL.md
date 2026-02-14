@@ -1,6 +1,6 @@
 ---
 name: generate-bdd-tests
-description: Transform acceptance criteria into executable BDD test scaffolding for Go (spec + testify) or Java (Spock)
+description: Use when acceptance criteria exist and need test scaffolding
 triggers:
   - "generate bdd"
   - "generate tests"
@@ -11,6 +11,24 @@ triggers:
 # Generate BDD Tests
 
 Transform acceptance criteria into executable BDD test scaffolding.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping test scaffolding:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "I'll write tests as I go" | Tests written after code are confirmations, not specs. They test what you built, not what you should build. | Generate test scaffolding first as executable specifications. |
+| "The ACs are specific enough to code from" | ACs are narratives. Tests are machine-checkable contracts. Narratives are too ambiguous for TDD. | Transform ACs into test cases to drive implementation. |
+| "Writing test scaffolding is wasted effort" | Scaffolding forces clarity. Without it, you code uncertain, then refactor endlessly. | Use test structure to clarify implementation intent. |
+| "I know how to test this" | Assumption. Tests without ACs miss edge cases and integration scenarios. | Generate tests from ACs to ensure comprehensive coverage. |
+| "We'll test everything at the end" | Too late. By then, bugs are baked in. Catching them at design time costs a fraction. | Use test scaffolding to catch issues during implementation. |
+
+## HARD GATE
+
+⛔ **DO NOT write implementation code** until BDD test scaffolding has been generated and saved.
+
+Tests come first. Code comes second. If no test scaffolding exists, you have nothing to implement toward. Generate the scaffolding, then implement to make it pass.
 
 ## Prerequisites
 

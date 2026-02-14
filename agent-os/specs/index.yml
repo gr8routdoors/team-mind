@@ -11,6 +11,11 @@
 # Note: Archived specs are moved to _archive/ directory
 
 specs:
-  
+  SPEC-001:
+    name: Adopt Superpowers Discipline Patterns
+    status: in_progress
+    created: 2026-02-14
+    stories: 7
+    stories_complete: 0
 
-# Next spec number: 001
+# Next spec number: 002

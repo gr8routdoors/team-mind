@@ -1,6 +1,6 @@
 ---
 name: inject-standards
-description: Inject relevant standards into the current context - suggests applicable standards or loads specified ones
+description: Use when relevant coding standards need to be loaded into context
 triggers:
   - "inject standards"
   - "load standards"
@@ -29,6 +29,18 @@ Analyzes context and suggests relevant standards.
 /inject-standards api/response-format api/auth  # Multiple files
 ```
 Directly injects specified standards without suggestions.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping standards injection:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "I already know the conventions" | You know *your* conventions. This project has specific ones you may not. | Inject standards to confirm your assumptions. |
+| "Standards are obvious from the code" | Some are. Others are buried, implicit, or visible only after reading 10 files. | Inject standards to load them all into context at once. |
+| "Loading standards wastes context" | Not loading them wastes worse—you violate conventions and refactor later. | Inject standards upfront to prevent violations. |
+| "I don't need standards for this task" | You do. Small deviations compound. Consistency requires standards. | Inject relevant standards before every task. |
+| "I can review standards if I get stuck" | By then, you've coded wrong. Standards prevent mistakes, not just fix them. | Inject standards before coding, not after. |
 
 ## Process
 

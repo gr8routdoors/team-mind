@@ -15,6 +15,11 @@ standards:
     tags: [coding, reviewing]
     description: Core principles — SOLID, YAGNI, TDD, error handling
 
+  cso:
+    path: cso.md
+    tags: [all]
+    description: Rules for writing skill descriptions — prevents the Description Trap
+
   code-style:
     path: code-style.md
     tags: [coding, reviewing]
@@ -48,6 +53,11 @@ standards:
     path: git.md
     tags: [committing]
     description: Conventional commits, branch naming, PR conventions
+
+  git-worktrees:
+    path: git-worktrees.md
+    tags: [coding, committing]
+    description: Branch isolation pattern for safe development work
 
   observability:
     path: observability.md

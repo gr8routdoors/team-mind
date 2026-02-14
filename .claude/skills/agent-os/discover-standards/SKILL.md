@@ -1,6 +1,6 @@
 ---
 name: discover-standards
-description: Extract tribal knowledge from your codebase into concise, documented standards
+description: Use when codebase has undocumented patterns worth standardizing
 triggers:
   - "discover standards"
   - "extract standards"
@@ -17,6 +17,18 @@ Extract tribal knowledge from your codebase into concise, documented standards.
 - **Always use AskUserQuestion tool** when asking the user anything
 - **Write concise standards** — Use minimal words. Standards must be scannable by AI agents without bloating context windows.
 - **Offer suggestions** — Present options the user can confirm, choose between, or correct.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping standards discovery:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "The code speaks for itself" | Code is action, not documentation. Tribal knowledge lives in heads, not files. Future developers won't know why patterns exist. | Discover and document the "why" behind patterns. |
+| "We don't have any standards" | You do. They're just undocumented. Every codebase has patterns. Documenting them prevents inconsistency. | Discover existing patterns and make them explicit. |
+| "We can document standards later" | You won't. The knowledge lives in the original author's head. Once they leave, it's lost. | Discover and document now, before context is lost. |
+| "Standards limit flexibility" | No. Standards enable flexibility by setting boundaries. Within boundaries, agents move fast. | Discover constraints to clarify where agents have freedom. |
+| "I don't have time to discover standards" | You don't have time NOT to. Without documented standards, every agent rewrites the rules. | Invest 2 hours discovering standards to save weeks of inconsistency. |
 
 ## Process
 

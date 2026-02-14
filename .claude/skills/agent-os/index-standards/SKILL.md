@@ -1,6 +1,6 @@
 ---
 name: index-standards
-description: Rebuild and maintain the standards index file (index.yml)
+description: Use when the standards index may be out of sync with actual files
 triggers:
   - "index standards"
   - "rebuild index"
@@ -14,6 +14,18 @@ Rebuild and maintain the standards index file (`index.yml`).
 ## Purpose
 
 The index enables `/inject-standards` to suggest relevant standards without reading all files. It maps each standard to a brief description for quick matching.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping index rebuilds:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "The index is probably fine" | It's probably not. Standards drift. New files are added without index entries. Old entries point to deleted files. | Run the index rebuild to keep it current. |
+| "Maintaining an index is busy work" | No. Without an index, `/inject-standards` can't match standards to tasks. You end up loading the wrong ones. | Keep the index current so `/inject-standards` works reliably. |
+| "I can remember what standards exist" | You can't. And the next agent won't. An index is searchable; memory is not. | Maintain the index as the source of truth. |
+| "Standards don't change often" | They do. Every time you discover or delete a standard, the index needs updating. | Run `/index-standards` after `/discover-standards` every time. |
+| "We don't need an index yet" | You do. Without one, agents can't find standards. They rediscover them or ignore them. | Maintain the index from the start. |
 
 ## Process
 

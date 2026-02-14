@@ -1,6 +1,6 @@
 ---
 name: continue-spec
-description: Resume work on an existing specification - loads context and identifies next steps
+description: Use when resuming work on an existing specification
 triggers:
   - "continue spec"
   - "resume spec"
@@ -11,6 +11,24 @@ triggers:
 # Continue Spec
 
 Resume work on an existing specification.
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping context loading:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "I remember where we left off" | You don't. Context from previous sessions has evaporated. You'll make decisions that contradict earlier ones. | Load the spec and session summaries to restore full context. |
+| "Nothing has changed since last time" | Assumptions. Other work may have happened. Specs may be outdated. | Check spec status and recent sessions to confirm current state. |
+| "Let me just start coding from the spec" | Specs drift. Without checking sessions, you'll miss gotchas and blockers documented after spec creation. | Load session summaries to catch recent discoveries. |
+| "I can reorient as I work" | No. Reorienting mid-work causes false starts, duplicate effort, and missed context. | Invest 5 minutes loading context before starting. |
+| "The spec is current; session summaries aren't important" | Sessions preserve decisions, learnings, and failures. Specs are static documents; sessions tell the story. | Read recent sessions to understand reasoning behind decisions. |
+
+## HARD GATE
+
+⛔ **DO NOT start working on any story** until you have completed Steps 1-6 (load ALL context: spec files, related sessions, component details, and presented the orientation summary to the user).
+
+Working without full context leads to duplicate work, missed decisions, and ignored gotchas. Load everything first.
 
 ## Process
 

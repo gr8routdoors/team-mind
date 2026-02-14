@@ -1,6 +1,6 @@
 ---
 name: end-session
-description: Preserve context from current session for future sessions - run before ending significant work
+description: Use before ending significant work or switching tasks
 triggers:
   - "end session"
   - "done for today"
@@ -19,6 +19,18 @@ Preserve context from the current session for future sessions. Run this before e
 - After completing a milestone
 - When switching to a different task
 - Before a break where context might be lost
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping session end:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "Nothing important happened this session" | You learned something. You made decisions. You discovered gotchas. All of it matters to the next session. | Document everything, even small insights. |
+| "Session summaries are optional" | No. They're the bridge between sessions. Without them, context is lost and work repeats. | Create the summary; it takes 10 minutes and prevents hours of rework. |
+| "I'll write the summary next time" | You won't. Memory decays fast. Details that are clear now will be vague in a week. | Write it immediately while details are fresh. |
+| "The code changes speak for themselves" | Code doesn't explain *why* it was built that way. Decisions, trade-offs, and blockers live in summaries. | Document the narrative: what happened and why. |
+| "We'll update the spec and call it done" | Specs capture what was planned. Sessions capture what actually happened. Both are needed. | Create the session summary AND update the spec. |
 
 ## Process
 

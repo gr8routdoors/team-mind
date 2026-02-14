@@ -54,6 +54,10 @@
 **Don't:** Finish significant work without documenting learnings.
 **Instead:** Run `/end-session` to create session summary and update artifacts.
 
+### GR-P03: Don't Claim Completion Without Verification Evidence
+**Don't:** Say "done", "fixed", "passing", or mark stories as passing without running verification commands.
+**Instead:** Run the verification command, read the output, cite specific evidence, then claim the result.
+
 ---
 
 ## Unattended Mode
@@ -90,6 +94,7 @@ When running autonomously (without Devon present), these additional guardrails a
 
 | ID | Title | Added | Source |
 |----|-------|-------|--------|
+| GR-P03 | Don't Claim Completion Without Verification Evidence | 2026-02-14 | STORY-002 |
 | GR-A02 | Don't Conflate Service Responsibilities | 2026-02-03 | Environment reset |
 | GR-C02 | Don't Build Without a Spec | 2026-02-03 | Environment reset |
 | GR-D01 | Don't Fetch Exponentially | 2026-02-03 | Environment reset |
@@ -98,4 +103,4 @@ When running autonomously (without Devon present), these additional guardrails a
 
 ---
 
-_Last updated: 2026-02-03_
+_Last updated: 2026-02-14_

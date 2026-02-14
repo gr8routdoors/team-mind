@@ -134,4 +134,10 @@ Include:
 
 ---
 
+## Related
+
+- **git-worktrees.md** — Branch isolation pattern for feature work
+
+---
+
 _Last updated: 2026-02-03_

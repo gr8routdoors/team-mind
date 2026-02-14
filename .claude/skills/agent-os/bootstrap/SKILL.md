@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: New agent onboarding - teaches Agent OS framework and how the development environment works
+description: Use when an agent is new to this project or returning after a long gap
 triggers:
   - "first time"
   - "new to project"
@@ -25,6 +25,18 @@ This skill onboards a new agent to:
 - First time working on this project
 - After a long gap (context may have evolved)
 - When unsure how the project is organized
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping onboarding:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "I already know how frameworks work" | You don't know *this* framework. Every project has unique conventions. Assuming familiarity causes mistakes. | Go through the full bootstrap to learn this project's specifics. |
+| "I can figure it out as I work" | No. You'll make mistakes because you don't understand the structure. | Invest 30 minutes learning the framework to prevent missteps. |
+| "The code is self-explanatory" | It's not. Code shows *what* was built. Frameworks show *how* to extend it. | Learn the framework so you work *with* it, not against it. |
+| "I don't need to understand the workflow" | The workflow is the contract. Breaking it causes problems for future sessions. | Understand the workflow so you operate consistently with the framework. |
+| "I'll skip bootstrap and run /start-session instead" | /start-session assumes you know the framework. Bootstrap teaches the framework first. | Run bootstrap first, then /start-session. |
 
 ## Process
 

@@ -1,6 +1,6 @@
 ---
 name: shape-spec
-description: Create new spec with requirements, design, stories, and ACs - run in plan mode
+description: Use when starting significant new work that needs requirements, design, and stories — run in plan mode
 triggers:
   - "shape spec"
   - "new spec"
@@ -18,6 +18,24 @@ Gather context and structure planning for significant work. **Run this skill whi
 - **Always use AskUserQuestion tool** when asking the user anything
 - **Offer suggestions** — Present options the user can confirm, adjust, or correct
 - **Keep it lightweight** — This is shaping, not exhaustive documentation
+
+## The Agent Will Rationalize
+
+Before following this process, be aware of these rationalizations that lead to skipping spec creation:
+
+| Rationalization | Why It's Wrong | What To Do Instead |
+|----------------|----------------|-------------------|
+| "This is too simple to need a spec" | Simple features have the most unexamined assumptions. Simplicity is why you skip design, and why bugs ship. | Run the process. Simple features shape fast. |
+| "I already know what to build" | You know what you *think* to build. Shaping surfaces what you missed. | Let the process confirm or correct your understanding. |
+| "The user described it clearly enough" | Users describe outcomes, not implementation. Gaps between intent and design cause rework. | Shape the spec to bridge intent and implementation. |
+| "Writing a spec will slow us down" | Rework from unclear requirements takes 3-10x longer than shaping. | Invest 15 minutes now to save hours of rework. |
+| "I can figure out the design while coding" | Designing while coding is expensive. You refactor endlessly because you never thought it through. | Invest in shaping before implementation starts. |
+
+## HARD GATE
+
+⛔ **DO NOT write any implementation code, create any files outside the spec folder, or scaffold any project structure** until the spec's design.md is created and the user has explicitly approved it.
+
+Shaping is for planning, not building. If you feel the urge to "just start coding," that's the rationalization this gate prevents. Design approval first, always.
 
 ## Prerequisites
 
