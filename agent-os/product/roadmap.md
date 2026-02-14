@@ -26,17 +26,66 @@
 
 ## Phase 3: Distribution (Up Next)
 
-The adoption path is: clone the repo → run `/clean-install` → the skill resets all project-specific content and walks you through initial setup. For brownfield projects, `/clean-install` hands off to `/onboard-project` which guides content ingestion and vetting from existing documentation sources.
+Prioritized to scratch the maintainer's itch first: stamp commits with context, get Python tooling in place, solve the upgrade problem, make token usage configurable, complete the PR pipeline, then build the new-user adoption path.
 
-### `/clean-install` skill
+### 3.1 — `/commit` skill
 
-- [ ] **Reset project-specific content** — Wipe product docs (mission, roadmap, domain) back to empty templates, clear all specs and session history, reset AGENTS.md `// TODO:` sections, remove any project-specific standards while preserving framework standards. The user clones the full repo (including this roadmap, SPEC-001, etc. as living examples) and the skill strips it down to a clean skeleton.
-- [ ] **Minimal AGENTS.md** — Redesign AGENTS.md as a pure boot loader rather than a reference document. Current AGENTS.md duplicates content that belongs in standards, skills, and architecture docs. The new AGENTS.md should contain only: a one-paragraph project description, the Lit SDLC directory structure, the single rule "run `/start-session` first (or `/bootstrap` if new)," project-specific configuration (tech stack, build commands, project structure), and the operating profile setting. All framework documentation (workflow tables, discipline enforcement explanations, standards references) should be removed — the skills and standards already contain that information, and `/start-session` loads what's needed. This also makes `/clean-install` simpler since there's less to separate.
+No skill currently exists for creating structured git commits. Agents either run `git commit` ad hoc with inconsistent messages, or don't commit at all. `/commit` is a standalone skill that stages changes, assembles a conventional commit message from the current work context, and stamps the commit. Usable any time — for personal repos this is the end of the line; for team repos it feeds into `/ship-pr`.
+
+- [ ] **Context-aware commit message** — Build the commit message from Lit SDLC context: the active spec and story (if any), a summary of what changed and why, and conventional commit format per `git.md` standards. For work outside a spec (e.g., framework improvements, ad hoc fixes), infer the type and scope from the changed files. Present the message for human review before committing, or auto-commit in `full`/`autonomous` profiles.
+- [ ] **Selective staging** — Review unstaged and staged changes, present a summary of what will be committed, and let the user confirm or adjust. Respect `.gitignore`. Flag any potentially sensitive files (`.env`, credentials) and refuse to stage them.
+- [ ] **Atomic commits** — Enforce the `git.md` standard: each commit should be a single logical change that compiles and passes tests. If the working tree contains changes spanning multiple logical units, suggest splitting into multiple commits and walk the user through it.
+- [ ] **Commit-PR message alignment** — The commit message format is designed to feed directly into `/ship-pr`. When `/ship-pr` creates a PR, it can pull from the commit messages to build the PR description, so they're naturally aligned. This avoids writing the same context twice.
+
+### 3.2 — Python tooling foundation
+
+Lit SDLC ships with a `pyproject.toml` at root and uses [UV](https://github.com/astral-sh/uv) for dependency management. Python tools live in a `tools/` directory and work out of the box — no separate install step. This gives the framework executable tooling alongside the declarative markdown/YAML content, enabling deterministic scripts that are testable with pytest.
+
+- [ ] **`pyproject.toml` + UV setup** — Add `pyproject.toml` to the repo root with UV as the package manager. Define the `tools/` directory as a Python package. Include core dependencies (PyYAML, python-frontmatter, Click) and dev dependencies (pytest, ruff). Document the convention in a standard so agents know to use UV.
+- [ ] **Standards index validator** (`tools/validate_standards.py`) — Parse `standards/index.yml`, verify all referenced files exist, validate tag syntax, check for orphaned standard files not in the index. First concrete tool demonstrating the pattern.
+- [ ] **Install validation script** (`tools/validate_install.py`) — Verify directory structure, check all skill files present, validate AGENTS.md has required sections. Used by `/clean-install` skill under the hood.
+- [ ] **Session frontmatter parser** (`tools/parse_session.py`) — Parse enhanced session summaries with YAML frontmatter (session_id, tokens_used, cost_usd, status, stories_completed/remaining). Foundation for autonomous execution and session analytics.
+
+### 3.3 — Upgrade and contribution workflow
+
+Once you clone Lit SDLC into your project, the framework files and your project-specific content live in the same repo. Upstream improvements (new skills, updated standards, bug fixes) are currently impossible to adopt without manually diffing and copying files. Going the other direction — contributing enhancements you develop in your project back to the Lit SDLC source repo — is equally manual. This needs a proper solution.
+
+- [ ] **Framework vs. project boundary** — Establish a clear, machine-enforceable boundary between framework files (skills, standards templates, tools, core guardrails) and project-specific files (product docs, specs, sessions, AGENTS.md customizations, project-specific standards). This could be a manifest file (`framework-manifest.yml`) listing every framework-owned file and its version hash, or a directory convention, or both. `/clean-install` also needs this boundary — the upgrade system builds on the same concept.
+- [ ] **`/upgrade` skill** — Check the upstream Lit SDLC repo for changes, diff against the local framework files, and present the user with a clear summary: what's new, what's changed, what conflicts with local modifications. For clean upgrades (no local modifications to framework files), apply automatically. For conflicts, walk the user through each one interactively — show the upstream change, show the local modification, ask which to keep or how to merge. Think `git merge` UX but for framework files specifically.
+- [ ] **Upgrade Python tooling** (`tools/upgrade.py`) — The deterministic side of the upgrade skill. Fetch upstream manifest, compare hashes, identify changed/new/removed framework files, detect local modifications to framework files, generate a diff report. The skill handles the conversation; the tool handles the file comparison.
+- [ ] **`/contribute-upstream` skill** — For enhancements made in a project repo that should flow back to the Lit SDLC source. Identify which framework files have been modified locally (new skills, updated standards, improved guardrails), extract them into a clean PR-ready format against the upstream repo, and help the user write a contribution summary. Could generate a patch set or prepare a branch in a local clone of the source repo.
+- [ ] **Version tagging** — Tag Lit SDLC releases with semantic versions. The manifest tracks which version is installed. The upgrade skill can show "you're on v2.1.0, v2.2.0 is available" and present a changelog. This also enables projects to pin to a known-good version and upgrade deliberately.
+
+### 3.4 — Operating profiles (token optimization)
+
+The discipline enforcement features (subagent-per-story, two-stage code review, full verification) are valuable but token-heavy. Teams with strong human review processes don't need the agent reviewing its own work before a human reviews it again. Operating profiles let teams choose their tradeoff between agent autonomy and token cost.
+
+- [ ] **Profile configuration** — A setting in AGENTS.md or a config file that skills read at startup. Skills adjust their behavior based on the active profile. Profiles are: `full` (default), `team`, and `lean`. (A fourth `autonomous` profile will be added when Phase 5 lands — its capabilities depend on the enhanced session skills and cost enforcement built in Phases 4 and 5.)
+- [ ] **Full discipline profile** (default) — Current behavior. Subagent per story, two-stage agent code review, full verify-completion with evidence gathering. Best for solo developers, small teams, or unattended work where the agent's output needs to be right the first time.
+- [ ] **Team profile** — Single agent executes stories sequentially (no subagent dispatch), skip agent-side code review (humans handle that via PR), still enforce verify-completion and all hard gates. Anti-rationalization tables and spec discipline remain. Estimated ~40-50% token reduction vs. full profile.
+- [ ] **Lean profile** — Single agent, no agent code review, lighter verification (confirm tests pass but skip the full evidence-gathering ritual). For experienced teams with strong CI pipelines and review culture who primarily want the spec structure and session memory. Minimal token overhead beyond baseline.
+- [ ] **Profile-aware skill behavior** — `/dispatch-subagents` checks profile: in `full` mode it spawns fresh subagents; in `team`/`lean` mode it executes stories inline. `/request-code-review` checks profile: in `full` mode it dispatches reviewers; in `team`/`lean` mode it skips. `/verify-completion` checks profile: in `full`/`team` mode it does full evidence gathering; in `lean` mode it does a lighter check. Anti-rationalization tables and hard gates remain active in all profiles — they're essentially free (just text the agent reads).
+
+### 3.5 — `/ship-pr` skill
+
+The implementation workflow currently ends at `/verify-completion` — there's no skill for packaging up the work and creating a pull request. `/ship-pr` is the capstone: it assembles a well-described PR from Lit SDLC artifacts and either pauses for human approval or auto-ships depending on the operating profile.
+
+- [ ] **PR assembly from Lit SDLC artifacts** — Automatically build the PR title, description, and context from the spec README (why), the story (what), the acceptance criteria (scope), and verification evidence (proof it works). This produces better PR descriptions than most humans write because the structured artifacts already contain all the information. Include a summary of files changed, tests added/modified, and standards followed.
+- [ ] **Profile-aware shipping behavior** — In `team` and `lean` profiles, `/ship-pr` prepares the PR, presents a summary to the human, and waits for explicit approval before creating it. In `full` profile, it creates the PR but still requires human merge. In `autonomous` profile, it auto-creates the PR and can optionally auto-merge if two-stage review and verification both passed (configurable). The skill should make the current behavior clear: "This PR will be created but NOT merged — a human must approve" vs. "This PR will be auto-merged based on your autonomous profile settings."
+- [ ] **Git hygiene** — Ensure the branch is clean, squash or organize commits per the project's git standard, handle rebasing against the target branch if needed, and set appropriate PR labels/reviewers if configured. Respect `git.md` and `git-worktrees.md` standards.
+- [ ] **PR linkage to spec artifacts** — Include links to the spec, story, and ACs in the PR description so reviewers have full context. Optionally update `stories.yml` status to reflect the PR is open. When the PR is merged (detected on next `/start-session`), mark the story as `passing`.
+
+### 3.6 — `/clean-install` skill
+
+The adoption path is: clone the repo → run `/clean-install` → the skill resets all project-specific content and walks you through initial setup. For brownfield projects, `/clean-install` hands off to `/onboard-project`.
+
+- [ ] **Reset project-specific content** — Wipe product docs (mission, roadmap, domain) back to empty templates, clear all specs and session history, reset AGENTS.md `// TODO:` sections, remove any project-specific standards while preserving framework standards. The user clones the full repo (including this roadmap, SPEC-001, etc. as living examples) and the skill strips it down to a clean skeleton. Leverages the framework/project boundary manifest from 3.3.
+- [ ] **Minimal AGENTS.md** — Redesign AGENTS.md as a pure boot loader rather than a reference document. Current AGENTS.md duplicates content that belongs in standards, skills, and architecture docs. The new AGENTS.md should contain only: a one-paragraph project description, the Lit SDLC directory structure, the single rule "run `/start-session` first (or `/bootstrap` if new)," project-specific configuration (tech stack, build commands, project structure), and the operating profile setting. All framework documentation (workflow tables, discipline enforcement explanations, standards references) should be removed — the skills and standards already contain that information, and `/start-session` loads what's needed.
 - [ ] **Interactive setup wizard** — After reset, walk the user through initial configuration: What languages does your project use? (remove irrelevant language-specific standards like `code-style/java.md` if it's a Go-only shop). What's your project structure? (populate the AGENTS.md project structure section). What's your git workflow? (configure git standards). What's your team size and review process? (set operating profile). This replaces the current manual `// TODO:` customization.
 - [ ] **Greenfield vs. brownfield fork** — At the end of clean-install, ask: "Do you have existing documentation to import?" If yes, hand off to `/onboard-project`. If no, hand off to `/plan-product` for a fresh start.
-- [ ] **Install validation** — Verify the resulting directory structure is correct: all skill files present, standards index valid, product templates in place, AGENTS.md properly configured. Report any issues.
+- [ ] **Install validation** — Verify the resulting directory structure is correct using `tools/validate_install.py` from 3.2. All skill files present, standards index valid, product templates in place, AGENTS.md properly configured. Report any issues.
 
-### `/onboard-project` skill (brownfield adoption)
+### 3.7 — `/onboard-project` skill (brownfield adoption)
 
 Adopting Lit SDLC in an existing ("brownfield") project is currently painful. The framework assumes product docs, domain knowledge, and architecture context are populated — but real projects have this information scattered across tools like Confluence, Google Docs, Jira, and tribal knowledge of varying quality. There is no workflow for ingesting, vetting, and structuring this existing content.
 
@@ -46,41 +95,13 @@ Adopting Lit SDLC in an existing ("brownfield") project is currently painful. Th
 - [ ] **Existing feature mapping** — Features already exist but aren't tracked as specs. Provide a way to retroactively create specs from existing functionality — not to re-implement, but to document what exists so future work builds on a known baseline. This solves the "we have 50 features but no specs" problem.
 - [ ] **Gap analysis after onboarding** — Once content is ingested and structured, automatically identify what's missing: does the project have a mission but no domain terminology? Architecture docs but no business rules? Standards for some languages but not others? Generate a prioritized onboarding backlog.
 
-### Operating profiles (token optimization)
+### 3.8 — Getting started guide and documentation
 
-The discipline enforcement features (subagent-per-story, two-stage code review, full verification) are valuable but token-heavy. Teams with strong human review processes don't need the agent reviewing its own work before a human reviews it again. Operating profiles let teams choose their tradeoff between agent autonomy and token cost.
+- [ ] **Getting started guide** — A walkthrough for new users covering: what Lit SDLC is (link to README), how to install it (link to `/clean-install` or manual steps), first session workflow (`/bootstrap` → `/start-session` → `/shape-spec`), and common patterns. Should be approachable for someone who has never used a context engineering framework.
 
-- [ ] **Profile configuration** — A setting in AGENTS.md or a config file that skills read at startup. Skills adjust their behavior based on the active profile. Profiles are: `full` (default), `team`, and `lean`.
-- [ ] **Full discipline profile** (default) — Current behavior. Subagent per story, two-stage agent code review, full verify-completion with evidence gathering. Best for solo developers, small teams, or unattended work where the agent's output needs to be right the first time.
-- [ ] **Team profile** — Single agent executes stories sequentially (no subagent dispatch), skip agent-side code review (humans handle that via PR), still enforce verify-completion and all hard gates. Anti-rationalization tables and spec discipline remain. Estimated ~40-50% token reduction vs. full profile.
-- [ ] **Lean profile** — Single agent, no agent code review, lighter verification (confirm tests pass but skip the full evidence-gathering ritual). For experienced teams with strong CI pipelines and review culture who primarily want the spec structure and session memory. Minimal token overhead beyond baseline.
-- [ ] **Profile-aware skill behavior** — `/dispatch-subagents` checks profile: in `full` mode it spawns fresh subagents; in `team`/`lean` mode it executes stories inline. `/request-code-review` checks profile: in `full` mode it dispatches reviewers; in `team`/`lean` mode it skips. `/verify-completion` checks profile: in `full`/`team` mode it does full evidence gathering; in `lean` mode it does a lighter check. Anti-rationalization tables and hard gates remain active in all profiles — they're essentially free (just text the agent reads).
+### 3.9 — Automated skill testing framework
 
-### Python tooling foundation
-
-Lit SDLC ships with a `pyproject.toml` at root and uses [UV](https://github.com/astral-sh/uv) for dependency management. Python tools live in a `tools/` directory and work out of the box — no separate install step. This gives the framework executable tooling alongside the declarative markdown/YAML content, enabling deterministic scripts that are testable with pytest.
-
-- [ ] **`pyproject.toml` + UV setup** — Add `pyproject.toml` to the repo root with UV as the package manager. Define the `tools/` directory as a Python package. Include core dependencies (PyYAML, python-frontmatter, Click) and dev dependencies (pytest, ruff). Document the convention in a standard so agents know to use UV.
-- [ ] **Standards index validator** (`tools/validate_standards.py`) — Parse `standards/index.yml`, verify all referenced files exist, validate tag syntax, check for orphaned standard files not in the index. First concrete tool demonstrating the pattern.
-- [ ] **Install validation script** (`tools/validate_install.py`) — Verify directory structure, check all skill files present, validate AGENTS.md has required sections. Used by `/clean-install` skill under the hood.
-- [ ] **Session frontmatter parser** (`tools/parse_session.py`) — Parse enhanced session summaries with YAML frontmatter (session_id, tokens_used, cost_usd, status, stories_completed/remaining). Foundation for autonomous execution and session analytics.
-- [ ] **`/clean-install` delegates to Python** — The skill handles the interactive conversation; the Python script handles the deterministic file operations (reset templates, remove specs, validate structure). Best of both: conversational UX + reliable execution.
-
-### Upgrade and contribution workflow
-
-Once you clone Lit SDLC into your project, the framework files and your project-specific content live in the same repo. Upstream improvements (new skills, updated standards, bug fixes) are currently impossible to adopt without manually diffing and copying files. Going the other direction — contributing enhancements you develop in your project back to the Lit SDLC source repo — is equally manual. This needs a proper solution.
-
-- [ ] **Framework vs. project boundary** — Establish a clear, machine-enforceable boundary between framework files (skills, standards templates, tools, core guardrails) and project-specific files (product docs, specs, sessions, AGENTS.md customizations, project-specific standards). This could be a manifest file (`framework-manifest.yml`) listing every framework-owned file and its version hash, or a directory convention, or both. `/clean-install` already needs this boundary — the upgrade system builds on the same concept.
-- [ ] **`/upgrade` skill** — Check the upstream Lit SDLC repo for changes, diff against the local framework files, and present the user with a clear summary: what's new, what's changed, what conflicts with local modifications. For clean upgrades (no local modifications to framework files), apply automatically. For conflicts, walk the user through each one interactively — show the upstream change, show the local modification, ask which to keep or how to merge. Think `git merge` UX but for framework files specifically.
-- [ ] **Upgrade Python tooling** (`tools/upgrade.py`) — The deterministic side of the upgrade skill. Fetch upstream manifest, compare hashes, identify changed/new/removed framework files, detect local modifications to framework files, generate a diff report. The skill handles the conversation; the tool handles the file comparison.
-- [ ] **`/contribute-upstream` skill** — For enhancements made in a project repo that should flow back to the Lit SDLC source. Identify which framework files have been modified locally (new skills, updated standards, improved guardrails), extract them into a clean PR-ready format against the upstream repo, and help the user write a contribution summary. Could generate a patch set or prepare a branch in a local clone of the source repo.
-- [ ] **Version tagging** — Tag Lit SDLC releases with semantic versions. The manifest tracks which version is installed. The upgrade skill can show "you're on v2.1.0, v2.2.0 is available" and present a changelog. This also enables projects to pin to a known-good version and upgrade deliberately.
-
-### Other distribution items
-
-- [ ] Getting started guide and documentation
-- [ ] Automated skill testing framework (can leverage Python tooling + pytest)
-- [ ] **`autonomous` operating profile** — Extends the profile system with a fourth profile for fully autonomous execution. Includes everything in `full` plus: session frontmatter for handoff continuity, cost budget enforcement, structured exit reasons, and "Next Agent Should" sections in session summaries. Skills check for this profile and produce machine-readable output where needed.
+- [ ] **Skill testing framework** — A pytest-based system for testing skills. Define expected inputs (trigger conditions, project state) and assert expected outputs (files created, content patterns, workflow steps followed). Leverages the Python tooling from 3.2. Enables regression testing when skills are modified — critical for the `/upgrade` workflow in 3.3 where upstream skill changes need to be validated against project customizations.
 
 ## Phase 4: Advanced Workflows
 
