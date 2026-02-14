@@ -288,20 +288,24 @@ lit-sdlc/
 
 ## Quick Start
 
-> A clean install script is [on the roadmap](agent-os/product/roadmap.md) (Phase 3). For now, manual setup:
+> A `/clean-install` skill is [on the roadmap](agent-os/product/roadmap.md) (Phase 3) to automate this setup. For now, manual steps:
 
-1. Install [Claude Code](https://claude.com/product/claude-code) or [Cursor](https://cursor.com/)
-2. Install [agent-os v3](https://buildermethods.com/agent-os/installation)
-3. Copy the contents of this repository into your project root (excluding this README)
-4. Customize [AGENTS.md](AGENTS.md) — areas marked `// TODO:` need your project's details
-5. Populate product context using `/plan-product` and `/bootstrap`
+**Prerequisites:** [Claude Code](https://claude.com/product/claude-code) or [Cursor](https://cursor.com/) with Claude access.
+
+1. Clone this repository (or copy the `agent-os/` directory, `.claude/skills/agent-os/` directory, `AGENTS.md`, and `CLAUDE.md` into your project root)
+2. Clear out project-specific content: remove specs from `agent-os/specs/`, reset product docs in `agent-os/product/`, clear `agent-os/context/sessions/`
+3. Customize [AGENTS.md](AGENTS.md) — sections marked `// TODO:` need your project's details (architecture, commands, structure)
+4. Run `/bootstrap` in your first Claude session to learn the framework
+5. Run `/plan-product` to populate your mission, roadmap, and domain knowledge
 6. Start building: `/start-session` → `/shape-spec` → implement → `/end-session`
+
+For **brownfield projects** (existing codebases with docs scattered across Confluence, Google Docs, etc.), an `/onboard-project` skill is [on the roadmap](agent-os/product/roadmap.md) to guide content ingestion and vetting. For now, manually populate the product docs and use `/discover-standards` to extract conventions from your existing code.
 
 ---
 
 ## Current Status
 
-Lit SDLC is actively developing itself using its own framework. Phase 1 (Foundation) and Phase 2 (Discipline Enforcement) are complete. Phase 3 (Distribution) is in progress — making the framework easy to install and adopt in new projects.
+Lit SDLC is actively developing itself using its own framework. Phase 1 (Foundation) and Phase 2 (Discipline Enforcement) are complete. Phase 3 (Distribution) is up next — centered on a `/clean-install` skill that resets the repo to a clean skeleton and walks you through setup, with an `/onboard-project` skill for brownfield adoption that guides ingestion and vetting of existing documentation from tools like Confluence and Google Docs.
 
 The [roadmap](agent-os/product/roadmap.md) tracks all phases. Known gaps and future work items are documented in [gaps.md](agent-os/gaps.md). The first spec, [SPEC-001: Adopt Superpowers Discipline Patterns](agent-os/specs/SPEC-001-adopt-superpowers-discipline/README.md), added anti-rationalization tables, hard gates, verification enforcement, subagent-driven development, two-stage code review, CSO rules, and git worktree standards — all inspired by analysis of the [Superpowers](https://github.com/NickBaynworker/superpowers) framework.
 
