@@ -46,8 +46,8 @@ standards:
 
   bdd:
     path: bdd.md
-    tags: [testing, planning, java, go]
-    description: BDD conventions — AC format, coverage patterns, Go/Java frameworks
+    tags: [testing, planning]
+    description: BDD conventions — AC format, coverage patterns, language-specific frameworks
 
   git:
     path: git.md
@@ -96,7 +96,7 @@ standards:
 #   /shape-spec           → [planning, architecture]
 #   /continue-spec        → [planning, architecture]
 #   /derive-acs           → [planning, testing]
-#   /generate-bdd-tests   → [testing, java, go]
+#   /generate-bdd-tests   → [testing]
 #   /investigate          → [all]
 #   /plan-product         → [planning, architecture]
 #   /inject-standards     → varies by activity (see below)

@@ -38,154 +38,63 @@ Before running this skill:
 
 ## Process
 
-### Step 1: Detect Target Language
+### Step 1: Discover Testing Stack
 
-Check `agent-os/standards/tech-stack.md` or ask:
+Determine the project's language(s) and BDD framework(s):
 
-```
-Which language should I generate tests for?
+1. Read `agent-os/standards/project/tech-stack.md` for project languages
+2. Read `agent-os/standards/project/testing.md` for the project's declared BDD framework
 
-1. **Go** — spec + testify (new services)
-2. **Java** — Spock framework (existing services)
-```
+**If the project's testing standard declares a BDD framework:** Use it. The project declaration is the authority.
 
-### Step 2: Load ACs and Standards
+**If the project's testing standard does not declare a BDD framework:** Ask the user which language and BDD framework to target. Do not assume.
+
+### Step 2: Load ACs and Conventions
 
 Read:
 ```
-specs/SPEC-{NNN}-{slug}/acs/*.md     # Acceptance criteria
-standards/bdd.md                      # BDD conventions for target language
+specs/SPEC-{NNN}-{slug}/acs/*.md       # Acceptance criteria
+agent-os/standards/bdd.md              # BDD methodology and language-specific conventions
 ```
+
+From `bdd.md`, always use:
+- **AC format** — Given/When/Then structure
+- **Coverage patterns** — Happy path, validation, edge cases, error conditions
+- **Traceability** — AC-to-requirement linking
+
+From `bdd.md`, use language-specific sections if they match the target language discovered in Step 1 (e.g., "Go BDD" section for Go projects, "Java BDD" section for Java projects). These sections contain templates, structural rules, and transformation patterns.
+
+**If the project's `testing.md` declares a BDD framework that differs from what `bdd.md` covers:** Use the project declaration as the authority for framework choice. Use the BDD methodology from `bdd.md` (AC format, traceability, coverage patterns) combined with your knowledge of the declared framework to generate idiomatic test scaffolding.
 
 ### Step 3: Map ACs to Test Structure
 
-**For Go (spec + testify)**:
+Using the transformation patterns from `bdd.md` (if available for the target language) or the project's declared BDD framework, map each AC element to the corresponding test construct:
 
-| AC Element | Go BDD |
-|------------|--------|
-| AC file | `{capability}_test.go` |
-| AC group | `spec.Run(t, "Capability", ...)` |
-| Given | `it.Before(func() { /* setup */ })` |
-| When | `when("context", func() { ... })` |
-| Then | `it("should outcome", func() { assert... })` |
+| AC Element | Maps To |
+|------------|---------|
+| AC file | One test file per capability |
+| AC group | Test suite or describe block |
+| Given | Setup / context / fixture |
+| When | Action under test |
+| Then | Assertion / expectation |
+| And | Additional setup or assertion |
+| Multiple scenarios | Parameterized / data-driven tests |
 
-**For Java (Spock)**:
-
-| AC Element | Spock |
-|------------|-------|
-| AC file | `{Capability}Spec.groovy` |
-| AC | `def "should {behavior}"() { ... }` |
-| Given | `given: "context"` |
-| When | `when: "action"` |
-| Then | `then: "outcome"` + assertions |
-| Multiple scenarios | `where:` data table |
+The specific syntax depends on the target framework. Use the conventions from `bdd.md` or the project's testing standard — do not invent your own patterns.
 
 ### Step 4: Generate Test Files
 
-#### Go Template
+Generate test file content using the templates and structural rules from `bdd.md` for the target language. If `bdd.md` does not have a section for the target language, generate idiomatic BDD test scaffolding based on the project's declared framework.
 
-```go
-package {package}
-
-import (
-    "testing"
-
-    "github.com/sclevine/spec"
-    "github.com/stretchr/testify/assert"
-)
-
-func Test{Capability}(t *testing.T) {
-    spec.Run(t, "{Capability}", func(t *testing.T, when spec.G, it spec.S) {
-        // Shared setup
-        var subject *{SubjectType}
-
-        it.Before(func() {
-            subject = New{SubjectType}()
-        })
-
-        // AC-001: {Title}
-        when("{given context}", func() {
-            it.Before(func() {
-                // Additional setup from "And" clauses
-            })
-
-            it("should {expected outcome}", func() {
-                // Act
-                result := subject.{Method}()
-
-                // Assert
-                assert.Equal(t, expected, result)
-            })
-        })
-
-        // AC-002: {Title}
-        when("{given context}", func() {
-            it("should {expected outcome}", func() {
-                // Test implementation
-            })
-        })
-    })
-}
-```
-
-#### Spock Template
-
-```groovy
-package {package}
-
-import spock.lang.Specification
-
-class {Capability}Spec extends Specification {
-
-    def subject = new {SubjectType}()
-
-    // AC-001: {Title}
-    def "should {expected behavior}"() {
-        given: "{context}"
-        def input = {setup}
-
-        and: "{additional context}"
-        {additional setup}
-
-        when: "{action}"
-        def result = subject.{method}(input)
-
-        then: "{outcome}"
-        result.{field} == {expected}
-    }
-
-    // Parameterized tests for multiple scenarios
-    def "should {behavior} for various inputs"() {
-        given: "{context with #variable}"
-        def input = new Input({variable})
-
-        when: "{action}"
-        def result = subject.{method}(input)
-
-        then: "{outcome is #expected}"
-        result == expected
-
-        where:
-        variable | expected
-        value1   | result1
-        value2   | result2
-    }
-}
-```
+Every generated test file must:
+- Reference AC IDs in comments for traceability
+- Include TODOs where implementation details are needed
+- Follow the structural rules from the conventions (naming, setup patterns, assertion style)
+- Group related ACs together within the test structure
 
 ### Step 5: Determine Output Location
 
-Ask user or infer from project structure:
-
-**Go**:
-```
-services/{service}/internal/{package}/{capability}_test.go
-```
-
-**Java**:
-```
-services/{service}/src/test/groovy/{package}/{Capability}Spec.groovy
-```
+Infer the output location from existing project structure (look at where existing test files live). If the project structure is unclear or no existing tests exist, ask the user.
 
 ### Step 6: Generate and Present
 
@@ -194,18 +103,16 @@ Generate test file content and present to user:
 ```
 ## Generated BDD Tests
 
-**Language:** Go (spec + testify)
-**Source:** specs/SPEC-001/acs/STORY-001-batch-loading.md (5 ACs)
-**Output:** services/auth-service/internal/auth/token_validation_test.go
+**Framework:** {framework name from discovered conventions}
+**Source:** specs/SPEC-{NNN}-{slug}/acs/{story}.md ({N} ACs)
+**Output:** {inferred or confirmed output path}
 
 ### Test Structure
 
-- 5 test cases generated from ACs
-- AC-001: Load factors for single product
-- AC-002: Load factors for batch of products
-- AC-003: Empty product list returns empty map
-- AC-004: Batch respects configured size limit
-- AC-005: Handle null product ID in batch
+- {N} test cases generated from ACs
+- AC-001: {Title}
+- AC-002: {Title}
+- ...
 
 Ready to save? (Save / Adjust / Preview full file)
 ```
@@ -221,10 +128,9 @@ After user approval:
 
 | AC File | Test File | Tests |
 |---------|-----------|-------|
-| STORY-001-batch-loading.md | batch_loading_test.go | 5 |
-| STORY-002-cache-invalidation.md | cache_invalidation_test.go | 6 |
+| {story}.md | {test_file} | {count} |
 
-**Total:** 11 BDD tests ready for implementation
+**Total:** {N} BDD tests ready for implementation
 
 ### Next Steps
 1. Implement subject under test (if not exists)
@@ -233,33 +139,10 @@ After user approval:
 4. Implement code to make tests pass (TDD green phase)
 ```
 
-## Go-Specific Guidance
-
-**Role**: Expert Go (Golang) Test Engineer
-**Task**: Convert acceptance criteria into BDD-style test scaffolding
-**Stack**: Go standard library `testing`, `github.com/sclevine/spec`, `github.com/stretchr/testify`
-
-**Structural Rules**:
-1. **No Cucumber/Gherkin** — Use `spec.Run` and nested `when`/`it` blocks
-2. **Contextual isolation** — Use `it.Before` for setup to ensure test isolation
-3. **Assertions** — Use `testify/assert` (aliased to `assert`) for all checks
-4. **Naming** — Use `Test[Subject]` pattern for entry function
-
-## Spock-Specific Guidance
-
-**Role**: Expert Java/Groovy Test Engineer
-**Task**: Convert acceptance criteria into Spock BDD specifications
-**Stack**: Spock Framework (`spock-core`)
-
-**Structural Rules**:
-1. **Extend Specification** — All specs extend `spock.lang.Specification`
-2. **Block labels** — Use `given:`, `and:`, `when:`, `then:`, `where:`
-3. **Plain English** — Method names in quotes describe behavior
-4. **Data-driven** — Use `where:` block for parameterized scenarios
-
 ## Tips
 
 - **Generate stubs, not complete tests** — Values may need adjustment
 - **Mark TODOs** — Flag places where implementation details are needed
-- **Group related ACs** — Keep related scenarios in the same `when` block (Go) or class (Spock)
+- **Group related ACs** — Keep related scenarios together in the test structure
 - **Include comments** — Reference AC IDs in comments for traceability
+- **Follow project conventions** — Match the style and patterns already used in the project's test suite
