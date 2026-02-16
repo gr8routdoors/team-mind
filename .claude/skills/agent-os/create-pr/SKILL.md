@@ -27,7 +27,7 @@ Before following this process, be aware of these rationalizations that lead to p
 
 | Rationalization | Why It's Wrong | What To Do Instead |
 |----------------|----------------|-------------------|
-| "The commit message is good enough for the PR title" | Maybe for a single commit, but you still need to verify it's in conventional commit format. For multiple commits, you need to synthesize. | Read the commit message(s) and ensure the PR title follows conventional commits. |
+| "The commit message is good enough for the PR title" | Maybe for a single commit, but you still need to verify it's in conventional commit format. For multiple commits, you must use the **most significant type** based on the ranking (feat > fix > refactor > perf > docs > style > test > chore). | Read all commit messages, rank them by significance, and use the most significant type for the PR title. |
 | "The user can edit the PR after creation" | Get it right the first time. The user asked you to create a PR — deliver a complete, properly formatted one. | Draft the title and description, present for review, create only after approval. |
 | "Just use the branch name as the title" | Branch names are not commit messages. They don't follow conventional commit format and often lack the detail needed for a PR title. | Read the commits and synthesize a proper conventional commit title. |
 | "The PR description can just be the commit message body" | For a single commit, yes. For multiple commits, you need to synthesize. Either way, verify it has the required sections. | Ensure the description includes Summary and Test plan sections per git.md. |
@@ -54,12 +54,14 @@ Count the commits in the output.
 
 **If multiple commits:**
 - Read all commit messages: `git log --format=%B origin/main..HEAD`
-- Analyze the commit types and scopes:
-  - If all commits have the same type and scope, use that type/scope for the PR title
-  - If commits have different types, identify the most common type
-  - If commits have different scopes, identify the broadest applicable scope
-- Synthesize a summary description that covers the changes across all commits
-- Build PR title: `<type>(<scope>): <summary description>`
+- Analyze the commit types and scopes using **commit type significance ranking**:
+  - Rank types by significance: `feat` > `fix` > `refactor` > `perf` > `docs` > `style` > `test` > `chore`
+  - Breaking changes (types with `!` suffix) always win regardless of base type
+  - Use the **most significant type** for the PR title (not the most common or first)
+  - If commits have different scopes, use the scope from the most significant commit
+- Synthesize a summary description that covers the primary change
+- Build PR title: `<most-significant-type>(<scope>): <summary description>`
+- **Example**: If commits are `docs(roadmap): update` and `feat(create-pr): add trigger`, use `feat` because feat > docs
 
 ### Step 2: Build PR Description (AC-002)
 
@@ -72,7 +74,8 @@ Count the commits in the output.
 **If multiple commits:**
 - Synthesize a description from the commit messages
 - Structure it with the required sections:
-  - **Summary** — What changed across all commits
+  - **Summary** — What changed across all commits (focus on the most significant change)
+  - **Changes** — List all commits with their types for full transparency
   - **Test plan** — How the changes were tested
 
 **For both cases:**
@@ -97,6 +100,12 @@ I'll create a pull request with:
 **Description:**
 ## Summary
 <summary text>
+
+## Changes
+- <type>(<scope>)[!]: <commit 1 description>
+- <type>(<scope>): <commit 2 description>
+
+(Note: Only include for multi-commit PRs. The `!` suffix indicates breaking changes.)
 
 ## Test plan
 <testing text>
