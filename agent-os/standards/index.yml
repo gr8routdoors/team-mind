@@ -64,6 +64,30 @@ standards:
     tags: [coding, reviewing, operations]
     description: Logging, metrics, tracing instrumentation for Splunk
 
+  directory-boundary:
+    path: directory-boundary.md
+    tags: [all]
+    description: Framework-owned vs project-owned directory convention
+
+  # Project-owned standards (not replaced on /upgrade-lit)
+  project-build:
+    path: project/build.md
+    tags: [coding]
+    description: Project build commands and prerequisites
+    project_owned: true
+
+  project-testing:
+    path: project/testing.md
+    tags: [coding, testing]
+    description: Project test commands
+    project_owned: true
+
+  project-tech-stack:
+    path: project/tech-stack.md
+    tags: [architecture, planning]
+    description: Project approved technologies and infrastructure
+    project_owned: true
+
 # =============================================================================
 # Tag Reference
 # =============================================================================

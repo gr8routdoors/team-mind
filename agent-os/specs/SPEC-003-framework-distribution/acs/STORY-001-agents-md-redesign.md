@@ -6,7 +6,7 @@
 **When** AGENTS.md is redesigned
 **Then** it contains only framework-owned content: workflow description, directory structure map, skill discovery instructions, and "run /start-session"
 **And** all project-specific content is removed (not relocated — it already lives in `agent-os/product/`)
-**And** AGENTS.md is fully replaceable by `/upgrade` without losing project context
+**And** AGENTS.md is fully replaceable by `/upgrade-lit` without losing project context
 
 ## AC-002: Project context discovery
 

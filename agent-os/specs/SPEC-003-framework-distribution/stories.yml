@@ -5,36 +5,36 @@ stories:
   STORY-001:
     name: Minimal AGENTS.md redesign
     description: Redesign AGENTS.md as generic boot loader — strip project content, keep framework workflow, add discovery pointers for project config and skills
-    status: failing
-    verified_by: null
+    status: passing
+    verified_by: manual
 
   STORY-002:
-    name: pyproject.toml + UV setup
-    description: Add pyproject.toml with UV, Click dependency, tools/ directory structure, and committed uv.lock
-    status: failing
-    verified_by: null
-
-  STORY-003:
     name: Framework/project directory boundary
     description: Formalize and document the convention that framework files live in known directories, project files live elsewhere, and upgrade replaces framework directories wholesale
-    status: failing
-    verified_by: null
+    status: passing
+    verified_by: manual
+
+  STORY-003:
+    name: /upgrade-lit skill
+    description: Create skill that replaces framework directories from upstream — nuke-and-replace with abort-if-dirty safety check
+    status: passing
+    verified_by: manual
 
   STORY-004:
-    name: /upgrade skill
-    description: Create skill that replaces framework directories from upstream — nuke-and-replace with pre-upgrade commit for rollback safety
+    name: pyproject.toml + UV setup
+    description: Add pyproject.toml with UV, Click dependency, tools/ directory structure, and committed uv.lock
     status: failing
     verified_by: null
 
 verification:
   criteria:
     - AGENTS.md is generic — no project-specific content, discovers project context from known locations
-    - pyproject.toml valid and UV resolves dependencies
     - Framework/project boundary convention is documented and directory structure matches
-    - /upgrade replaces framework directories from upstream without touching project files
-    - /upgrade auto-commits before replacing for rollback safety
-    - /upgrade warns if custom files detected in framework directories
+    - /upgrade-lit replaces framework directories from upstream without touching project files
+    - /upgrade-lit aborts if uncommitted changes exist (user must commit or stash first)
+    - /upgrade-lit warns if custom files detected in framework directories
     - All new skills have CSO-compliant descriptions
     - All new skills include anti-rationalization tables
+    - pyproject.toml valid and UV resolves dependencies
   completed: false
   completed_date: null

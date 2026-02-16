@@ -52,4 +52,10 @@ For GraphQL schema and query design:
 
 ---
 
-_Last updated: 2026-02-03_
+## Project-Specific
+
+Build commands and prerequisites are project-owned. See `standards/project/build.md`.
+
+---
+
+_Last updated: 2026-02-15_

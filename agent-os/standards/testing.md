@@ -148,4 +148,10 @@ func TestProcessOrder(t *testing.T) {
 
 ---
 
-_Last updated: 2026-02-03_
+## Project-Specific
+
+Test commands are project-owned. See `standards/project/testing.md`.
+
+---
+
+_Last updated: 2026-02-15_
