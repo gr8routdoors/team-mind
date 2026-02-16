@@ -2,7 +2,7 @@
 
 ## Overview
 
-Make AGENTS.md a generic boot loader, formalize the framework-vs-project directory boundary, and build an upgrade skill that replaces framework files from upstream. These three changes make Lit SDLC maintainable for projects that are already using it.
+Make AGENTS.md a generic boot loader, formalize the framework-vs-project directory boundary, build an upgrade skill that replaces framework files from upstream, and create a minimal PR creation skill that enforces conventional commit format. These four changes make Lit SDLC maintainable for projects that are already using it.
 
 ## Scope
 
@@ -10,6 +10,7 @@ Make AGENTS.md a generic boot loader, formalize the framework-vs-project directo
 - Minimal AGENTS.md redesign (generic boot loader, project content discovered not inlined)
 - Framework/project directory boundary convention (formalized and documented)
 - `/upgrade-lit` skill (nuke-and-replace framework directories from upstream)
+- `/create-pr` skill (minimal PR creation with conventional commit titles)
 
 **Out of scope (deferred to future spec):**
 - Python tooling foundation (pyproject.toml, UV, tools/ directory) — deferred until first Python tool is needed (YAGNI)
@@ -58,3 +59,4 @@ See `stories.yml` for current status.
 | STORY-001 | Minimal AGENTS.md redesign | passing |
 | STORY-002 | Framework/project directory boundary | passing |
 | STORY-003 | /upgrade-lit skill | passing |
+| STORY-004 | /create-pr skill | passing |

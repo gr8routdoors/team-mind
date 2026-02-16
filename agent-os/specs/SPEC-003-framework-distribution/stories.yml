@@ -20,6 +20,12 @@ stories:
     status: passing
     verified_by: manual
 
+  STORY-004:
+    name: /create-pr skill
+    description: Create minimal PR creation skill that enforces conventional commit format for PR titles and generates proper PR descriptions
+    status: passing
+    verified_by: manual
+
 verification:
   criteria:
     - AGENTS.md is generic — no project-specific content, discovers project context from known locations
@@ -27,6 +33,8 @@ verification:
     - /upgrade-lit replaces framework directories from upstream without touching project files
     - /upgrade-lit aborts if uncommitted changes exist (user must commit or stash first)
     - /upgrade-lit warns if custom files detected in framework directories
+    - /create-pr enforces conventional commit format for PR titles
+    - /create-pr generates proper PR descriptions per git.md standard
     - All new skills have CSO-compliant descriptions
     - All new skills include anti-rationalization tables
   completed: true
