@@ -2,17 +2,17 @@
 
 ## Overview
 
-Establish the Python tooling foundation, make AGENTS.md a generic boot loader, formalize the framework-vs-project directory boundary, and build an upgrade skill that replaces framework files from upstream. These four changes make Lit SDLC maintainable for projects that are already using it.
+Make AGENTS.md a generic boot loader, formalize the framework-vs-project directory boundary, and build an upgrade skill that replaces framework files from upstream. These three changes make Lit SDLC maintainable for projects that are already using it.
 
 ## Scope
 
 **In scope:**
 - Minimal AGENTS.md redesign (generic boot loader, project content discovered not inlined)
-- Python tooling foundation (pyproject.toml, UV, Click, tools/ directory)
 - Framework/project directory boundary convention (formalized and documented)
 - `/upgrade-lit` skill (nuke-and-replace framework directories from upstream)
 
 **Out of scope (deferred to future spec):**
+- Python tooling foundation (pyproject.toml, UV, tools/ directory) — deferred until first Python tool is needed (YAGNI)
 - Framework manifest with file hashes (not needed for nuke-and-replace upgrade)
 - Validator scripts (standards index, install validation)
 - `/contribute-upstream` skill
@@ -44,8 +44,6 @@ Establish the Python tooling foundation, make AGENTS.md a generic boot loader, f
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| UV for package management | UV vs pip vs poetry vs pdm | UV is fast, modern, and already in use at the maintainer's work projects |
-| tools/ directory convention | tools/ vs scripts/ vs src/ | tools/ clearly signals "framework utilities" vs application code |
 | Directory boundary over manifest | Directory convention vs manifest file vs git submodule | Directory separation makes framework files obvious by location; upgrade becomes nuke-and-replace with no diffing or merge logic needed |
 | Nuke-and-replace upgrade | Nuke-and-replace vs diff-and-merge vs manifest-based three-way merge | Framework directories are wholly owned by upstream — no project files live there. Nuke-and-replace is simple, eliminates stale files after refactors, and avoids all merge complexity. Rollback is just `git checkout`. |
 | AGENTS.md as generic boot loader | Generic vs project-specific | Generic AGENTS.md is a framework file that can be upgraded like any other. Project-specific config lives in a known location that AGENTS.md points to. |
@@ -60,4 +58,3 @@ See `stories.yml` for current status.
 | STORY-001 | Minimal AGENTS.md redesign | passing |
 | STORY-002 | Framework/project directory boundary | passing |
 | STORY-003 | /upgrade-lit skill | passing |
-| STORY-004 | pyproject.toml + UV setup | failing |

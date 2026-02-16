@@ -2,15 +2,13 @@
 
 ## Overview
 
-Four changes that make Lit SDLC maintainable: a generic AGENTS.md, Python tooling, a formalized directory boundary, and a nuke-and-replace upgrade skill. The key insight is that framework files and project files are separated by directory — upgrade replaces framework directories wholesale rather than diffing individual files.
+Three changes that make Lit SDLC maintainable: a generic AGENTS.md, a formalized directory boundary, and a nuke-and-replace upgrade skill. The key insight is that framework files and project files are separated by directory — upgrade replaces framework directories wholesale rather than diffing individual files.
 
 ## Components
 
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `AGENTS.md` | Config | Generic boot loader — framework workflow, directory map, pointer to project config |
-| `pyproject.toml` | Config | UV package management, project metadata |
-| `tools/` | Python package | Framework utility scripts (CLI via Click) |
 | `/upgrade-lit` skill | Skill (SKILL.md) | Replace framework directories from upstream |
 
 ## Directory Boundary
@@ -23,9 +21,6 @@ Framework-owned (replaced on upgrade):
   agent-os/standards/*.md        ← framework standards (root-level files)
   agent-os/standards/code-style/ ← framework language guides
   AGENTS.md                      ← generic boot loader
-  tools/                         ← framework Python tools (STORY-004)
-  pyproject.toml                 ← package config (STORY-004)
-  uv.lock                        ← dependency lockfile (STORY-004)
 
 Project-owned (never touched by upgrade):
   .claude/skills/{project}/      ← project-specific skills
@@ -94,18 +89,8 @@ Agent reads AGENTS.md → sees directory structure → reads project config from
 - CSO-compliant description, anti-rationalization table
 - Process: check for uncommitted changes (abort if dirty) → show what will be replaced → confirm with user → delete framework directories → copy from upstream repo → report changes → suggest reviewing diff with `git diff HEAD~1`
 - If custom files detected in framework directories, warn before deleting
-- Python tooling paths (`tools/`, `pyproject.toml`, `uv.lock`, `uv sync`) are out of scope — will be added when STORY-004 is implemented
 
 **Stories:** STORY-003
-
-### Task 4: Python tooling foundation
-- Create `pyproject.toml` with UV configuration
-- Create `tools/__init__.py` and package structure
-- Add core dependency: Click (CLI interfaces for framework tools)
-- Add dev dependencies (pytest, ruff)
-- Commit `uv.lock` for reproducible installs
-
-**Stories:** STORY-004
 
 ---
 
@@ -113,6 +98,7 @@ Agent reads AGENTS.md → sees directory structure → reads project config from
 
 The following were originally part of this spec and are deferred to a future spec:
 
+- **Python tooling foundation** — `pyproject.toml`, UV, `tools/` directory, Click CLI. Deferred until first Python tool is needed (YAGNI). When added, `/upgrade-lit` will be updated to handle these paths.
 - **Framework manifest** — Hash-based file tracking for validation and contribution workflows
 - **Validator scripts** — `validate_standards.py`, `validate_install.py`, `parse_session.py`
 - **`/contribute-upstream` skill** — Package local enhancements for upstream PR

@@ -37,9 +37,6 @@ Framework-owned (replaced on /upgrade-lit):
   .claude/skills/agent-os/           # Framework skills
   agent-os/standards/*.md            # Framework standards (root-level files)
   agent-os/standards/code-style/     # Language-specific guides
-  tools/                             # Framework Python tools
-  pyproject.toml                     # Package config
-  uv.lock                            # Dependency lockfile
 
 Project-owned (never touched by /upgrade-lit):
   CLAUDE.md                          # Claude Code configuration

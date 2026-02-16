@@ -20,12 +20,6 @@ stories:
     status: passing
     verified_by: manual
 
-  STORY-004:
-    name: pyproject.toml + UV setup
-    description: Add pyproject.toml with UV, Click dependency, tools/ directory structure, and committed uv.lock
-    status: failing
-    verified_by: null
-
 verification:
   criteria:
     - AGENTS.md is generic — no project-specific content, discovers project context from known locations
@@ -35,6 +29,5 @@ verification:
     - /upgrade-lit warns if custom files detected in framework directories
     - All new skills have CSO-compliant descriptions
     - All new skills include anti-rationalization tables
-    - pyproject.toml valid and UV resolves dependencies
-  completed: false
-  completed_date: null
+  completed: true
+  completed_date: 2026-02-15

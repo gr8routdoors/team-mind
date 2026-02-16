@@ -24,9 +24,6 @@ Replaced wholesale on `/upgrade-lit`. Do not put project content here.
 | `.claude/skills/agent-os/` | Framework skills (start-session, shape-spec, etc.) |
 | `agent-os/standards/*.md` | Framework standards (root-level files only) |
 | `agent-os/standards/code-style/` | Language-specific style guides (java.md, go.md) |
-| `tools/` | Framework Python tools |
-| `pyproject.toml` | Package config |
-| `uv.lock` | Dependency lockfile |
 
 ---
 
