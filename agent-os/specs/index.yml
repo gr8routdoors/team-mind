@@ -26,10 +26,10 @@ specs:
     stories_complete: 1
 
   SPEC-003:
-    name: Framework Distribution
-    status: in_requirements
+    name: Framework Tooling & Upgrade
+    status: in_design
     created: 2026-02-14
-    stories: 11
+    stories: 4
     stories_complete: 0
 
 # Next spec number: 004

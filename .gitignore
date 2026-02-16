@@ -1,7 +1,8 @@
 # IDE files
 .vscode/
 .idea/
-.cursor/
+.cursor/plans
+.claude/worktrees
 
 # Local environment files
 .env

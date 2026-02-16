@@ -1,4 +1,4 @@
-# STORY-001: pyproject.toml + UV setup — Acceptance Criteria
+# STORY-002: pyproject.toml + UV setup — Acceptance Criteria
 
 ## AC-001: Valid pyproject.toml
 
@@ -13,9 +13,13 @@
 
 **Given** a valid `pyproject.toml`
 **When** dependencies are defined
-**Then** core dependencies include: PyYAML, python-frontmatter, Click
+**Then** core dependencies include: Click (for CLI interfaces on framework tools)
 **And** dev dependencies include: pytest, ruff
+**And** all dependencies specify version lower bounds (e.g., `click>=8.0`)
+**And** `uv.lock` is committed to the repo for reproducible installs
 **And** all dependencies resolve and install via `uv sync`
+
+> **Note:** PyYAML and python-frontmatter are intentionally excluded. The LLM reads and writes YAML/frontmatter natively — Python tools handle deterministic operations (hashing, diffing, validating structure) that don't require YAML parsing. Additional dependencies should be added per-story as needed.
 
 ## AC-003: Tools directory structure
 

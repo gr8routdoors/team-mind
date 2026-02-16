@@ -1,139 +1,114 @@
-# SPEC-003: Framework Distribution — Design
+# SPEC-003: Framework Tooling & Upgrade — Design
 
 ## Overview
 
-A layered approach: Python tooling provides the executable foundation, the framework manifest defines the boundary between framework and project files, upgrade/contribution workflows build on the manifest, and the install/onboard skills provide the user-facing adoption experience.
+Four changes that make Lit SDLC maintainable: a generic AGENTS.md, Python tooling, a formalized directory boundary, and a nuke-and-replace upgrade skill. The key insight is that framework files and project files are separated by directory — upgrade replaces framework directories wholesale rather than diffing individual files.
 
 ## Components
 
 | Component | Type | Purpose |
 |-----------|------|---------|
+| `AGENTS.md` | Config | Generic boot loader — framework workflow, directory map, pointer to project config |
 | `pyproject.toml` | Config | UV package management, project metadata |
-| `tools/` | Python package | Framework utility scripts |
-| `tools/validate_standards.py` | Script | Validate standards index integrity |
-| `tools/validate_install.py` | Script | Verify directory structure and completeness |
-| `tools/parse_session.py` | Script | Parse session summaries with YAML frontmatter |
-| `tools/upgrade.py` | Script | Diff framework files against upstream, generate report |
-| `framework-manifest.yml` | Config | Lists all framework-owned files with version hashes |
-| `/upgrade` skill | Skill | Interactive upgrade from upstream |
-| `/contribute-upstream` skill | Skill | Extract and package local enhancements for upstream PR |
-| `/clean-install` skill | Skill | Reset repo to clean skeleton, guided setup |
-| `/onboard-project` skill | Skill | Brownfield content ingestion and structuring |
-| Getting started guide | Doc | User-facing walkthrough |
+| `tools/` | Python package | Framework utility scripts (CLI via Click) |
+| `/upgrade` skill | Skill (SKILL.md) | Replace framework directories from upstream |
+
+## Directory Boundary
+
+The framework/project boundary is defined by directory location, not by a manifest or metadata:
+
+```
+Framework-owned (replaced on upgrade):
+  .claude/skills/agent-os/       ← framework skills
+  agent-os/standards/            ← framework standards
+  tools/                         ← framework Python tools
+  AGENTS.md                      ← generic boot loader
+  pyproject.toml                 ← package config
+  uv.lock                        ← dependency lockfile
+
+Project-owned (never touched by upgrade):
+  .claude/skills/{project}/      ← project-specific skills
+  agent-os/product/              ← mission, roadmap, domain docs
+  agent-os/specs/                ← project specs and stories
+  agent-os/context/              ← sessions, component details
+  README.md                      ← project README
+```
+
+This convention means:
+- **Custom skills go in `.claude/skills/{project}/`**, not in `agent-os/`
+- **Project-specific standards** (if any) go in a project-owned location, not in `agent-os/standards/`
+- Upgrade can safely nuke framework directories because project files are never there
 
 ## Data Flow
 
-### Install flow
-```
-User clones repo → /clean-install → Python tools reset files → setup wizard → /onboard-project or /plan-product
-```
-
 ### Upgrade flow
 ```
-/upgrade → tools/upgrade.py fetches upstream manifest → diff against local → present changes → apply or walk through conflicts
+/upgrade → confirm with user → git commit current state → delete framework directories → copy from upstream → uv sync → report what changed
 ```
 
-### Contribution flow
+### AGENTS.md discovery
 ```
-/contribute-upstream → compare local framework files to manifest → identify modifications → extract into PR-ready format
-```
-
-## Framework Manifest Structure
-
-```yaml
-# framework-manifest.yml
-version: "2.1.0"
-files:
-  ".claude/skills/agent-os/commit/SKILL.md":
-    hash: "sha256:abc123..."
-    type: skill
-  "agent-os/standards/guardrails.md":
-    hash: "sha256:def456..."
-    type: standard
-  "tools/validate_standards.py":
-    hash: "sha256:ghi789..."
-    type: tool
-  # ... all framework-owned files
-
-project_files:
-  # These are NOT framework-owned (never overwritten by upgrade)
-  - "AGENTS.md"
-  - "agent-os/product/**"
-  - "agent-os/specs/**"
-  - "agent-os/context/sessions/**"
-  - "agent-os/context/component-details/**"
+Agent reads AGENTS.md → sees directory structure → reads project config from agent-os/product/ → discovers project skills from .claude/skills/{project}/ → ready to work
 ```
 
 ## Trade-offs & Decisions
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| Hash-based change detection | Hash vs timestamp vs git diff | Hash is deterministic and works regardless of git history |
-| Glob patterns for project files | Explicit list vs glob patterns | Globs are maintainable; explicit lists break as projects grow |
-| /onboard-project as single skill | Single skill vs multiple skills per content type | Single skill with internal phases keeps the user experience simple |
+| Directory boundary over manifest | Directory convention vs manifest file vs git submodule | Directory separation makes ownership obvious by location; no metadata to maintain |
+| Nuke-and-replace upgrade | Nuke-and-replace vs diff-and-merge vs three-way merge | Framework directories are wholly owned by upstream. Nuke-and-replace is simple, eliminates stale files after refactors, and has zero merge complexity. Rollback is `git checkout`. |
+| AGENTS.md as framework file | Framework-owned vs project-owned | Generic AGENTS.md can be upgraded like any other framework file. Project config is discovered from known locations, not inlined in AGENTS.md. |
+| Pre-upgrade commit | Auto-commit vs manual commit vs no commit | Auto-commit before upgrade ensures `git checkout` is a clean rollback path. User confirms before proceeding. |
 
 ---
 
 ## Execution Plan
 
-### Task 1: Python tooling foundation
-- Create `pyproject.toml` with UV configuration
-- Create `tools/__init__.py` and package structure
-- Add core dependencies (PyYAML, python-frontmatter, Click)
-- Add dev dependencies (pytest, ruff)
+### Task 1: AGENTS.md redesign
+- Strip all project-specific content from AGENTS.md
+- Keep: framework workflow description, directory structure map, skill discovery instructions, "run /start-session"
+- Add: pointer to `agent-os/product/` for project context
+- Add: pointer to `.claude/skills/{project}/` for project-specific skills
+- Document the new format so downstream projects know what to customize where
 
 **Stories:** STORY-001
 
-### Task 2: Validator scripts
-- Create `tools/validate_standards.py`
-- Create `tools/validate_install.py`
-- Create `tools/parse_session.py`
-- Add pytest tests for each
+### Task 2: Python tooling foundation
+- Create `pyproject.toml` with UV configuration
+- Create `tools/__init__.py` and package structure
+- Add core dependency: Click (CLI interfaces for framework tools)
+- Add dev dependencies (pytest, ruff)
+- Commit `uv.lock` for reproducible installs
 
-**Stories:** STORY-002, STORY-003
+**Stories:** STORY-002
 
-### Task 3: Framework boundary
-- Design and create `framework-manifest.yml`
-- Create `tools/manifest.py` for manifest operations (generate, compare, diff)
-- Document the boundary convention
+### Task 3: Directory boundary convention
+- Document the framework-owned vs project-owned directory convention
+- Ensure existing directory structure matches the convention
+- Add convention to AGENTS.md directory map
+- Verify no project files live in framework directories and vice versa
+
+**Stories:** STORY-003
+
+### Task 4: /upgrade skill
+- Create `.claude/skills/agent-os/upgrade/SKILL.md`
+- CSO-compliant description, anti-rationalization table
+- Process: show current vs upstream version → confirm with user → auto-commit current state → delete framework directories → copy from upstream repo → run `uv sync` → report changes → suggest reviewing diff with `git diff HEAD~1`
+- User can opt out of any directory (e.g., keep local standards)
+- If custom files detected in framework directories, warn before deleting
 
 **Stories:** STORY-004
 
-### Task 4: Upgrade and contribution
-- Create `/upgrade` skill with CSO-compliant description
-- Create `tools/upgrade.py` for deterministic diff/apply
-- Create `/contribute-upstream` skill
-- Implement version tagging convention
+---
 
-**Stories:** STORY-005, STORY-006, STORY-007
+## Future Work (Deferred)
 
-### Task 5: AGENTS.md redesign
-- Strip framework documentation from AGENTS.md
-- Reduce to boot loader: project description, directory structure, "run /start-session", project config, profile setting
-- Document the new format
+The following were originally part of this spec and are deferred to a future spec:
 
-**Stories:** STORY-008
-
-### Task 6: /clean-install skill
-- Create skill that delegates file operations to Python tools
-- Interactive setup wizard (languages, project structure, git workflow, profile)
-- Greenfield vs brownfield fork
-- Install validation via tools/validate_install.py
-
-**Stories:** STORY-009
-
-### Task 7: /onboard-project skill
-- Content ingestion workflow (copy/paste, file upload, URL)
-- Content quality assessment and scorecard
-- Guided content transformation into Lit SDLC artifacts
-- Existing feature mapping to retroactive specs
-- Gap analysis after onboarding
-
-**Stories:** STORY-010
-
-### Task 8: Getting started guide
-- Write user-facing walkthrough
-- Cover install, first session, common workflows
-- Link to relevant skills and docs
-
-**Stories:** STORY-011
+- **Framework manifest** — Hash-based file tracking for validation and contribution workflows
+- **Validator scripts** — `validate_standards.py`, `validate_install.py`, `parse_session.py`
+- **`/contribute-upstream` skill** — Package local enhancements for upstream PR
+- **Version tagging** — Semantic versioning, changelog generation
+- **`/clean-install` skill** — Fresh adoption experience for new projects
+- **`/onboard-project` skill** — Brownfield content ingestion
+- **Getting started guide** — User-facing walkthrough
