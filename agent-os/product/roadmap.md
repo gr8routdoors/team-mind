@@ -24,9 +24,11 @@
 - [x] CSO standard — Claude Search Optimization (SPEC-001)
 - [x] Git worktrees standard (SPEC-001)
 
-## Phase 3: Distribution (Up Next)
+## Phase 3: Distribution (In Progress)
 
-Prioritized to scratch the maintainer's itch first: stamp commits with context, get Python tooling in place, solve the upgrade problem, make token usage configurable, complete the PR pipeline, then build the new-user adoption path.
+**Completed:** SPEC-003 (AGENTS.md redesign, directory boundary, `/upgrade-lit` skill, minimal `/create-pr` skill)
+
+**Up next:** `/commit` skill, Python tooling foundation, operating profiles, enhanced `/create-pr`, adoption workflows
 
 ### 3.1 — `/commit` skill
 
@@ -46,15 +48,16 @@ Lit SDLC ships with a `pyproject.toml` at root and uses [UV](https://github.com/
 - [ ] **Install validation script** (`tools/validate_install.py`) — Verify directory structure, check all skill files present, validate AGENTS.md has required sections. Used by `/clean-install` skill under the hood.
 - [ ] **Session frontmatter parser** (`tools/parse_session.py`) — Parse enhanced session summaries with YAML frontmatter (session_id, tokens_used, cost_usd, status, stories_completed/remaining). Foundation for autonomous execution and session analytics.
 
-### 3.3 — Upgrade and contribution workflow
+### 3.3 — Upgrade and contribution workflow ✅ COMPLETE (SPEC-003)
 
-Once you clone Lit SDLC into your project, the framework files and your project-specific content live in the same repo. Upstream improvements (new skills, updated standards, bug fixes) are currently impossible to adopt without manually diffing and copying files. Going the other direction — contributing enhancements you develop in your project back to the Lit SDLC source repo — is equally manual. This needs a proper solution.
+**Delivered:** Framework directory boundary convention, `/upgrade-lit` skill for nuke-and-replace upgrades, minimal AGENTS.md as generic boot loader, minimal `/create-pr` skill.
 
-- [ ] **Framework vs. project boundary** — Establish a clear, machine-enforceable boundary between framework files (skills, standards templates, tools, core guardrails) and project-specific files (product docs, specs, sessions, AGENTS.md customizations, project-specific standards). This could be a manifest file (`framework-manifest.yml`) listing every framework-owned file and its version hash, or a directory convention, or both. `/clean-install` also needs this boundary — the upgrade system builds on the same concept.
-- [ ] **`/upgrade-lit` skill** — Check the upstream Lit SDLC repo for changes, diff against the local framework files, and present the user with a clear summary: what's new, what's changed, what conflicts with local modifications. For clean upgrades (no local modifications to framework files), apply automatically. For conflicts, walk the user through each one interactively — show the upstream change, show the local modification, ask which to keep or how to merge. Think `git merge` UX but for framework files specifically.
-- [ ] **Upgrade Python tooling** (`tools/upgrade.py`) — The deterministic side of the upgrade skill. Fetch upstream manifest, compare hashes, identify changed/new/removed framework files, detect local modifications to framework files, generate a diff report. The skill handles the conversation; the tool handles the file comparison.
-- [ ] **`/contribute-upstream` skill** — For enhancements made in a project repo that should flow back to the Lit SDLC source. Identify which framework files have been modified locally (new skills, updated standards, improved guardrails), extract them into a clean PR-ready format against the upstream repo, and help the user write a contribution summary. Could generate a patch set or prepare a branch in a local clone of the source repo.
-- [ ] **Version tagging** — Tag Lit SDLC releases with semantic versions. The manifest tracks which version is installed. The upgrade skill can show "you're on v2.1.0, v2.2.0 is available" and present a changelog. This also enables projects to pin to a known-good version and upgrade deliberately.
+- [x] **Framework vs. project boundary** — Delivered as directory convention in SPEC-003 STORY-002. Framework files live in `.claude/skills/agent-os/`, `agent-os/standards/*.md`, `agent-os/standards/code-style/`, and `AGENTS.md`. Project files live in `.claude/skills/{project}/`, `agent-os/standards/project/`, `agent-os/product/`, `agent-os/specs/`, `agent-os/context/`. Documented in `agent-os/standards/directory-boundary.md`.
+- [x] **`/upgrade-lit` skill** — Delivered in SPEC-003 STORY-003. Nuke-and-replace framework directories from upstream via shallow clone. Aborts if uncommitted changes exist. Warns about custom files in framework directories. Merges `index.yml` to preserve project-owned standards.
+- [x] **Minimal `/create-pr` skill** — Delivered in SPEC-003 STORY-004. Enforces conventional commit format for PR titles. Handles single commit (use commit message) and multiple commits (synthesize). Generates proper PR descriptions per git.md. To be enhanced in Phase 3.5 with artifact integration and profile-aware behavior.
+- [ ] **Upgrade Python tooling** (`tools/upgrade.py`) — Deferred to future spec (YAGNI — no Python tools ship with framework yet).
+- [ ] **`/contribute-upstream` skill** — Deferred to future spec.
+- [ ] **Version tagging** — Deferred to future spec.
 
 ### 3.4 — Operating profiles (token optimization)
 
@@ -81,8 +84,9 @@ The implementation workflow currently ends at `/verify-completion` — the exist
 
 The adoption path is: clone the repo → run `/clean-install` → the skill resets all project-specific content and walks you through initial setup. For brownfield projects, `/clean-install` hands off to `/onboard-project`.
 
-- [ ] **Reset project-specific content** — Wipe product docs (mission, roadmap, domain) back to empty templates, clear all specs and session history, reset AGENTS.md `// TODO:` sections, remove any project-specific standards while preserving framework standards. The user clones the full repo (including this roadmap, SPEC-001, etc. as living examples) and the skill strips it down to a clean skeleton. Leverages the framework/project boundary manifest from 3.3.
-- [ ] **Minimal AGENTS.md** — Redesign AGENTS.md as a pure boot loader rather than a reference document. Current AGENTS.md duplicates content that belongs in standards, skills, and architecture docs. The new AGENTS.md should contain only: a one-paragraph project description, the Lit SDLC directory structure, the single rule "run `/start-session` first (or `/bootstrap` if new)," project-specific configuration (tech stack, build commands, project structure), and the operating profile setting. All framework documentation (workflow tables, discipline enforcement explanations, standards references) should be removed — the skills and standards already contain that information, and `/start-session` loads what's needed.
+**Note:** Minimal AGENTS.md was delivered in SPEC-003 STORY-001 — it's now a generic boot loader that discovers project context from known locations.
+
+- [ ] **Reset project-specific content** — Wipe product docs (mission, roadmap, domain) back to empty templates, clear all specs and session history, reset AGENTS.md `// TODO:` sections, remove any project-specific standards while preserving framework standards. The user clones the full repo (including this roadmap, SPEC-001, etc. as living examples) and the skill strips it down to a clean skeleton. Leverages the framework/project boundary convention from SPEC-003.
 - [ ] **Interactive setup wizard** — After reset, walk the user through initial configuration: What languages does your project use? (remove irrelevant language-specific standards like `code-style/java.md` if it's a Go-only shop). What's your project structure? (populate the AGENTS.md project structure section). What's your git workflow? (configure git standards). What's your team size and review process? (set operating profile). This replaces the current manual `// TODO:` customization.
 - [ ] **Greenfield vs. brownfield fork** — At the end of clean-install, ask: "Do you have existing documentation to import?" If yes, hand off to `/onboard-project`. If no, hand off to `/plan-product` for a fresh start.
 - [ ] **Install validation** — Verify the resulting directory structure is correct using `tools/validate_install.py` from 3.2. All skill files present, standards index valid, product templates in place, AGENTS.md properly configured. Report any issues.

@@ -8,6 +8,7 @@ triggers:
   - "make pull request"
   - "open pr"
   - "ship pr"
+  - "ship it"
 ---
 
 # Create Pull Request
