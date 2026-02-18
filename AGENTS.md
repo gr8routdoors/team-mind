@@ -5,29 +5,30 @@
 
 ## Getting Started
 
-**First time on this project?** Run `/bootstrap` to learn the framework.
+**ALWAYS run `/start-session` first.** No exceptions. This loads priorities, recent context, and active specs before any work begins.
 
-**Returning?** Run `/start-session` at the beginning of every session.
+If `/start-session` finds no framework content (no roadmap, no specs, no sessions), run `/bootstrap` to set up the project.
+
+**When asked to build or implement a spec**, read and follow the `/dispatch-subagents` skill once you've finished running /start-session. Do NOT implement stories yourself — dispatch subagents per story with two-stage review.
 
 ## Workflow
 
 | Phase | Skill | When to Use |
 |-------|-------|-------------|
-| Session Start | `/start-session` | **Always run first** — loads priorities, context, spec status |
-| First Time | `/bootstrap` | New agent onboarding — learn the framework |
+| Session Start | `/start-session` | **ALWAYS run first** — loads priorities, context, spec status |
+| Implementation | `/dispatch-subagents` | **Build/implement a spec** — dispatch subagents per story |
 | Product Strategy | `/plan-product` | Roadmap, priorities, strategic planning |
 | Shaping | `/shape-spec` | New feature or significant change (creates spec) |
 | Acceptance Criteria | `/derive-acs` | Generate ACs from requirements (standalone) |
 | BDD Tests | `/generate-bdd-tests` | Transform ACs into test scaffolding |
-| Implementation | `/dispatch-subagents` | Execute stories with subagent-driven development |
 | Code Review | `/request-code-review` | Two-stage review (spec compliance + code quality) |
 | Review Feedback | `/receive-code-review` | Handle review feedback with technical rigor |
 | Continuing Work | `/continue-spec` | Resume work on existing spec |
 | Investigation | `/investigate` | Bugs, performance, understanding behavior |
+| Standards | `/inject-standards` | Load applicable conventions before implementation |
 | Verification | `/verify-completion` | **Before ANY completion claim** — evidence before assertions |
+| Onboarding | `/bootstrap` | New project with no framework content |
 | End of Session | `/end-session` | Context preservation, session summary |
-
-Before implementation, run `/inject-standards` to load applicable conventions.
 
 ## Directory Structure
 
