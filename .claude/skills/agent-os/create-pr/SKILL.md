@@ -81,10 +81,10 @@ Count the commits in the output.
 **For both cases:**
 - If the description is missing required sections, add them based on the code changes
 - If testing info isn't clear, use: "Manual verification"
-- Append the Claude Code footer:
+- Append the AI footer with the resolved tool name (see [Resolving AI Tool Name](#resolving-ai-tool-name)):
   ```
 
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  🤖 Generated with [Lit SDLC](https://github.com/gr8routdoors/lit-sdlc) via <resolved tool name>
   ```
 
 ### Step 3: Present for Review (AC-001, AC-002)
@@ -110,7 +110,7 @@ I'll create a pull request with:
 ## Test plan
 <testing text>
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with [Lit SDLC](https://github.com/gr8routdoors/lit-sdlc) via <resolved tool name>
 
 Does this look good, or would you like me to adjust anything?
 ```
@@ -135,6 +135,20 @@ gh pr create --title "<title>" --body "<description>"
 - Check if `gh` is authenticated: `gh auth status`
   - If not authenticated: "GitHub CLI is not authenticated. Run: gh auth login"
 - If other error: Show the error message and suggest the user check their repository setup
+
+---
+
+## Resolving AI Tool Name
+
+The footer must include the name of the AI tool that generated the PR. Detect the environment and substitute accordingly:
+
+| Signal | Tool Name |
+|--------|-----------|
+| Running inside Cursor IDE (system prompt mentions "Cursor", workspace uses `.cursor/` directories) | **Cursor** |
+| Running inside Claude Code CLI (`claude` command, CLAUDE_CODE env) | **Claude Code** |
+| Cannot determine | **AI Assistant** (generic fallback) |
+
+The agent MUST resolve this before presenting the PR for review — never show a raw placeholder to the user.
 
 ---
 
