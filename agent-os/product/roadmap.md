@@ -26,9 +26,9 @@
 
 ## Phase 3: Distribution (In Progress)
 
-**Completed:** SPEC-003 (AGENTS.md redesign, directory boundary, `/upgrade-lit` skill, minimal `/create-pr` skill)
+**Completed:** SPEC-003 (AGENTS.md redesign, directory boundary, `/upgrade-lit` skill, minimal `/create-pr` skill), `/clean-install` skill
 
-**Up next:** `/commit` skill, Python tooling foundation, operating profiles, enhanced `/create-pr`, adoption workflows
+**Up next:** `/commit` skill, Python tooling foundation, operating profiles, enhanced `/create-pr`, `/onboard-project`
 
 ### 3.1 — `/commit` skill
 
@@ -80,16 +80,16 @@ The implementation workflow currently ends at `/verify-completion` — the exist
 - [ ] **Git hygiene** — Ensure the branch is clean, squash or organize commits per the project's git standard, handle rebasing against the target branch if needed, and set appropriate PR labels/reviewers if configured. Respect `git.md` and `git-worktrees.md` standards.
 - [ ] **PR linkage to spec artifacts** — Include links to the spec, story, and ACs in the PR description so reviewers have full context. Optionally update `stories.yml` status to reflect the PR is open. When the PR is merged (detected on next `/start-session`), mark the story as `passing`.
 
-### 3.6 — `/clean-install` skill
+### 3.6 — `/clean-install` skill ✅ COMPLETE
 
 The adoption path is: clone the repo → run `/clean-install` → the skill resets all project-specific content and walks you through initial setup. For brownfield projects, `/clean-install` hands off to `/onboard-project`.
 
-**Note:** Minimal AGENTS.md was delivered in SPEC-003 STORY-001 — it's now a generic boot loader that discovers project context from known locations.
+**Delivered:** Full `/clean-install` skill with inventory-driven reset, hard gate confirmation, template generation for all project-owned layers, worktree cleanup, and greenfield/brownfield handoff.
 
-- [ ] **Reset project-specific content** — Wipe product docs (mission, roadmap, domain) back to empty templates, clear all specs and session history, reset AGENTS.md `// TODO:` sections, remove any project-specific standards while preserving framework standards. The user clones the full repo (including this roadmap, SPEC-001, etc. as living examples) and the skill strips it down to a clean skeleton. Leverages the framework/project boundary convention from SPEC-003.
-- [ ] **Interactive setup wizard** — After reset, walk the user through initial configuration: What languages does your project use? (remove irrelevant language-specific standards like `code-style/java.md` if it's a Go-only shop). What's your project structure? (populate the AGENTS.md project structure section). What's your git workflow? (configure git standards). What's your team size and review process? (set operating profile). This replaces the current manual `// TODO:` customization.
-- [ ] **Greenfield vs. brownfield fork** — At the end of clean-install, ask: "Do you have existing documentation to import?" If yes, hand off to `/onboard-project`. If no, hand off to `/plan-product` for a fresh start.
-- [ ] **Install validation** — Verify the resulting directory structure is correct using `tools/validate_install.py` from 3.2. All skill files present, standards index valid, product templates in place, AGENTS.md properly configured. Report any issues.
+- [x] **Reset project-specific content** — Wipes product docs (mission, roadmap, domain) back to empty templates, clears all specs and session history, resets project-specific standards while preserving framework standards. Leverages the framework/project boundary convention from SPEC-003. Handles both deletion and overwrite-fallback for sandboxed environments.
+- [x] **Greenfield vs. brownfield fork** — After reset, offers handoff to `/plan-product` for greenfield projects or `/onboard-project` for brownfield adoption.
+- [ ] **Interactive setup wizard** — Deferred. Walk the user through language selection, project structure, git workflow, and operating profile configuration. Currently handled by downstream skills (`/plan-product`, `/bootstrap`).
+- [ ] **Install validation** — Deferred to 3.2 (Python tooling foundation). Verify directory structure using `tools/validate_install.py`.
 
 ### 3.7 — `/onboard-project` skill (brownfield adoption)
 
