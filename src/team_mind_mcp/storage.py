@@ -28,7 +28,7 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    uri TEXT UNIQUE NOT NULL,
+                    uri TEXT NOT NULL,
                     metadata JSON
                 )
             """)
