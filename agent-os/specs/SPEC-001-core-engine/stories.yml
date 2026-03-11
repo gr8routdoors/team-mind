@@ -38,6 +38,24 @@ stories:
     status: passing
     verified_by: null
 
+  STORY-006:
+    name: CLI Configuration & Environment Variables
+    description: Parse global CLI options (like '--db-path') and environment variables ('TEAM_MIND_DB_PATH') to configure the StorageAdapter and start the MCP server.
+    status: passing
+    verified_by: null
+
+  STORY-007:
+    name: Bulk CLI Ingestion Subcommand
+    description: Provide a 'team-mind-mcp ingest' subcommand to process files and URIs without starting the full MCP server, allowing for offline bulk loading.
+    status: passing
+    verified_by: null
+
+  STORY-008:
+    name: Live MCP Ingestion Tool
+    description: Build an IngestionPlugin that registers an 'ingest_documents' tool, allowing connected AI agents to dynamically push URIs to the storage backend at runtime.
+    status: passing
+    verified_by: null
+
 verification:
   criteria:
     - The package can be built into a wheel (`uv build`) and installed locally without dependency conflicts.
