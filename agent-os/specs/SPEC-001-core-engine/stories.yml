@@ -35,7 +35,7 @@ stories:
   STORY-005:
     name: Document Retrieval Plugin
     description: Implement a dedicated plugin and ResourceResolver that fetches full document payloads given a URI, seamlessly handling whether it is stored locally in the embedded DB or pulled live from a remote pointer.
-    status: in_requirements
+    status: passing
     verified_by: null
 
 verification:

@@ -29,9 +29,16 @@ def test_packaging_cli_entry_point_execution():
     AC-002: CLI Entry Point Execution
     """
     # Given the package is correctly installed (we simulate execution via uv run)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
     
     # When a user invokes the CLI entry point
-    result = subprocess.run(["uv", "run", "team-mind-mcp"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["uv", "run", "team-mind-mcp"], 
+        capture_output=True, 
+        text=True,
+        env=env
+    )
     
     # Then the application triggers the main MCP server startup routine
     # And returns a successful exit code
