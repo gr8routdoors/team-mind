@@ -17,7 +17,7 @@ stories:
   STORY-002:
     name: SQLite Embedded Storage Engine
     description: Implement the database abstraction layer natively using SQLite with JSON1 and sqlite-vec support.
-    status: in_requirements
+    status: passing
     verified_by: null
 
   STORY-003:
