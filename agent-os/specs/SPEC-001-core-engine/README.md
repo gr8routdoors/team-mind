@@ -46,6 +46,7 @@ See `stories.yml` for current status.
 
 | ID | Story | Status |
 |----|-------|--------|
+| STORY-000 | Executable Packaging & Delivery | in_requirements |
 | STORY-001 | MCP Gateway & Plugin Registry | in_requirements |
 | STORY-002 | SQLite Embedded Storage Engine | in_requirements |
 | STORY-003 | URI-based Bundle Ingestion Loop | in_requirements |

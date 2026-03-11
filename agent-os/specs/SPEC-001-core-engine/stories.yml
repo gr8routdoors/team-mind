@@ -2,6 +2,12 @@
 # Agents may only modify 'status' and 'verified_by' fields
 
 stories:
+  STORY-000:
+    name: Executable Packaging & Delivery
+    description: Establish the project structure, pyproject.toml, and CLI entry point so the application can be cleanly installed and run (e.g., via `uvx team-mind-mcp`).
+    status: in_requirements
+    verified_by: null
+
   STORY-001:
     name: MCP Gateway & Plugin Registry
     description: Establish the base Python MCP server and the generic interface for plugins to register tools.
@@ -34,7 +40,8 @@ stories:
 
 verification:
   criteria:
-    - All BDD tests pass
+    - The package can be built into a wheel (`uv build`) and installed locally without dependency conflicts.
+    - All pytest BDD tests pass.
     - Manual test of using an AI client (like Claude Desktop) to connect to the MCP server and execute the 'semantic_search' and 'get_full_document' tools.
   completed: false
   completed_date: null

@@ -14,7 +14,7 @@ specs:
     slug: core-engine
     status: in_requirements
     created: 2026-03-10
-    stories: 4
+    stories: 6
     stories_complete: 0
 
 # Next spec number: 002
