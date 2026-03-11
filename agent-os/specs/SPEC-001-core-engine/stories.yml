@@ -5,7 +5,7 @@ stories:
   STORY-000:
     name: Executable Packaging & Delivery
     description: Establish the project structure, pyproject.toml, and CLI entry point so the application can be cleanly installed and run (e.g., via `uvx team-mind-mcp`).
-    status: in_requirements
+    status: passing
     verified_by: null
 
   STORY-001:
