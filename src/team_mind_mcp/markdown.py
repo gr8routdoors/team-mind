@@ -2,7 +2,7 @@ import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import Plugin
+from team_mind_mcp.server import ToolProvider, IngestListener
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
@@ -14,7 +14,7 @@ def _mock_embed(text: str) -> list[float]:
         vector[i] = h[i] / 255.0
     return vector
 
-class MarkdownPlugin(Plugin):
+class MarkdownPlugin(ToolProvider, IngestListener):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
     
     def __init__(self, storage: StorageAdapter):

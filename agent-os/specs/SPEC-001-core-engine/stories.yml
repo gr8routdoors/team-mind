@@ -56,6 +56,12 @@ stories:
     status: passing
     verified_by: null
 
+  STORY-009:
+    name: Decouple Plugin Interfaces
+    description: Split the unified Plugin interface into ToolProvider and IngestListener to cleanly separate MCP tool capabilities from event-driven ingestion handling.
+    status: passing
+    verified_by: null
+
 verification:
   criteria:
     - The package can be built into a wheel (`uv build`) and installed locally without dependency conflicts.

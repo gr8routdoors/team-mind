@@ -3,10 +3,10 @@ STORY-001: MCP Gateway & Plugin Registry
 """
 import pytest
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import MCPGateway, Plugin, PluginRegistry
+from team_mind_mcp.server import MCPGateway, ToolProvider, PluginRegistry
 
 
-class MockPlugin(Plugin):
+class MockPlugin(ToolProvider):
     @property
     def name(self) -> str:
         return "mock_plugin"

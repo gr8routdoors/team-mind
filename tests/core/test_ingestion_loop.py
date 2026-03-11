@@ -4,10 +4,10 @@ STORY-003: URI-based Bundle Ingestion Loop
 import pytest
 import os
 import pathlib
-from team_mind_mcp.server import PluginRegistry, Plugin
+from team_mind_mcp.server import PluginRegistry, IngestListener
 from team_mind_mcp.ingestion import IngestionPipeline, IngestionBundle
 
-class TrackerPlugin(Plugin):
+class TrackerPlugin(IngestListener):
     """Mock plugin to track received bundles."""
     def __init__(self, name: str):
         self._name = name

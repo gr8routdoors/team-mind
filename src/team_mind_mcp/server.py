@@ -5,12 +5,15 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 
 
-class Plugin:
-    """Base interface for all Team Mind plugins."""
+from abc import ABC, abstractmethod
+
+class ToolProvider(ABC):
+    """Base interface for plugins that expose MCP Tools."""
     
     @property
+    @abstractmethod
     def name(self) -> str:
-        raise NotImplementedError
+        pass
         
     def get_tools(self) -> List[Tool]:
         """Return a list of MCP Tools exposed by this plugin."""
@@ -19,6 +22,14 @@ class Plugin:
     async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
         """Execute a tool by name."""
         raise NotImplementedError
+
+class IngestListener(ABC):
+    """Base interface for plugins that process ingestion events."""
+    
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
 
     async def process_bundle(self, bundle: Any) -> None:
         """Process an incoming ingestion bundle from the pipeline."""
@@ -29,28 +40,36 @@ class PluginRegistry:
     """Manages the lifecycle and routing for all active plugins."""
     
     def __init__(self):
-        self._plugins: Dict[str, Plugin] = {}
-        # Map tool names to the plugin that provides them
-        self._tool_routes: Dict[str, Plugin] = {}
+        self._tool_providers: Dict[str, ToolProvider] = {}
+        self._tool_routes: Dict[str, ToolProvider] = {}
+        self._ingest_listeners: List[IngestListener] = []
         
-    def register(self, plugin: Plugin) -> None:
-        """Register a new plugin and its tools."""
-        self._plugins[plugin.name] = plugin
-        for tool in plugin.get_tools():
-            if tool.name in self._tool_routes:
-                raise ValueError(f"Tool collision: {tool.name} is already registered.")
-            self._tool_routes[tool.name] = plugin
+    def register(self, plugin: Any) -> None:
+        """Register a new plugin components (Tools, Listeners, or both)."""
+        if isinstance(plugin, ToolProvider):
+            self._tool_providers[plugin.name] = plugin
+            for tool in plugin.get_tools():
+                if tool.name in self._tool_routes:
+                    raise ValueError(f"Tool collision: {tool.name} is already registered.")
+                self._tool_routes[tool.name] = plugin
+                
+        if isinstance(plugin, IngestListener):
+            self._ingest_listeners.append(plugin)
             
     def get_all_tools(self) -> List[Tool]:
-        """Aggregate all tools from all registered plugins."""
+        """Aggregate all tools from all registered providers."""
         tools = []
-        for plugin in self._plugins.values():
-            tools.extend(plugin.get_tools())
+        for provider in self._tool_providers.values():
+            tools.extend(provider.get_tools())
         return tools
         
-    def get_plugin_for_tool(self, tool_name: str) -> Plugin | None:
-        """Find the plugin responsible for a specific tool."""
+    def get_plugin_for_tool(self, tool_name: str) -> ToolProvider | None:
+        """Find the provider responsible for a specific tool."""
         return self._tool_routes.get(tool_name)
+        
+    def get_ingest_listeners(self) -> List[IngestListener]:
+        """Return the ordered list of ingestion listeners."""
+        return self._ingest_listeners
 
 
 class MCPGateway:

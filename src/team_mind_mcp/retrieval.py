@@ -3,10 +3,10 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import Plugin
+from team_mind_mcp.server import ToolProvider
 from team_mind_mcp.storage import StorageAdapter
 
-class DocumentRetrievalPlugin(Plugin):
+class DocumentRetrievalPlugin(ToolProvider):
     """Fetches full document text from local DB or live URI pointer."""
     
     def __init__(self, storage: StorageAdapter):

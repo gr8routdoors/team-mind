@@ -1,9 +1,9 @@
 import json
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import Plugin, PluginRegistry
+from team_mind_mcp.server import ToolProvider, PluginRegistry
 from team_mind_mcp.ingestion import IngestionPipeline, IngestionBundle
 
-class IngestionPlugin(Plugin):
+class IngestionPlugin(ToolProvider):
     """Exposes the internal ingestion loop to external MCP Clients."""
     
     def __init__(self, registry: PluginRegistry):

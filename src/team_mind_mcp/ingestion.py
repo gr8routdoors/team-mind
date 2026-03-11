@@ -46,11 +46,10 @@ class IngestionPipeline:
             
         bundle = IngestionBundle(uris=resolved_uris)
         
-        # Broadcast to all plugins concurrently
+        # Broadcast to all listeners concurrently
         aws = []
-        for plugin in self.registry._plugins.values():
-            if hasattr(plugin, "process_bundle"):
-                aws.append(plugin.process_bundle(bundle))
+        for listener in self.registry.get_ingest_listeners():
+            aws.append(listener.process_bundle(bundle))
                 
         if aws:
             await asyncio.gather(*aws)
