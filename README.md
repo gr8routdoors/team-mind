@@ -1,15 +1,89 @@
-# team-mind
+# Team Mind
 
-<!-- Brief project description -->
+Team Mind is a collaborative AI knowledge engine built on the Model Context Protocol (MCP). It provides a persistent, decentralized "brain" that allows AI agents and development teams to share context, ingest documents, and execute semantic searches.
 
-## Development
+## Architecture & Data Flow
 
-This project uses [Lit SDLC](https://github.com/buildermethods/lit-sdlc) for structured AI-assisted development. See [AGENTS.md](AGENTS.md) for the development workflow.
+At its core, Team Mind operates as an extensible MCP Server. The architecture separates the communication layer from the storage and ingestion mechanisms, allowing for flexible plugin-based capabilities.
 
-### Quick Start
+```mermaid
+graph TD
+    %% AI Clients
+    Claude((Claude Desktop / AI Client))
 
-<!-- Add setup and run instructions -->
+    %% Core Engine
+    subgraph Core Engine [Team Mind MCP Server]
+        Gateway[MCP Gateway]
+        Registry[Plugin Registry]
+        Pipeline[Ingestion Pipeline]
+        
+        %% Plugins
+        subgraph Plugins
+            IngestPlugin(Ingestion Plugin)
+            RetrievePlugin(Retrieval Plugin)
+            MarkdownPlugin(Markdown Plugin)
+        end
+        
+        %% Storage
+        DB[(SQLite + sqlite-vec)]
+    end
 
-## Project Structure
+    %% Connections
+    Claude <-->|stdio / MCP Protocol| Gateway
+    Gateway --> Registry
+    Registry --> IngestPlugin
+    Registry --> RetrievePlugin
+    Registry --> MarkdownPlugin
+    
+    IngestPlugin -->|Triggers| Pipeline
+    Pipeline -->|Broadcasts IngestionBundle| MarkdownPlugin
+    
+    MarkdownPlugin -->|Stores chunks & vectors| DB
+    RetrievePlugin -->|Fetches full docs| DB
+```
 
-<!-- Document the directory layout -->
+### Core Components
+
+- **MCP Gateway**: Handles the standard MCP protocol lifecycle and routing between the connected AI client (e.g., Claude) and the internal registry.
+- **Plugin Registry**: Manages registered tools (`ToolProvider`) and ingestion event listeners (`IngestListener`).
+- **Ingestion Pipeline**: An event-driven loop that resolves local files or remote URIs, bundling them and broadcasting to all registered listeners.
+- **Storage Adapter**: An embedded SQLite database utilizing the `sqlite-vec` extension for high-performance semantic vector search and `json1` for metadata.
+
+## Usage
+
+Team Mind is built with `uv` and exposes a unified CLI entry point.
+
+### Starting the Server
+
+To start the MCP Server and connect it to a client:
+
+```bash
+# Starts the stdio server (defaults to ~/.team-mind/database.sqlite)
+uv run team-mind-mcp start
+
+# Override the database location
+uv run team-mind-mcp --db-path ./my-project-brain.sqlite start
+```
+
+### Offline Bulk Ingestion
+
+You can seamlessly pre-load the database with context from local files, entire directories, or remote URIs using the `ingest` subcommand without starting the server:
+
+```bash
+# Ingest diverse targets simultaneously
+uv run team-mind-mcp ingest ./docs/ https://example.com/api.md ./notes.txt
+```
+
+### Live Agent Ingestion
+
+When the server is running, connected AI agents have access to the `ingest_documents` tool. This allows them to dynamically pull in web links or local file paths during a conversation, expanding their context dynamically!
+
+## Development Status
+
+- **Phase 1: Core Engine (SPEC-001)** - **COMPLETE**
+  - Executable packaging, SQLite Vector Storage, MCP Gateway, URI Ingestion Pipeline, Markdown chunking/embedding, Document Retrieval, and dynamic CLI configuration.
+- **Phase 2: AI Client Orchestration (SPEC-002)** - *Upcoming*
+
+---
+
+> **Note:** This project uses [Lit SDLC](https://github.com/buildermethods/lit-sdlc) for structured AI-assisted development. See `AGENTS.md` for the internal workflow.
