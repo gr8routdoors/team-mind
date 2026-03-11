@@ -1,22 +1,22 @@
 # Project Testing Standards
 
 ## Core Testing Tooling
-This project uses **`pytest`** as the primary testing framework, partnered with **`pytest-bdd`** for executing our Acceptance Criteria behavior-driven tests.
+This project uses pure **`pytest`** as the primary testing framework. We reject Cucumber-style `.feature` files and fragmented step definitions in favor of highly readable, inline BDD tests.
 
 ## Commands
 *Ensure all commands are prefixed with `uv run` to guarantee isolated execution.*
 
 - **Run all tests:** `uv run pytest`
-- **Run specific test file:** `uv run pytest tests/path/to/test.py`
+- **Run specific test file:** `uv run pytest tests/core/test_mcp_gateway.py`
 - **Verbose output (to see print statements):** `uv run pytest -vv -s`
-- **Run BDD tests only:** `uv run pytest tests/features/`
 
 ## Testing Philosophy
 
-### Behavior-Driven Development (BDD)
-- Acceptance Criteria generated during the `/derive-acs` phase **MUST** be backed by `pytest-bdd` tests.
-- Feature files (`.feature`) should identically match the `Given/When/Then` logic established in the AC markdown documents.
-- Step definitions should be cleanly organized in `tests/step_defs/`.
+### Behavior-Driven Development (BDD) via Inline Pytest
+- Acceptance Criteria generated during the `/derive-acs` phase **MUST** be mapped directly to `pytest` test functions.
+- We do not use `pytest-bdd`. The "Feature file" concept is redundant since our ACs are already documented in markdown.
+- Tests should be written in a single location with clear structural comments (`# Given`, `# When`, `# Then`) dividing the setup, execution, and assertion phases.
+- Test names should clearly reference the AC they cover.
 
 ### Unit tests
 - Fast, isolated unit tests for core deterministic logic (e.g., chunking logic, URI parsing).
