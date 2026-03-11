@@ -1,15 +1,5 @@
-# IDE files
-.vscode/
-.idea/
-.cursor/plans
-.claude/worktrees
-
-# Local environment files
-.env
-.envrc
-
-# MCP server caches
-.serena/
-
-# Garbage OSX files
-.DS_Store
+venv
+.venv
+__pycache__
+*.pyc
+.pytest_cache
