@@ -20,6 +20,10 @@ class Plugin:
         """Execute a tool by name."""
         raise NotImplementedError
 
+    async def process_bundle(self, bundle: Any) -> None:
+        """Process an incoming ingestion bundle from the pipeline."""
+        pass
+
 
 class PluginRegistry:
     """Manages the lifecycle and routing for all active plugins."""
