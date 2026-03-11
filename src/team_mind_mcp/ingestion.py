@@ -16,6 +16,10 @@ class ResourceResolver:
         resolved = []
         for uri in uris:
             parsed = urlparse(uri)
+            if parsed.scheme in ("http", "https"):
+                resolved.append(uri)
+                continue
+                
             if parsed.scheme != "file":
                 raise ValueError(f"Unsupported URI schema: {parsed.scheme} in {uri}")
                 
