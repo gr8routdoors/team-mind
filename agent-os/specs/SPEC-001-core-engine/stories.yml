@@ -11,7 +11,7 @@ stories:
   STORY-001:
     name: MCP Gateway & Plugin Registry
     description: Establish the base Python MCP server and the generic interface for plugins to register tools.
-    status: in_requirements
+    status: passing
     verified_by: null
 
   STORY-002:
