@@ -7,29 +7,14 @@
 #   in_progress     - Implementation underway
 #   complete        - All stories pass verification
 #   archived        - No longer active (completed or abandoned)
-#
-# Note: Archived specs are moved to _archive/ directory
 
 specs:
   SPEC-001:
-    name: Adopt Superpowers Discipline Patterns
-    status: in_progress
-    created: 2026-02-14
-    stories: 7
-    stories_complete: 0
-
-  SPEC-002:
-    name: Developer Workflow
-    status: in_progress
-    created: 2026-02-14
-    stories: 2
-    stories_complete: 1
-
-  SPEC-003:
-    name: Framework Tooling & Upgrade
-    status: in_design
-    created: 2026-02-14
+    name: Core Information Architecture (MVP)
+    slug: core-engine
+    status: in_requirements
+    created: 2026-03-10
     stories: 4
     stories_complete: 0
 
-# Next spec number: 004
+# Next spec number: 002

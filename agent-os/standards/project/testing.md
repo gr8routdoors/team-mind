@@ -1,43 +1,32 @@
-# Test Commands
+# Project Testing Standards
 
-> Project-specific test commands.
-> This file is project-owned and not replaced on `/upgrade-lit`.
+## Core Testing Tooling
+This project uses **`pytest`** as the primary testing framework, partnered with **`pytest-bdd`** for executing our Acceptance Criteria behavior-driven tests.
 
----
+## Commands
+*Ensure all commands are prefixed with `uv run` to guarantee isolated execution.*
 
-## Running Tests
+- **Run all tests:** `uv run pytest`
+- **Run specific test file:** `uv run pytest tests/path/to/test.py`
+- **Verbose output (to see print statements):** `uv run pytest -vv -s`
+- **Run BDD tests only:** `uv run pytest tests/features/`
 
-_Configure this section with your project's test commands._
+## Testing Philosophy
 
-<!-- Example:
-### Backend
-```bash
-cd services/core-service && ./gradlew test
-cd services/core-service && ./gradlew test --tests "*.SomeServiceTest"  # single test class
-```
+### Behavior-Driven Development (BDD)
+- Acceptance Criteria generated during the `/derive-acs` phase **MUST** be backed by `pytest-bdd` tests.
+- Feature files (`.feature`) should identically match the `Given/When/Then` logic established in the AC markdown documents.
+- Step definitions should be cleanly organized in `tests/step_defs/`.
 
-### Frontend
-```bash
-cd ux/client-app && npm test
-cd ux/client-app && npm test -- --grep "specific test"  # single test
-```
--->
+### Unit tests
+- Fast, isolated unit tests for core deterministic logic (e.g., chunking logic, URI parsing).
+- **Mocking:** Use `unittest.mock` strictly to isolate tests from network access, disk I/O, or LLM inference. Validating logic should not require a live internet connection.
 
----
+### Integration Tests
+- Verify actual integrations with external systems or DBs. 
+- For example, database operations should test against a real, ephemeral in-memory SQLite database (`:memory:`) to validate extensions like `sqlite-vec` behave as expected.
 
-## BDD Framework
-
-_Configure this section with your project's BDD testing framework. This is used by `/generate-bdd-tests` to produce idiomatic test scaffolding._
-
-<!-- Example:
-| Language | Framework | Libraries | Notes |
-|----------|-----------|-----------|-------|
-| Go | spec + testify | github.com/sclevine/spec, github.com/stretchr/testify | Nested when/it blocks |
-| Java | Spock | spock-core | Groovy-based, extends Specification |
-| Python | pytest-bdd | pytest-bdd, pytest | Gherkin syntax with pytest |
-| JavaScript | Cucumber.js | @cucumber/cucumber | Step definitions in JS/TS |
--->
-
----
-
-_Last updated: 2026-02-16_
+## Quality Gates
+Test pass rate ensures behavioral correctness, but quality involves more than just passing tests:
+- **Type Checking:** `uv run pyright` must pass completely without ignoring core typing rules.
+- **Linting & Formatting:** `uv run ruff check` and `uv run ruff format --check` must pass. Code should be clean and standardized.

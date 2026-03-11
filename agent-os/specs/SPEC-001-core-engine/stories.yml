@@ -1,0 +1,40 @@
+# Stories for SPEC-001
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: MCP Gateway & Plugin Registry
+    description: Establish the base Python MCP server and the generic interface for plugins to register tools.
+    status: in_requirements
+    verified_by: null
+
+  STORY-002:
+    name: SQLite Embedded Storage Engine
+    description: Implement the database abstraction layer natively using SQLite with JSON1 and sqlite-vec support.
+    status: in_requirements
+    verified_by: null
+
+  STORY-003:
+    name: URI-based Bundle Ingestion Loop
+    description: Build the event-driven ingestion pipeline that abstracts inputs as URIs, packages them into Bundles, and broadcasts them to active plugins.
+    status: in_requirements
+    verified_by: null
+
+  STORY-004:
+    name: Markdown Vector Plugin
+    description: Implement the trivial Markdown plugin that vectorizes semantic data and stores Source Pointers (URIs) for semantic search.
+    status: in_requirements
+    verified_by: null
+
+  STORY-005:
+    name: Document Retrieval Plugin
+    description: Implement a dedicated plugin and ResourceResolver that fetches full document payloads given a URI, seamlessly handling whether it is stored locally in the embedded DB or pulled live from a remote pointer.
+    status: in_requirements
+    verified_by: null
+
+verification:
+  criteria:
+    - All BDD tests pass
+    - Manual test of using an AI client (like Claude Desktop) to connect to the MCP server and execute the 'semantic_search' and 'get_full_document' tools.
+  completed: false
+  completed_date: null

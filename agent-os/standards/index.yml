@@ -25,6 +25,10 @@ standards:
     tags: [coding, reviewing]
     description: General formatting, references language-specific guides
     children:
+      python:
+        path: code-style/python.md
+        tags: [coding, reviewing, python]
+        description: Python conventions — typing, ruff formatting, idiomatic patterns
       java:
         path: code-style/java.md
         tags: [coding, reviewing, java]

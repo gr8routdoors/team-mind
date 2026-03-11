@@ -2,41 +2,40 @@
 
 ## Design Philosophy
 
-Lit SDLC is a **file-based, zero-dependency framework** that lives entirely inside your repository. No runtime, no server, no database. The framework consists of markdown files, YAML configuration, and convention-based directory structure that AI agents read and follow.
+The core philosophy of "Team Mind" is to provide an intelligent, token-optimized, and highly extensible enterprise knowledge base. Moving beyond traditional "dumb" RAG (Retrieval-Augmented Generation) which relies solely on text chunking and semantic fuzziness, this system embraces a **Structured, Pluggable Architecture**. 
 
-## The Four Layers
+It prioritizes:
+1. **Token Optimization & Precision:** Giving AI agents exactly the structural information they need (e.g., AST signatures) rather than raw, noisy files.
+2. **Deterministic Retrieval:** Allowing agents to invoke explicit tools for specific data types instead of relying on unpredictable semantic search for everything.
+3. **Rich, Multipronged Ingestion:** A single source file or resource can be processed by multiple specialized plugins to extract diverse layers of value (semantics, metrics, structural graphs).
 
-### 1. Product Layer (`agent-os/product/`)
+## Project Structure & Architecture
 
-The "why" — product vision, priorities, and domain knowledge.
+The system is decomposed into three primary layers:
 
-| File | Purpose |
-|------|---------|
-| `mission.md` | Problem, target users, solution, differentiators |
-| `roadmap.md` | Current focus, phased feature list, blocked items |
-| `domain/terminology.md` | Business vocabulary and concept definitions |
-| `domain/business-rules.md` | Non-negotiable constraints and operational rules |
+### 1. The Gateway Layer (MCP Server)
+The universal entry point for the system is a **Model Context Protocol (MCP) Server**. 
+- It acts as the Host/Router that registers tools exposed by the underlying plugins.
+- It normalizes the interface so that any MCP-compliant client (Claude, Cursor, custom agents) can seamlessly interact with the enterprise knowledge base.
+- For non-MCP human interfaces (like MS Teams bots), a lightweight "Router API" (potentially backed by a fast LLM) will act as an intermediary client to query the MCP server on the human's behalf.
 
-### 2. Standards Layer (`agent-os/standards/`)
+### 2. The Ingestion Pipeline (Bundle Broadcast & Validation)
+Ingestion is treated as a systemic, multi-stage event rather than a simple database write.
+- **Resource Bundles & URIs:** The system abstracts incoming data as "Resources" identified by URIs (e.g., `file://`, `https://`, `confluence://`), not just local files. A "Bundle" contains one or more of these Resources.
+- **Pointer-Based Retrieval:** To prevent massive data duplication at an enterprise scale, the system avoids storing the full raw document payload in the database whenever possible. Instead, it stores the semantic vectors, metadata, and a *Pointer* (the URI). When an AI requests the full document, a "Resolver" fetches it live from the source. Short-lived or uploaded content can still be stored directly in the embedded DB if needed.
+- **Stage A: Broadcast Processing:** When a Bundle is ingested, the Core Engine broadcasts it to all registered plugins. Each plugin parses the bundle and extracts its domain-specific value (e.g., parsing code ASTs, vectorizing text, extracting facts). These extracted records are held in a `PENDING` state.
+- **Stage B: The Librarian (Validation Post-Processor):** Because validation requires understanding the semantic *meaning* of the parsed data, the Librarian operates *after* the plugins have done the heavy lifting. The Librarian evaluates the new `PENDING` facts and vectors against the current "Golden" state of the database. If a new fact contradicts established architecture, it halts the commit and flags the bundle for human review. If it passes, the records are committed to the primary active index.
 
-The "what" — declarative conventions agents must follow. Each standard is a markdown file indexed in `index.yml` with tags for selective injection.
-
-### 3. Skills Layer (`.claude/skills/agent-os/`)
-
-The "how" — procedural workflows executed step by step. Each skill has YAML frontmatter, anti-rationalization tables, optional hard gates, and process steps.
-
-### 4. Context Layer (`agent-os/context/`)
-
-The "what happened" — accumulated knowledge from past work: architecture docs, component details, session summaries.
+### 3. The Plugin Architecture (Renderers/Processors)
+Plugins are specialized engines that handle both the ingestion parsing of resources and the registration of retrieval tools to the MCP Server.
+- **Example Plugins:**
+  - *Markdown/Text Plugin:* Handles semantic vectorization and keyword search. (Registers tool: `search_knowledge_base`)
+  - *Document Retrieval Plugin:* Dedicated plugin for fetching raw content. Can retrieve from local DB storage or live URIs. (Registers tool: `get_full_document`)
+  - *AST/Code Plugin:* Parses code into structural relationships. (Registers tools: `get_class_signature`, `get_method`)
+  - *Metrics Plugin:* Analyzes code churn or complexity during ingestion. (Registers tool: `get_file_metrics`)
 
 ## Key Architectural Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| File-based, no runtime | Zero dependencies. Works with any AI tool that reads files. |
-| Standards separate from skills | Standards update independently. Prevents bloat. |
-| Tagged index for standards | Agents load only relevant standards, preserving context window. |
-| Session summaries in markdown | Human-readable, version-controlled, searchable. |
-| Stories locked to agents | Agents modify status only. Prevents scope creep. |
-| Two-stage code review | Catches different problem classes: spec drift vs. code quality. |
-| Anti-rationalization by design | Agents skip good practices under pressure. Explicit counters prevent this. |
+1. **Client-Side Orchestration:** The MCP Server does not need a heavy internal orchestrating LLM for retrieval. It exposes all plugin tools to the AI client, allowing the client (Claude/Cursor) to orchestrate its own deterministic tool calls.
+2. **Post-Processing Validation:** The Librarian acts as a gatekeeper *after* initial parsing but *before* final commit. This solves the "Catch-22" of needing semantic understanding to validate a file.
+3. **Embedded Relational/Document Storage (MVP):** Phase 1 skips flat files and avoids massive MongoDB deployments by utilizing an embedded database (e.g., SQLite with JSON/Vector extensions, or DuckDB). Modern SQLite provides native JSON document views (`JSONB`), allowing us to store and query arbitrary plugin metadata/documents just like MongoDB, alongside vector embeddings, entirely in process.

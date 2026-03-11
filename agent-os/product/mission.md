@@ -2,27 +2,22 @@
 
 ## Problem
 
-AI coding agents (Claude, Cursor, Copilot) are powerful but unreliable without structure. They forget context between sessions, ignore project conventions, skip testing, rationalize away good practices, and declare work "done" without verification. Teams adopting AI-assisted development face a paradox: the agent can write code fast, but without guardrails the code is wrong, inconsistent, or incomplete.
+Information scatter across large teams and sub-teams. Vital engineering knowledge, architectural decisions, and technical artifacts become quickly outdated because teams move fast and document systems like Confluence become messy. Currently, there is no single, prioritized source of truth for AI agents or engineers to retrieve accurate, high-utility enterprise knowledge efficiently.
 
 ## Target Users
 
-Software developers and teams using AI coding agents (primarily Claude Code and Cursor) who want to:
-- Maintain engineering discipline while leveraging AI speed
-- Preserve knowledge across sessions so agents don't start from scratch
-- Enforce consistent conventions without manual oversight
-- Scale from solo developer to multi-agent workflows
+1. **Strike Teams / Individual Engineers:** Starting small as an intelligent, local memory assistant.
+2. **AI Agents / LLMs:** Seeking token-optimized, high-signal context for automated coding and answering.
+3. **Enterprise Teams:** Scaling to support large engineering organizations with secure, cross-team knowledge sharing and integrations (e.g., MS Teams).
 
 ## Solution
 
-Lit SDLC provides a lightweight, file-based framework that structures the entire software development lifecycle for AI agents. It separates **declarative standards** (conventions the agent must follow) from **procedural skills** (step-by-step workflows the agent executes), layered on top of **persistent product context** (mission, roadmap, domain knowledge) and **session memory** (learnings, decisions, component knowledge that survives across conversations).
-
-The framework is self-reinforcing: agents that follow the process produce better results, which builds trust, which justifies giving agents more autonomy.
+An intelligent, "learning" knowledge base (a Team Mind) that goes beyond standard RAG. It features:
+- **Usage-Based Reliability:** An organic truth system where information value decays over time or increases based on positive usage (RLHF-style weighting).
+- **Token Optimization:** Efficiently serves only the most relevant, high-quality context to AI agents.
+- **Multi-Source Ingestion:** Seamlessly consumes Markdown (human-editable) and meeting transcripts.
+- **Validation Gates:** Prevents the "misinformation domino effect" by vetting ingested facts against established "golden docs."
 
 ## Key Differentiators
 
-- **Drop-in, file-based**: No runtime dependencies. Just markdown and YAML files in your repo.
-- **Standards + Skills separation**: Conventions are independently managed, tagged, and selectively injectable.
-- **Session continuity**: Structured session summaries bridge knowledge across conversations.
-- **Spec-driven development**: Features flow from specs through acceptance criteria to BDD test scaffolding.
-- **Discipline enforcement**: Anti-rationalization tables, hard gates, and verification requirements prevent agents from cutting corners.
-- **Self-documenting**: The framework uses itself to manage its own development (this repo is a working example).
+Unlike a static wiki or a simple vector store, this system has a **Memory Weighting Strategy**. It acts as a Librarian rather than just a Searcher—automatically promoting high-utility facts, tracking source authority, detecting contradictions upon ingestion, and decaying outdated information.

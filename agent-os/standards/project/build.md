@@ -1,39 +1,29 @@
-# Build Commands & Prerequisites
+# Project Build Standards
 
-> Project-specific build commands and environment setup.
-> This file is project-owned and not replaced on `/upgrade-lit`.
-
----
-
-## Build Commands
-
-_Configure this section with your project's build commands._
-
-<!-- Example:
-### Backend
-```bash
-cd services/core-service && ./gradlew build
-```
-
-### Frontend
-```bash
-cd ux/client-app && npm run build
-```
--->
-
----
+## Tooling: `uv`
+This project utilizes **[uv](https://astral.sh/uv)** as the standard Python package and project manager. `uv` is exceptionally fast, manages Python versions automatically, and eliminates the need for manual virtual environment management.
 
 ## Prerequisites
+- macOS / Linux / Windows
+- Install `uv`: 
+  - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+  - Homebrew: `brew install uv`
 
-_Configure this section with your project's required tools and environment setup._
+## Core Commands
 
-<!-- Example:
-- Java 21+ (via sdkman: `sdk install java 21.0.2-tem`)
-- Node.js 20+ (via nvm: `nvm install 20`)
-- Docker and Docker Compose
-- `cp .env.example .env` and fill in local values
--->
+### Setup & Installation
+- **Initialize a project/repo:** `uv init`
+- **Sync dependencies:** `uv sync` (Creates a virtual environment securely in `.venv` and installs all dependencies exactly as defined in `pyproject.toml` and locked in `uv.lock`).
 
----
+### Running Code
+- **Execute a script:** `uv run python script.py` 
+- **Run a module:** `uv run python -m my_module`
+*Note: `uv run` automatically uses the isolated `.venv` environment. You do not need to run `source .venv/bin/activate` manually.*
 
-_Last updated: 2026-02-15_
+### Managing Dependencies
+- **Add a runtime dependency:** `uv add <package>` (e.g., `uv add mcp sqlite-vec`)
+- **Add a development dependency:** `uv add --dev <package>` (e.g., `uv add --dev pytest ruff`)
+- **Remove a dependency:** `uv remove <package>`
+
+## CI / Verification
+Before asserting any completion of a feature, you should ensure the environment syncs cleanly and the required verification steps (testing, linting) execute successfully via `uv run`.
