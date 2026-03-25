@@ -292,6 +292,70 @@ On registration:
 - If you implement `IngestProcessor`, you start receiving bundles during ingestion.
 - If you implement `IngestObserver`, you start receiving events after ingestion completes.
 
+## Relevance Weighting (Platform-Managed)
+
+The platform automatically manages relevance weighting for all plugins. You don't implement scoring — the platform does it for you. Your documents gain or lose value based on AI/human feedback and time-based decay.
+
+### What you get for free
+
+- **Usage-based ranking**: When an AI agent or human calls `provide_feedback(doc_id, signal)`, the platform updates the document's score. Higher-scored documents rank higher in search results.
+- **Composite scoring**: Search results are ranked by `final_rank = vector_distance - (usage_score * weight_influence * decay_factor)`, not just vector distance alone.
+- **Tombstoning**: Bad documents can be flagged out of all search results without being deleted.
+
+### What you control: Decay policy
+
+Declare `decay_half_life_days` on your DoctypeSpec to control how fast your data's boost decays over time:
+
+```python
+DoctypeSpec(
+    name="meeting_notes",
+    description="Notes from team meetings.",
+    decay_half_life_days=30,     # Loses half its boost every 30 days
+)
+
+DoctypeSpec(
+    name="code_signature",
+    description="Function signatures from source code.",
+    decay_half_life_days=None,   # No decay — code doesn't age
+)
+```
+
+- `None` (default) = no decay. Usage score stays at full value forever.
+- A number = half-life in days. After that many days, the effective score is halved.
+
+### How scoring works
+
+| What | Who does it | How |
+|------|-------------|-----|
+| Feedback signals | AI agents / humans via `provide_feedback` MCP tool | `signal` from -5 (strongly demote) to +5 (strongly promote) |
+| Score accumulation | Platform | Signals are **additive**: +3, then +1, then -2 = score of 2.0 |
+| Decay | Platform, at query time | `effective_score = usage_score * 0.5^(days_old / half_life)` |
+| Tombstone | AI agents / humans via `provide_feedback(tombstone=true)` | Document excluded from all search results, reversible |
+
+### What if you don't care about weighting?
+
+Don't set `decay_half_life_days`. Don't call `provide_feedback`. Your documents get `usage_score=0.0`, `decay_factor=1.0`, and results are ranked by **pure vector distance** — identical to a system with no weighting at all.
+
+### The `doc_weights` table
+
+Each document gets one row in `doc_weights` (auto-created when the document is saved):
+
+```
+doc_weights
+├── doc_id          → FK to documents
+├── usage_score     → Accumulated feedback (starts at 0.0)
+├── created_at      → When the doc was ingested
+├── last_accessed   → Last feedback timestamp
+├── tombstoned      → 0 or 1
+└── decay_half_life_days → Copied from DoctypeSpec (nullable)
+```
+
+There is **one row per document**, not one row per feedback event. Signals are accumulated into `usage_score` directly — no compaction or aggregation needed at scale.
+
+### Known limitation: Document updates
+
+Currently, re-ingesting the same URI creates **new rows** alongside old ones. There is no deduplication or "update in place." Old chunks keep their accumulated weights; new chunks start at `usage_score=0.0`. Semantic deduplication is planned for a future spec.
+
 ## Discovery: How Others Find Your Data
 
 AI clients can call the `list_doctypes` MCP tool to discover what's available:
@@ -325,4 +389,6 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
 | [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | DoctypeSpec model, scoped queries, discovery tool |
 | [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |
+| [ADR-003: Relevance Weighting](ADRs/ADR-003-relevance-weighting.md) | Scoring model, decay policy, tombstoning, signal design |
+| [SPEC-004: Relevance Weighting](../../specs/SPEC-004-relevance-weighting/design.md) | doc_weights table, feedback tool, composite scoring, spike results |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |
