@@ -352,9 +352,41 @@ doc_weights
 
 There is **one row per document**, not one row per feedback event. Signals are accumulated into `usage_score` directly — no compaction or aggregation needed at scale.
 
-### Known limitation: Document updates
+### Updating and replacing documents
 
-Currently, re-ingesting the same URI creates **new rows** alongside old ones. There is no deduplication or "update in place." Old chunks keep their accumulated weights; new chunks start at `usage_score=0.0`. Semantic deduplication is planned for a future spec.
+The platform provides two methods for keeping data current:
+
+**Update a specific chunk in place** (preserves its weight):
+```python
+# Plugin knows the doc_id of the chunk it wants to update
+storage.update_payload(
+    doc_id=42,
+    metadata={"chunk": "updated content", "version": 2},
+    vector=new_embedding
+)
+# uri, plugin, doctype, and usage_score are all preserved
+```
+
+**Wipe and re-ingest a whole document** (fresh start):
+```python
+# Delete all old chunks for this URI, then re-ingest
+deleted = storage.delete_by_uri(
+    uri="file:///doc.md",
+    plugin=self.name,
+    doctype="markdown_chunk"
+)
+# Now insert new chunks — they start with usage_score=0.0
+for chunk in new_chunks:
+    storage.save_payload(uri, chunk_meta, vector, plugin=self.name, doctype="markdown_chunk")
+```
+
+`delete_by_uri` is scoped to your plugin and doctype — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
+
+**Which to use:** If your chunks have stable identities (e.g., a user preference by ID), use `update_payload`. If the document's structure changes on update (paragraphs added/removed), use wipe-and-replace.
+
+### Score clamping
+
+Usage scores are clamped to the range **-50.0 to +50.0** to prevent unbounded accumulation. A document that receives +1 feedback a thousand times won't dominate the ranking — it caps at 50.0.
 
 ## Discovery: How Others Find Your Data
 

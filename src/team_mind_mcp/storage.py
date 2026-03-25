@@ -15,6 +15,10 @@ class StorageAdapter:
     # How much usage_score influences ranking relative to vector distance.
     WEIGHT_INFLUENCE = 0.1
 
+    # Score bounds to prevent unbounded accumulation.
+    MAX_USAGE_SCORE = 50.0
+    MIN_USAGE_SCORE = -50.0
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn = None
@@ -125,6 +129,81 @@ class StorageAdapter:
 
             return doc_id
 
+    def update_payload(
+        self,
+        doc_id: int,
+        metadata: dict,
+        vector: list[float],
+    ) -> None:
+        """Update an existing document's metadata and vector in place.
+
+        The plugin/doctype/uri are immutable — only content changes.
+        Preserves the existing weight row (usage_score, tombstone, etc.).
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No document with id={doc_id}")
+
+            self._conn.execute(
+                "UPDATE documents SET metadata = ? WHERE id = ?",
+                (json.dumps(metadata), doc_id),
+            )
+
+            vec_bytes = struct.pack(f"{len(vector)}f", *vector)
+            self._conn.execute(
+                "UPDATE vec_documents SET embedding = ? WHERE id = ?",
+                (vec_bytes, doc_id),
+            )
+
+    def delete_by_uri(
+        self,
+        uri: str,
+        plugin: str,
+        doctype: str,
+    ) -> int:
+        """Delete all documents (and their weights/vectors) for a URI/plugin/doctype combo.
+
+        Returns the number of documents deleted. Used by plugins to wipe old
+        chunks before re-ingesting an updated document.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            # Find all matching doc IDs
+            cursor = self._conn.execute(
+                "SELECT id FROM documents WHERE uri = ? AND plugin = ? AND doctype = ?",
+                (uri, plugin, doctype),
+            )
+            doc_ids = [row[0] for row in cursor.fetchall()]
+
+            if not doc_ids:
+                return 0
+
+            placeholders = ",".join("?" for _ in doc_ids)
+
+            # Delete weights, vectors, then documents
+            self._conn.execute(
+                f"DELETE FROM doc_weights WHERE doc_id IN ({placeholders})",
+                doc_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM vec_documents WHERE id IN ({placeholders})",
+                doc_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM documents WHERE id IN ({placeholders})",
+                doc_ids,
+            )
+
+            return len(doc_ids)
+
     def update_weight(
         self,
         doc_id: int,
@@ -144,7 +223,10 @@ class StorageAdapter:
             if row is None:
                 raise ValueError(f"No weight entry for doc_id={doc_id}")
 
-            new_score = row[1] + signal
+            new_score = max(
+                self.MIN_USAGE_SCORE,
+                min(self.MAX_USAGE_SCORE, row[1] + signal),
+            )
 
             if tombstone is not None:
                 self._conn.execute(
