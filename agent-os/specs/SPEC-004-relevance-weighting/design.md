@@ -53,6 +53,51 @@ return scored[:limit]
 - A written recommendation in the spike results (update this design doc).
 - Clear go/no-go for SQL-side scoring.
 
+## Spike Results (STORY-001 — Completed)
+
+### Findings
+
+**SQL-side composite scoring works.** The `LEFT JOIN` on `doc_weights` with a composite `ORDER BY` composes correctly with sqlite-vec's `MATCH` operator. Tombstone filtering via `AND COALESCE(w.tombstoned, 0) = 0` also works within the same query.
+
+**Both approaches produce identical results.** At 200 documents, the SQL and Python approaches returned 100% identical top-10 result sets, confirming functional equivalence.
+
+**Weights change ordering.** Both approaches produce different rankings than pure vector distance, confirming that `usage_score` has a real effect on result ordering.
+
+### Performance Benchmarks
+
+| Scale | Baseline (KNN only) | SQL Composite | Python Re-rank |
+|-------|---------------------|---------------|----------------|
+| 100 docs | 0.58 ms | 0.82 ms (1.41x) | 0.79 ms (1.36x) |
+| 1,000 docs | 1.00 ms | 1.09 ms (1.10x) | 1.08 ms (1.08x) |
+| 10,000 docs | 9.59 ms | 9.95 ms (1.04x) | 9.82 ms (1.02x) |
+
+Key observations:
+- At small scale (100 docs), both approaches add ~40% overhead — negligible in absolute terms (< 1ms).
+- At scale (10K docs), the overhead shrinks to **2-4%** — the KNN search dominates and the JOIN/re-rank cost is amortized.
+- SQL and Python approaches perform nearly identically at all scales.
+
+### Recommendation
+
+**Go with SQL-side composite scoring (Approach 1).** It works, it's fast, and it keeps the scoring logic in one place (the query) rather than split across SQL + Python. The `LEFT JOIN` + `COALESCE` pattern handles missing weight rows cleanly, and tombstone filtering composes naturally with the existing `WHERE` clause.
+
+The Python re-ranking approach is a viable fallback but offers no performance advantage and adds code complexity. Keep it as a documented alternative in case future sqlite-vec versions change the MATCH operator behavior.
+
+**For STORY-005 implementation, use this query pattern:**
+```sql
+SELECT d.id, d.uri, d.plugin, d.doctype, d.metadata, v.distance,
+       COALESCE(w.usage_score, 0.0) AS usage_score,
+       (v.distance - COALESCE(w.usage_score, 0.0) * :weight_influence) AS final_rank
+FROM vec_documents v
+JOIN documents d ON v.id = d.id
+LEFT JOIN doc_weights w ON d.id = w.doc_id
+WHERE v.embedding MATCH ? AND k = ?
+  AND COALESCE(w.tombstoned, 0) = 0
+  [AND d.plugin IN (...)]
+  [AND d.doctype IN (...)]
+ORDER BY final_rank ASC
+LIMIT ?
+```
+
 ## Data Model
 
 ### doc_weights table

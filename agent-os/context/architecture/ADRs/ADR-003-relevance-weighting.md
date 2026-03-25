@@ -1,6 +1,6 @@
 # ADR-003: Platform-Managed Relevance Weighting with Plugin-Controlled Decay
 
-**Status:** Proposed (pending spike validation — see SPEC-004)
+**Status:** Accepted (spike validated SQL-side composite scoring — see SPEC-004 STORY-001)
 **Date:** 2026-03-25
 **Spec:** SPEC-004 (Relevance Weighting System)
 **See also:** [Plugin Developer Guide](../plugin-developer-guide.md), [ADR-001: Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md)

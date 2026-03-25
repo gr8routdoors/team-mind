@@ -10,8 +10,8 @@ stories:
       composite scoring via JOIN + ORDER BY, (2) over-fetch KNN then re-rank in
       Python, (3) hybrid with SQL pre-filter and Python re-rank. Determine
       performance characteristics and recommend the approach for production.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/spikes/test_weighted_scoring.py
 
   STORY-002:
     name: Doc Weights Table & Ingestion Hook
