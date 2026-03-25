@@ -17,4 +17,12 @@ specs:
     stories: 6
     stories_complete: 0
 
-# Next spec number: 002
+  SPEC-002:
+    name: Plugin Data Schema & Doctype System
+    slug: plugin-data-schema
+    status: in_design
+    created: 2026-03-25
+    stories: 6
+    stories_complete: 0
+
+# Next spec number: 003
