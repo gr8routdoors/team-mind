@@ -60,9 +60,14 @@ CREATE INDEX idx_documents_plugin_doctype ON documents(plugin, doctype);
 4. Results come back scoped to the requested data.
 
 ### Discovery
-1. AI client calls `list_doctypes` MCP tool (optionally filtered by plugin name).
-2. DoctypeDiscoveryPlugin queries the PluginRegistry's doctype catalog.
-3. Returns structured list of all doctypes with their schemas, grouped by plugin.
+1. AI client calls `list_doctypes` MCP tool (optionally filtered by `plugins` and/or `doctypes` lists).
+2. DoctypeDiscoveryPlugin queries the PluginRegistry's doctype catalog with the filters.
+3. Returns structured list of matching doctypes with their schemas, grouped by plugin.
+
+### Scoped semantic search
+1. AI client calls `semantic_search(query, plugins=["travel_preferences"], doctypes=["user_interest"])`.
+2. MarkdownPlugin passes the filter lists through to `StorageAdapter.retrieve_by_vector_similarity`.
+3. Results come back scoped to the intersection of the filters.
 
 ## API Contracts
 
@@ -94,11 +99,15 @@ def get_plugins_for_doctype(self, doctype_name: str) -> list[str]:
     """Which plugins produce a given doctype?"""
 ```
 
-### MCP Tool
+### MCP Tools
 
 ```
-list_doctypes(plugin?: str) -> list[{plugin, name, description, schema}]
+list_doctypes(plugins?: list[str], doctypes?: list[str]) -> list[{plugin, name, description, schema}]
+
+semantic_search(query: str, limit?: int, plugins?: list[str], doctypes?: list[str]) -> list[SearchResult]
 ```
+
+**Design principle:** Every surface that accepts a plugin or doctype filter accepts a list. Single-value is just a list of one. This applies uniformly from StorageAdapter up through PluginRegistry methods and MCP tools.
 
 ## Trade-offs & Decisions
 

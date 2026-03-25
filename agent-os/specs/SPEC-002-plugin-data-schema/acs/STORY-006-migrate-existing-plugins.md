@@ -1,6 +1,6 @@
 # STORY-006: Migrate Existing Plugins to Doctypes — Acceptance Criteria
 
-> ACs for updating MarkdownPlugin and other storage-writing plugins to use formal doctypes.
+> ACs for updating MarkdownPlugin and other storage-writing plugins to use formal doctypes, and ensuring MCP tools surface multi-value filtering.
 
 ---
 
@@ -10,8 +10,10 @@
 |----|-------|----------|
 | AC-001 | MarkdownPlugin Declares Doctype | Happy path |
 | AC-002 | MarkdownPlugin Passes Plugin and Doctype on Save | Happy path |
-| AC-003 | Semantic Search Filters by Doctype | Integration |
-| AC-004 | Existing Tests Continue to Pass | Regression |
+| AC-003 | Semantic Search Accepts Plugin and Doctype Filters | Happy path |
+| AC-004 | Semantic Search Multi-Value Filters | Happy path |
+| AC-005 | Response Metadata Includes Plugin and Doctype | Integration |
+| AC-006 | Existing Tests Continue to Pass | Regression |
 
 ---
 
@@ -34,16 +36,33 @@
 
 ---
 
-### AC-003: Semantic Search Filters by Doctype
+### AC-003: Semantic Search Accepts Plugin and Doctype Filters
 
-**Given** the knowledge base contains documents from multiple plugins and doctypes
-**When** `semantic_search` is called via the MarkdownPlugin
-**Then** results include the `plugin` and `doctype` fields in the response metadata
+**Given** the `semantic_search` MCP tool
+**When** called with optional `plugins` and/or `doctypes` list parameters
+**Then** results are scoped to only documents matching the provided filters
+**And** omitting the parameters returns results across all plugins and doctypes
+
+---
+
+### AC-004: Semantic Search Multi-Value Filters
+
+**Given** documents from plugins `"plugin_a"` and `"plugin_b"` with doctypes `"type_x"` and `"type_y"`
+**When** `semantic_search` is called with `plugins=["plugin_a", "plugin_b"]` and `doctypes=["type_x"]`
+**Then** results include documents from both plugins but only with `doctype = "type_x"`
+
+---
+
+### AC-005: Response Metadata Includes Plugin and Doctype
+
+**Given** documents stored with explicit plugin and doctype fields
+**When** `semantic_search` returns results
+**Then** each result includes `plugin` and `doctype` in its metadata
 **And** consumers can distinguish document types in the results
 
 ---
 
-### AC-004: Existing Tests Continue to Pass
+### AC-006: Existing Tests Continue to Pass
 
 **Given** the changes to MarkdownPlugin and StorageAdapter
 **When** the full SPEC-001 test suite is executed
