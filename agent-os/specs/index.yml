@@ -33,4 +33,12 @@ specs:
     stories: 5
     stories_complete: 0
 
-# Next spec number: 004
+  SPEC-004:
+    name: Relevance Weighting System
+    slug: relevance-weighting
+    status: in_design
+    created: 2026-03-25
+    stories: 6
+    stories_complete: 0
+
+# Next spec number: 005
