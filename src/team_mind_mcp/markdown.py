@@ -2,7 +2,7 @@ import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestListener
+from team_mind_mcp.server import ToolProvider, IngestListener, DoctypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
@@ -16,14 +16,27 @@ def _mock_embed(text: str) -> list[float]:
 
 class MarkdownPlugin(ToolProvider, IngestListener):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
-    
+
     def __init__(self, storage: StorageAdapter):
         self.storage = storage
-        
+
     @property
     def name(self) -> str:
         return "markdown_plugin"
-        
+
+    @property
+    def doctypes(self) -> list[DoctypeSpec]:
+        return [
+            DoctypeSpec(
+                name="markdown_chunk",
+                description="A paragraph-level chunk extracted from a markdown document.",
+                schema={
+                    "chunk": {"type": "string", "description": "The text content of the chunk."},
+                    "plugin": {"type": "string", "description": "Owning plugin name."}
+                }
+            )
+        ]
+
     def get_tools(self) -> list[Tool]:
         return [
             Tool(
@@ -33,36 +46,52 @@ class MarkdownPlugin(ToolProvider, IngestListener):
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "The search query text."},
-                        "limit": {"type": "integer", "description": "Max results to return."}
+                        "limit": {"type": "integer", "description": "Max results to return."},
+                        "plugins": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Filter results to these plugins only."
+                        },
+                        "doctypes": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Filter results to these document types only."
+                        }
                     },
                     "required": ["query"]
                 }
             )
         ]
-        
+
     async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
         if name != "semantic_search":
             raise ValueError(f"Unsupported tool: {name}")
-            
+
         query = arguments.get("query")
         if not query:
             raise ValueError("Query is required for semantic_search")
-            
+
         limit = arguments.get("limit", 5)
-        
+        plugins_filter = arguments.get("plugins")
+        doctypes_filter = arguments.get("doctypes")
+
         vector = _mock_embed(query)
-        results = self.storage.retrieve_by_vector_similarity(vector, limit=limit)
-        
+        results = self.storage.retrieve_by_vector_similarity(
+            vector, limit=limit,
+            plugins=plugins_filter,
+            doctypes=doctypes_filter
+        )
+
         # Format the SQLite results into an MCP TextContent response
         response_text = json.dumps(results, indent=2)
         return [TextContent(type="text", text=response_text)]
-        
+
     async def process_bundle(self, bundle: IngestionBundle) -> None:
         """Filter for .md files, read them, chunk them, embed, and store."""
         for uri in bundle.uris:
             if not uri.endswith(".md"):
                 continue
-                
+
             # Fetch content (supporting file:// locally for MVP)
             try:
                 if uri.startswith("file://"):
@@ -73,11 +102,14 @@ class MarkdownPlugin(ToolProvider, IngestListener):
                     continue
             except Exception:
                 continue
-                
+
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]
-            
+
             for chunk in chunks:
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
-                self.storage.save_payload(uri, metadata, vector)
+                self.storage.save_payload(
+                    uri, metadata, vector,
+                    plugin=self.name, doctype="markdown_chunk"
+                )

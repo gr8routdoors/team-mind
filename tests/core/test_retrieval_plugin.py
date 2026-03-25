@@ -19,7 +19,8 @@ async def test_retrieval_fetches_local_db_markdown(tmp_path):
     storage.save_payload(
         uri="virtual://in-db-only",
         metadata={"local_payload": "# Embedded Markdown\nThis comes directly from SQLite."},
-        vector=[0.0] * 768
+        vector=[0.0] * 768,
+        plugin="retrieval_test", doctype="embedded_doc"
     )
     plugin = DocumentRetrievalPlugin(storage)
     
@@ -50,7 +51,8 @@ async def test_retrieval_fetches_live_file_content_via_uri_pointer(tmp_path):
     storage.save_payload(
         uri=live_file.as_uri(),
         metadata={"author": "test"}, # No local_payload
-        vector=[0.0] * 768
+        vector=[0.0] * 768,
+        plugin="retrieval_test", doctype="live_doc"
     )
     
     # When the AI client calls get_full_document

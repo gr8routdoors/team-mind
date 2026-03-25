@@ -9,6 +9,7 @@ from team_mind_mcp.server import MCPGateway, PluginRegistry
 from team_mind_mcp.markdown import MarkdownPlugin
 from team_mind_mcp.retrieval import DocumentRetrievalPlugin
 from team_mind_mcp.ingestion_plugin import IngestionPlugin
+from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
 
 def get_default_db_path() -> Path:
     """Returns the default database path, prioritizing the environment variable."""
@@ -37,9 +38,12 @@ async def run_server(db_path: Path) -> int:
     retrieval_plugin = DocumentRetrievalPlugin(storage)
     ingestion_plugin = IngestionPlugin(gateway.registry)
     
+    discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
+
     gateway.registry.register(markdown_plugin)
     gateway.registry.register(retrieval_plugin)
     gateway.registry.register(ingestion_plugin)
+    gateway.registry.register(discovery_plugin)
     
     # Import the stdio server here to prevent overhead on simple CLI commands
     from mcp.server.stdio import stdio_server

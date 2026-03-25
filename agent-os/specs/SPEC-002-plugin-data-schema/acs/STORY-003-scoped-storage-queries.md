@@ -15,6 +15,7 @@
 | AC-005 | Filter by Multiple Plugins | Happy path |
 | AC-006 | Combined Plugin and Doctype Filter | Integration |
 | AC-007 | Empty Filter List Returns Nothing | Edge case |
+| AC-008 | Post-Filter Behavior with KNN Limit | Edge case |
 
 ---
 
@@ -76,3 +77,16 @@
 **When** `retrieve_by_vector_similarity` is called with `doctypes=[]` (empty list)
 **Then** no results are returned
 **And** no error is raised
+
+---
+
+### AC-008: Post-Filter Behavior with KNN Limit
+
+**Given** 10 documents exist: 5 with `doctype="type_a"` and 5 with `doctype="type_b"`
+**When** `retrieve_by_vector_similarity` is called with `limit=5` and `doctypes=["type_a"]`
+**Then** results contain only `doctype="type_a"` documents
+**And** the result count may be fewer than `limit` due to post-filter KNN behavior
+
+> **Implementation note:** sqlite-vec performs KNN search *before* JOIN/WHERE filters.
+> The query over-fetches by a configurable multiplier to compensate, but `limit` is a
+> maximum, not a guarantee, when filters are applied.

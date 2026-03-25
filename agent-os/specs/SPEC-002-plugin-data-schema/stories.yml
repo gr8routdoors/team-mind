@@ -5,38 +5,38 @@ stories:
   STORY-001:
     name: Doctype Specification Model
     description: Define the DoctypeSpec dataclass and add an optional `doctypes` property to the ToolProvider and IngestListener base classes, allowing plugins to declare the document types they produce along with advisory schemas.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_doctype_model.py
 
   STORY-002:
     name: Storage Schema Evolution
     description: Add `plugin` and `doctype` as first-class indexed columns on the `documents` table. Update `save_payload` to require these fields. Handle schema creation for both new and existing databases.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_storage_schema.py
 
   STORY-003:
     name: Scoped Storage Queries
     description: Extend `retrieve_by_vector_similarity` to accept optional `plugins` and `doctypes` filter lists, applying efficient IN-clause filtering alongside KNN vector search.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_scoped_queries.py
 
   STORY-004:
     name: Doctype Registry & Catalog
     description: Extend PluginRegistry to collect doctype declarations from plugins on registration and expose catalog methods for discovering available doctypes, filtering by plugin or doctype name.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_doctype_registry.py
 
   STORY-005:
     name: Doctype Discovery MCP Tool
     description: Build a DoctypeDiscoveryPlugin that exposes a `list_doctypes` MCP tool, allowing connected AI clients to introspect what document types and schemas are available in the knowledge base.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_discovery_plugin.py
 
   STORY-006:
     name: Migrate Existing Plugins to Doctypes
     description: Update MarkdownPlugin (and any other storage-writing plugins) to declare formal doctypes and pass plugin/doctype identifiers when saving payloads, ensuring backward compatibility.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_plugin_migration.py
 
 verification:
   criteria:
