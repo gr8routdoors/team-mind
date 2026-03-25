@@ -19,6 +19,8 @@ When you build a plugin, you own:
 
 5. **Your ingestion logic** — You decide which URIs from a bundle are relevant, how to process them, how to chunk/transform content, and what to store.
 
+6. **Your observation reactions** — You decide what to do when other plugins finish ingesting (auditing, notifications, cross-plugin triggers).
+
 ## What the Platform Provides
 
 You don't build these — they're shared infrastructure:
@@ -26,12 +28,28 @@ You don't build these — they're shared infrastructure:
 - **The `documents` table** — A shared table with columns: `id`, `uri`, `plugin`, `doctype`, `metadata` (JSON). Your plugin writes rows tagged with your plugin name and doctype. Other plugins can read your data by querying your doctype.
 - **The `vec_documents` table** — Vector embeddings linked to document rows. Used for semantic (KNN) search.
 - **The `PluginRegistry`** — Handles registration, tool routing, and doctype catalog. You register; it routes.
-- **The `IngestionPipeline`** — Broadcasts bundles to all listeners. You just implement `process_bundle()`.
+- **The `IngestionPipeline`** — Two-phase pipeline: broadcasts bundles to processors (Phase 1), then notifies observers with structured events (Phase 2).
 - **Cross-plugin queries** — Any plugin can query by `plugins` and/or `doctypes` lists. If your data is useful to others, they can discover it via `list_doctypes` and query it via `semantic_search`.
 
 ## Plugin Interfaces
 
-Pick one or both depending on what your plugin does:
+There are three interfaces. Pick any combination depending on what your plugin does:
+
+| Interface | Role | When to use |
+|-----------|------|-------------|
+| **ToolProvider** | Expose tools to AI clients | You want AI agents to call your plugin's functionality |
+| **IngestProcessor** | Do ingestion work (parse, chunk, store) | You want to process raw URIs and write documents to storage |
+| **IngestObserver** | React to completed ingestion | You want to know when other plugins have finished ingesting (audit, notify, trigger) |
+
+Common combinations:
+
+| Pattern | Example | Use Case |
+|---------|---------|----------|
+| ToolProvider only | `DocumentRetrievalPlugin` | Query/action tools, no ingestion |
+| IngestProcessor only | *(future)* Metrics collector | Silently processes documents |
+| IngestObserver only | *(future)* Audit plugin | Reacts when ingestion completes |
+| ToolProvider + IngestProcessor | `MarkdownPlugin` | Ingests AND exposes search tools |
+| ToolProvider + IngestObserver | *(future)* Dashboard plugin | Tools AND reacts to ingestion |
 
 ### ToolProvider — Expose tools to AI clients
 
@@ -79,14 +97,16 @@ class MyPlugin(ToolProvider):
         raise ValueError(f"Unknown tool: {name}")
 ```
 
-### IngestListener — Process incoming documents
+### IngestProcessor — Process incoming documents
+
+Processors receive raw URIs, do the heavy lifting (parsing, chunking, embedding), write to storage, and return `IngestionEvent` objects describing what they wrote.
 
 ```python
-from team_mind_mcp.server import IngestListener, DoctypeSpec
+from team_mind_mcp.server import IngestProcessor, DoctypeSpec
 from team_mind_mcp.storage import StorageAdapter
-from team_mind_mcp.ingestion import IngestionBundle
+from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 
-class MyIngestionPlugin(IngestListener):
+class MyIngestionPlugin(IngestProcessor):
     def __init__(self, storage: StorageAdapter):
         self.storage = storage
 
@@ -104,40 +124,108 @@ class MyIngestionPlugin(IngestListener):
             )
         ]
 
-    async def process_bundle(self, bundle: IngestionBundle) -> None:
+    async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
+        doc_ids = []
+        processed_uris = []
+
         for uri in bundle.uris:
             if not self._is_relevant(uri):
                 continue
 
+            processed_uris.append(uri)
             content = self._fetch_and_process(uri)
             vector = self._generate_embedding(content)
 
             # Pointer mode: store URI reference, fetch content on demand
-            self.storage.save_payload(
+            doc_id = self.storage.save_payload(
                 uri=uri,
                 metadata={"summary": content[:200]},
                 vector=vector,
                 plugin=self.name,
                 doctype="processed_item"
             )
+            doc_ids.append(doc_id)
 
             # OR Embedded mode: store full content in metadata
-            self.storage.save_payload(
+            doc_id = self.storage.save_payload(
                 uri=uri,
                 metadata={"local_payload": content, "summary": content[:200]},
                 vector=vector,
                 plugin=self.name,
                 doctype="processed_item"
             )
+            doc_ids.append(doc_id)
+
+        # Return events describing what you wrote
+        if processed_uris:
+            return [IngestionEvent(
+                plugin=self.name,
+                doctype="processed_item",
+                uris=processed_uris,
+                doc_ids=doc_ids
+            )]
+        return []
 ```
 
-### Both — Ingest and expose tools (like MarkdownPlugin)
+### IngestObserver — React to completed ingestion
+
+Observers don't process raw URIs. They receive structured `IngestionEvent` objects **after** all processors have finished, describing what was written. Use this for auditing, notifications, cross-plugin triggers, or any reaction to "something was just ingested."
 
 ```python
-class MyFullPlugin(ToolProvider, IngestListener):
-    # Implement all of: name, doctypes, get_tools, call_tool, process_bundle
+from team_mind_mcp.server import IngestObserver
+from team_mind_mcp.ingestion import IngestionEvent
+
+class AuditPlugin(IngestObserver):
+    @property
+    def name(self) -> str:
+        return "audit_plugin"
+
+    async def on_ingest_complete(self, events: list[IngestionEvent]) -> None:
+        for event in events:
+            if event.plugin == "java_plugin" and event.doctype == "code_signature":
+                # Java code was updated — trigger compliance audit
+                await self._run_audit(event.uris, event.doc_ids)
+```
+
+**What's in an IngestionEvent:**
+```python
+@dataclass
+class IngestionEvent:
+    plugin: str          # Which processor wrote the data
+    doctype: str         # What doctype was written
+    uris: list[str]      # Which source URIs were processed
+    doc_ids: list[int]   # IDs of the document rows created
+```
+
+### Combining interfaces
+
+```python
+# Ingest AND expose tools (like MarkdownPlugin)
+class MyFullPlugin(ToolProvider, IngestProcessor):
+    # Implement: name, doctypes, get_tools, call_tool, process_bundle
+    ...
+
+# Tools AND react to ingestion
+class MyDashboard(ToolProvider, IngestObserver):
+    # Implement: name, get_tools, call_tool, on_ingest_complete
     ...
 ```
+
+## The Two-Phase Ingestion Pipeline
+
+When documents are ingested, the pipeline runs in two phases:
+
+```
+Phase 1 — Processing (parallel):
+  Raw URIs → IngestionBundle → broadcast to all IngestProcessors
+  → Each processor writes documents, returns IngestionEvents
+
+Phase 2 — Observation (parallel, after Phase 1 completes):
+  Collected IngestionEvents → broadcast to all IngestObservers
+  → Each observer reacts to what was written
+```
+
+**Key guarantee:** Observers never run until all processors have finished. When your observer receives events, the data is committed and queryable.
 
 ## Storage: How Your Data Lives in the Database
 
@@ -201,7 +289,8 @@ gateway.registry.register(my_plugin)
 On registration:
 - Your tools are added to the MCP tool catalog (visible to AI clients).
 - Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
-- If you implement `IngestListener`, you start receiving bundles.
+- If you implement `IngestProcessor`, you start receiving bundles during ingestion.
+- If you implement `IngestObserver`, you start receiving events after ingestion completes.
 
 ## Discovery: How Others Find Your Data
 
@@ -231,8 +320,9 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 
 | Document | What it covers |
 |----------|---------------|
-| [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Broadcast model, dual interfaces, dual-mode storage, design rationale |
+| [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Three interfaces, two-phase pipeline, dual-mode storage, design rationale |
 | [ADR-001: Plugin-Scoped Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md) | Doctype namespacing, cross-plugin queries, schema contracts |
 | [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
 | [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | DoctypeSpec model, scoped queries, discovery tool |
+| [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |

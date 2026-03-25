@@ -2,9 +2,9 @@ import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestListener, DoctypeSpec
+from team_mind_mcp.server import ToolProvider, IngestProcessor, DoctypeSpec
 from team_mind_mcp.storage import StorageAdapter
-from team_mind_mcp.ingestion import IngestionBundle
+from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 
 
 def _mock_embed(text: str) -> list[float]:
@@ -16,7 +16,7 @@ def _mock_embed(text: str) -> list[float]:
     return vector
 
 
-class MarkdownPlugin(ToolProvider, IngestListener):
+class MarkdownPlugin(ToolProvider, IngestProcessor):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
 
     def __init__(self, storage: StorageAdapter):
@@ -95,8 +95,11 @@ class MarkdownPlugin(ToolProvider, IngestListener):
         response_text = json.dumps(results, indent=2)
         return [TextContent(type="text", text=response_text)]
 
-    async def process_bundle(self, bundle: IngestionBundle) -> None:
+    async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         """Filter for .md files, read them, chunk them, embed, and store."""
+        processed_uris: list[str] = []
+        doc_ids: list[int] = []
+
         for uri in bundle.uris:
             if not uri.endswith(".md"):
                 continue
@@ -112,12 +115,26 @@ class MarkdownPlugin(ToolProvider, IngestListener):
             except Exception:
                 continue
 
+            processed_uris.append(uri)
+
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]
 
             for chunk in chunks:
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
-                self.storage.save_payload(
+                doc_id = self.storage.save_payload(
                     uri, metadata, vector, plugin=self.name, doctype="markdown_chunk"
                 )
+                doc_ids.append(doc_id)
+
+        if processed_uris:
+            return [
+                IngestionEvent(
+                    plugin=self.name,
+                    doctype="markdown_chunk",
+                    uris=processed_uris,
+                    doc_ids=doc_ids,
+                )
+            ]
+        return []

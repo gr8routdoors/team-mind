@@ -7,7 +7,7 @@ import pytest
 from team_mind_mcp.server import (
     DoctypeSpec,
     ToolProvider,
-    IngestListener,
+    IngestProcessor,
     PluginRegistry,
 )
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
@@ -28,7 +28,7 @@ class _Alpha(ToolProvider):
         ]
 
 
-class _Beta(IngestListener):
+class _Beta(IngestProcessor):
     @property
     def name(self) -> str:
         return "beta"

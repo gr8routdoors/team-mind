@@ -1,0 +1,42 @@
+# Stories for SPEC-003
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: IngestionEvent Data Model
+    description: Define the IngestionEvent dataclass that carries structured information about what an IngestProcessor wrote during ingestion.
+    status: passing
+    verified_by: tests/core/test_ingestion_event.py
+
+  STORY-002:
+    name: Rename IngestListener to IngestProcessor
+    description: Rename IngestListener to IngestProcessor across all interfaces, plugins, registry, pipeline, and tests. Update process_bundle() to return list[IngestionEvent].
+    status: passing
+    verified_by: tests/core/test_ingest_processor.py
+
+  STORY-003:
+    name: IngestObserver Interface
+    description: Define the IngestObserver ABC with on_ingest_complete(events) method and register observers in PluginRegistry.
+    status: passing
+    verified_by: tests/core/test_ingest_observer.py
+
+  STORY-004:
+    name: Two-Phase Ingestion Pipeline
+    description: Update IngestionPipeline to collect IngestionEvents from processors in Phase 1, then broadcast them to observers in Phase 2.
+    status: passing
+    verified_by: tests/core/test_two_phase_pipeline.py
+
+  STORY-005:
+    name: Update Documentation
+    description: Update plugin developer guide, system overview, ADR-001, README, and all spec docs to reflect the three-interface model.
+    status: passing
+    verified_by: null
+
+verification:
+  criteria:
+    - All pytest BDD tests pass for every story.
+    - Existing SPEC-001 and SPEC-002 tests continue to pass (no regressions).
+    - IngestObserver receives events only after all processors complete.
+    - Plugin developer guide accurately describes all three interfaces.
+  completed: false
+  completed_date: null

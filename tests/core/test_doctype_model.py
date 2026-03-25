@@ -3,7 +3,7 @@ SPEC-002 / STORY-001: Doctype Specification Model
 """
 
 import json
-from team_mind_mcp.server import DoctypeSpec, ToolProvider, IngestListener
+from team_mind_mcp.server import DoctypeSpec, ToolProvider, IngestProcessor
 
 
 class _PluginWithDoctypes(ToolProvider):
@@ -28,7 +28,7 @@ class _PluginWithoutDoctypes(ToolProvider):
         return "bare_plugin"
 
 
-class _ListenerWithDoctypes(IngestListener):
+class _ProcessorWithDoctypes(IngestProcessor):
     @property
     def name(self) -> str:
         return "listener_plugin"

@@ -3,11 +3,11 @@ STORY-003: URI-based Bundle Ingestion Loop
 """
 
 import pytest
-from team_mind_mcp.server import PluginRegistry, IngestListener
+from team_mind_mcp.server import PluginRegistry, IngestProcessor
 from team_mind_mcp.ingestion import IngestionPipeline, IngestionBundle
 
 
-class TrackerPlugin(IngestListener):
+class TrackerPlugin(IngestProcessor):
     """Mock plugin to track received bundles."""
 
     def __init__(self, name: str):
@@ -18,8 +18,9 @@ class TrackerPlugin(IngestListener):
     def name(self) -> str:
         return self._name
 
-    async def process_bundle(self, bundle: IngestionBundle) -> None:
+    async def process_bundle(self, bundle: IngestionBundle) -> list:
         self.received_bundles.append(bundle)
+        return []
 
 
 @pytest.mark.asyncio

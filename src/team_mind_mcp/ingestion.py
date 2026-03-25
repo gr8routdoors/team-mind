@@ -1,13 +1,24 @@
 import asyncio
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Any
 from urllib.parse import urlparse
 
 
 @dataclass
+class IngestionEvent:
+    """Structured event describing what an IngestProcessor wrote during ingestion."""
+
+    plugin: str
+    doctype: str
+    uris: list[str] = field(default_factory=list)
+    doc_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
 class IngestionBundle:
     uris: List[str]
+    events: List[IngestionEvent] = field(default_factory=list)
 
 
 class ResourceResolver:
@@ -39,14 +50,14 @@ class ResourceResolver:
 
 
 class IngestionPipeline:
-    """Event-driven ingestion pipeline orchestrating URI parsing into bundles."""
+    """Two-phase ingestion pipeline: process then observe."""
 
     def __init__(self, registry: Any):
         self.registry = registry
 
     async def ingest(self, uris: List[str]) -> IngestionBundle | None:
-        """Process URIs, expand them, and broadcast bundle to all plugins.
-        Returns the bundle or None if no valid files were resolved (No-Op)."""
+        """Process URIs in two phases: processors write data, observers react.
+        Returns the bundle with collected events, or None if no valid URIs."""
         resolved_uris = ResourceResolver.resolve(uris)
 
         if not resolved_uris:
@@ -54,12 +65,26 @@ class IngestionPipeline:
 
         bundle = IngestionBundle(uris=resolved_uris)
 
-        # Broadcast to all listeners concurrently
-        aws = []
-        for listener in self.registry.get_ingest_listeners():
-            aws.append(listener.process_bundle(bundle))
+        # Phase 1: Broadcast to all processors, collect events
+        processor_tasks = []
+        for processor in self.registry.get_ingest_processors():
+            processor_tasks.append(processor.process_bundle(bundle))
 
-        if aws:
-            await asyncio.gather(*aws)
+        all_events: List[IngestionEvent] = []
+        if processor_tasks:
+            results = await asyncio.gather(*processor_tasks)
+            for event_list in results:
+                if event_list:
+                    all_events.extend(event_list)
+
+        bundle.events = all_events
+
+        # Phase 2: Broadcast collected events to all observers
+        observer_tasks = []
+        for observer in self.registry.get_ingest_observers():
+            observer_tasks.append(observer.on_ingest_complete(all_events))
+
+        if observer_tasks:
+            await asyncio.gather(*observer_tasks)
 
         return bundle

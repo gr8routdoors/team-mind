@@ -40,8 +40,12 @@ class ToolProvider(ABC):
         raise NotImplementedError
 
 
-class IngestListener(ABC):
-    """Base interface for plugins that process ingestion events."""
+class IngestProcessor(ABC):
+    """Base interface for plugins that do ingestion work.
+
+    Processors receive raw IngestionBundles (URIs), parse/chunk/embed content,
+    write to storage, and return IngestionEvents describing what they wrote.
+    """
 
     @property
     @abstractmethod
@@ -53,8 +57,26 @@ class IngestListener(ABC):
         """Declare document types this plugin produces. Override to declare."""
         return []
 
-    async def process_bundle(self, bundle: Any) -> None:
-        """Process an incoming ingestion bundle from the pipeline."""
+    async def process_bundle(self, bundle: Any) -> list:
+        """Process an ingestion bundle and return IngestionEvents for what was written."""
+        return []
+
+
+class IngestObserver(ABC):
+    """Base interface for plugins that react to completed ingestion.
+
+    Observers receive structured IngestionEvents after all processors have
+    finished. They do not process raw URIs — they react to what was written
+    (e.g., auditing, notifications, cross-plugin triggers).
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    async def on_ingest_complete(self, events: list) -> None:
+        """Called after all processors finish with the collected events."""
         pass
 
 
@@ -64,12 +86,13 @@ class PluginRegistry:
     def __init__(self):
         self._tool_providers: Dict[str, ToolProvider] = {}
         self._tool_routes: Dict[str, ToolProvider] = {}
-        self._ingest_listeners: List[IngestListener] = []
+        self._ingest_processors: List[IngestProcessor] = []
+        self._ingest_observers: List[IngestObserver] = []
         self._doctype_catalog: List[DoctypeSpec] = []
         self._doctypes_by_plugin: Dict[str, List[DoctypeSpec]] = {}
 
     def register(self, plugin: Any) -> None:
-        """Register a new plugin components (Tools, Listeners, or both)."""
+        """Register a new plugin (Tools, Processors, Observers, or any combination)."""
         if isinstance(plugin, ToolProvider):
             self._tool_providers[plugin.name] = plugin
             for tool in plugin.get_tools():
@@ -79,11 +102,14 @@ class PluginRegistry:
                     )
                 self._tool_routes[tool.name] = plugin
 
-        if isinstance(plugin, IngestListener):
-            self._ingest_listeners.append(plugin)
+        if isinstance(plugin, IngestProcessor):
+            self._ingest_processors.append(plugin)
 
-        # Collect doctypes from either interface
-        if isinstance(plugin, (ToolProvider, IngestListener)):
+        if isinstance(plugin, IngestObserver):
+            self._ingest_observers.append(plugin)
+
+        # Collect doctypes from any interface that declares them
+        if isinstance(plugin, (ToolProvider, IngestProcessor)):
             plugin_doctypes = plugin.doctypes
             if plugin_doctypes:
                 stamped = []
@@ -104,9 +130,13 @@ class PluginRegistry:
         """Find the provider responsible for a specific tool."""
         return self._tool_routes.get(tool_name)
 
-    def get_ingest_listeners(self) -> List[IngestListener]:
-        """Return the ordered list of ingestion listeners."""
-        return self._ingest_listeners
+    def get_ingest_processors(self) -> List[IngestProcessor]:
+        """Return the ordered list of ingestion processors."""
+        return self._ingest_processors
+
+    def get_ingest_observers(self) -> List[IngestObserver]:
+        """Return the ordered list of ingestion observers."""
+        return self._ingest_observers
 
     def get_doctype_catalog(self) -> List[DoctypeSpec]:
         """All doctypes across all registered plugins."""

@@ -5,7 +5,7 @@ SPEC-002 / STORY-004: Doctype Registry & Catalog
 from team_mind_mcp.server import (
     DoctypeSpec,
     ToolProvider,
-    IngestListener,
+    IngestProcessor,
     PluginRegistry,
 )
 
@@ -23,7 +23,7 @@ class _PluginA(ToolProvider):
         ]
 
 
-class _PluginB(IngestListener):
+class _PluginB(IngestProcessor):
     @property
     def name(self) -> str:
         return "plugin_b"

@@ -45,8 +45,8 @@ graph TD
 ### Core Components
 
 - **MCP Gateway**: Handles the standard MCP protocol lifecycle and routing between the connected AI client (e.g., Claude) and the internal registry.
-- **Plugin Registry**: Manages registered tools (`ToolProvider`) and ingestion event listeners (`IngestListener`).
-- **Ingestion Pipeline**: An event-driven loop that resolves local files or remote URIs, bundling them and broadcasting to all registered listeners.
+- **Plugin Registry**: Manages registered tools (`ToolProvider`), ingestion processors (`IngestProcessor`), and ingestion observers (`IngestObserver`).
+- **Ingestion Pipeline**: A two-phase event-driven loop that resolves URIs, broadcasts bundles to processors (Phase 1), then notifies observers with structured events (Phase 2).
 - **Storage Adapter**: An embedded SQLite database utilizing the `sqlite-vec` extension for high-performance semantic vector search and `json1` for metadata.
 
 ## Usage

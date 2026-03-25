@@ -25,4 +25,12 @@ specs:
     stories: 6
     stories_complete: 0
 
-# Next spec number: 003
+  SPEC-003:
+    name: Ingestion Interface Split (Processor + Observer)
+    slug: ingestion-interface-split
+    status: in_progress
+    created: 2026-03-25
+    stories: 5
+    stories_complete: 0
+
+# Next spec number: 004
