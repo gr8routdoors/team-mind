@@ -1,5 +1,5 @@
 """
-Tests for score clamping, document updates, and document deletion.
+Tests for score averaging, document updates, and document deletion.
 """
 
 import json
@@ -7,48 +7,90 @@ import pytest
 from team_mind_mcp.storage import StorageAdapter
 
 
-# --- Score clamping ---
+# --- Score averaging (cumulative moving average) ---
 
 
-def test_score_clamped_at_max(tmp_path):
-    """Usage score cannot exceed MAX_USAGE_SCORE."""
+def test_score_averages_toward_signal_value(tmp_path):
+    """Repeated +5 signals converge the average to 5.0."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
     doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
 
-    # Apply +5 signal 20 times = would be 100 without clamping
     for _ in range(20):
         adapter.update_weight(doc_id, signal=5)
 
     with adapter._conn:
         row = adapter._conn.execute(
-            "SELECT usage_score FROM doc_weights WHERE doc_id = ?", (doc_id,)
+            "SELECT usage_score, signal_count FROM doc_weights WHERE doc_id = ?",
+            (doc_id,),
         ).fetchone()
 
-    assert row[0] == adapter.MAX_USAGE_SCORE  # 50.0
+    assert row[1] == 20  # signal_count
+    assert abs(row[0] - 5.0) < 0.01  # converges to 5.0
     adapter.close()
 
 
-def test_score_clamped_at_min(tmp_path):
-    """Usage score cannot go below MIN_USAGE_SCORE."""
+def test_negative_signals_average_correctly(tmp_path):
+    """Repeated -5 signals converge the average to -5.0."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
     doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
 
-    # Apply -5 signal 20 times = would be -100 without clamping
     for _ in range(20):
         adapter.update_weight(doc_id, signal=-5)
 
     with adapter._conn:
         row = adapter._conn.execute(
-            "SELECT usage_score FROM doc_weights WHERE doc_id = ?", (doc_id,)
+            "SELECT usage_score, signal_count FROM doc_weights WHERE doc_id = ?",
+            (doc_id,),
         ).fetchone()
 
-    assert row[0] == adapter.MIN_USAGE_SCORE  # -50.0
+    assert row[1] == 20
+    assert abs(row[0] - (-5.0)) < 0.01  # converges to -5.0
+    adapter.close()
+
+
+def test_single_outlier_barely_moves_average(tmp_path):
+    """100 signals of +5, then one -5 — average stays near 5.0."""
+    db_path = tmp_path / "test.db"
+    adapter = StorageAdapter(str(db_path))
+    adapter.initialize()
+
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+
+    for _ in range(100):
+        adapter.update_weight(doc_id, signal=5)
+
+    # One outlier
+    result = adapter.update_weight(doc_id, signal=-5)
+
+    # Average should be (5.0 * 100 + (-5)) / 101 ≈ 4.9
+    assert result["signal_count"] == 101
+    assert result["usage_score"] > 4.8
+    assert result["usage_score"] < 5.0
+    adapter.close()
+
+
+def test_mixed_signals_average(tmp_path):
+    """Mixed signals produce a reasonable average."""
+    db_path = tmp_path / "test.db"
+    adapter = StorageAdapter(str(db_path))
+    adapter.initialize()
+
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+
+    # 3 signals of +5, 2 signals of -3 → expected avg = (15 + -6) / 5 = 1.8
+    for _ in range(3):
+        adapter.update_weight(doc_id, signal=5)
+    for _ in range(2):
+        result = adapter.update_weight(doc_id, signal=-3)
+
+    assert result["signal_count"] == 5
+    assert abs(result["usage_score"] - 1.8) < 0.01
     adapter.close()
 
 

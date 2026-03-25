@@ -39,6 +39,15 @@ Tombstoning does not delete the row (preserves audit trail) but effectively remo
 
 AI agents provide feedback via a `provide_feedback(doc_id, signal, reason?)` MCP tool. The platform records the signal and updates the weight. Plugins don't implement this — it's a core tool that works across all doctypes.
 
+**Score accumulation uses cumulative moving average, not simple addition.** Each new signal is averaged proportionally into the existing score:
+
+```
+new_count = old_count + 1
+new_score = old_score + (signal - old_score) / new_count
+```
+
+This naturally bounds `usage_score` to the signal range [-5, +5] without artificial clamping. A document with 5000 ratings of +5 followed by one -5 ends up at ≈ 4.998 — the single outlier has proportionally minimal impact. The `doc_weights` table tracks `signal_count` to maintain the running average.
+
 ### 2. Decay Policy via DoctypeSpec
 
 Plugins declare how their data ages by extending DoctypeSpec:
@@ -141,6 +150,14 @@ Simple up/down voting like Reddit or Stack Overflow.
 - Can't distinguish "slightly useful" from "this is the canonical answer."
 - Can't express "this is actively harmful — remove it."
 - The installed-instance model (teams own their knowledge base) makes stronger signals safe — there's no adversarial voting concern.
+
+### 3b. Additive accumulation with clamping
+
+Sum all signals directly (`score += signal`) and clamp to a range like [-50, +50].
+
+**Rejected because:**
+- Unfair to outliers: 5000 signals of +5 then one -5 drops the score to 45 — the single negative voice has disproportionate impact.
+- Cumulative moving average is fairer: the same scenario gives ≈ 4.998, and naturally bounds to [-5, +5] without artificial clamping.
 
 ### 4. Delete instead of tombstone
 

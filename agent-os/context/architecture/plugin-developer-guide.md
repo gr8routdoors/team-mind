@@ -328,7 +328,7 @@ DoctypeSpec(
 | What | Who does it | How |
 |------|-------------|-----|
 | Feedback signals | AI agents / humans via `provide_feedback` MCP tool | `signal` from -5 (strongly demote) to +5 (strongly promote) |
-| Score accumulation | Platform | Signals are **additive**: +3, then +1, then -2 = score of 2.0 |
+| Score accumulation | Platform | Signals are **averaged**: each new signal is folded into the running average proportionally |
 | Decay | Platform, at query time | `effective_score = usage_score * 0.5^(days_old / half_life)` |
 | Tombstone | AI agents / humans via `provide_feedback(tombstone=true)` | Document excluded from all search results, reversible |
 
@@ -343,14 +343,15 @@ Each document gets one row in `doc_weights` (auto-created when the document is s
 ```
 doc_weights
 ├── doc_id          → FK to documents
-├── usage_score     → Accumulated feedback (starts at 0.0)
+├── usage_score     → Running average of feedback signals (starts at 0.0)
+├── signal_count    → Number of signals received (for averaging math)
 ├── created_at      → When the doc was ingested
 ├── last_accessed   → Last feedback timestamp
 ├── tombstoned      → 0 or 1
 └── decay_half_life_days → Copied from DoctypeSpec (nullable)
 ```
 
-There is **one row per document**, not one row per feedback event. Signals are accumulated into `usage_score` directly — no compaction or aggregation needed at scale.
+There is **one row per document**, not one row per feedback event. The running average is maintained via `signal_count` — no compaction or aggregation needed at scale.
 
 ### Updating and replacing documents
 
@@ -384,9 +385,40 @@ for chunk in new_chunks:
 
 **Which to use:** If your chunks have stable identities (e.g., a user preference by ID), use `update_payload`. If the document's structure changes on update (paragraphs added/removed), use wipe-and-replace.
 
-### Score clamping
+### Score averaging (not additive)
 
-Usage scores are clamped to the range **-50.0 to +50.0** to prevent unbounded accumulation. A document that receives +1 feedback a thousand times won't dominate the ranking — it caps at 50.0.
+Scores use a **cumulative moving average**, not simple addition. Each new signal is averaged into the existing score proportionally:
+
+```
+new_count = old_count + 1
+new_score = old_score + (signal - old_score) / new_count
+```
+
+This means:
+- After 100 signals of +5, the average is 5.0
+- One person comes along and gives -5 → average becomes ≈ 4.9 (barely moves)
+- The score naturally stays bounded to [-5, +5] (the signal range) with no artificial clamping
+- Every signal gets proportional weight — early signals and late signals are treated fairly
+
+The `doc_weights` table tracks `signal_count` alongside `usage_score` to maintain the running average.
+
+### URIs for embedded content
+
+When storing content in embedded mode (`local_payload`), the URI is just a **string identifier** — it doesn't need to point to a real file or URL. Use any scheme that makes sense for your data:
+
+```python
+# These are all valid URIs for embedded content:
+"user://preferences/hiking"
+"chat://session-123/msg-5"
+"virtual://generated-summary-42"
+"api://weather/2026-03-25"
+```
+
+The URI serves as a logical identifier for `delete_by_uri` and `get_full_document` lookups regardless of storage mode.
+
+### Chunks are a plugin concept, not a core concept
+
+The platform has no concept of "chunks." Every row in the `documents` table is just a document — the platform doesn't know or care whether a row represents a whole file, a paragraph, a sentence, or a function signature. If your plugin splits a source file into 10 chunks, that's 10 document rows. If another plugin stores one row per file, that's fine too. The platform treats all rows identically.
 
 ## Discovery: How Others Find Your Data
 

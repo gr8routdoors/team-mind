@@ -15,10 +15,6 @@ class StorageAdapter:
     # How much usage_score influences ranking relative to vector distance.
     WEIGHT_INFLUENCE = 0.1
 
-    # Score bounds to prevent unbounded accumulation.
-    MAX_USAGE_SCORE = 50.0
-    MIN_USAGE_SCORE = -50.0
-
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn = None
@@ -84,12 +80,21 @@ class StorageAdapter:
                 CREATE TABLE IF NOT EXISTS doc_weights (
                     doc_id INTEGER PRIMARY KEY REFERENCES documents(id),
                     usage_score REAL DEFAULT 0.0,
+                    signal_count INTEGER DEFAULT 0,
                     last_accessed TEXT,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     tombstoned INTEGER DEFAULT 0,
                     decay_half_life_days REAL
                 )
             """)
+
+            # Migrate existing doc_weights: add signal_count if missing
+            cursor = self._conn.execute("PRAGMA table_info(doc_weights)")
+            weight_columns = {row[1] for row in cursor.fetchall()}
+            if "signal_count" not in weight_columns:
+                self._conn.execute(
+                    "ALTER TABLE doc_weights ADD COLUMN signal_count INTEGER DEFAULT 0"
+                )
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_doc_weights_tombstoned
                 ON doc_weights(tombstoned)
@@ -210,50 +215,59 @@ class StorageAdapter:
         signal: int,
         tombstone: bool | None = None,
     ) -> dict:
-        """Apply a feedback signal to a document's weight. Returns updated weight info."""
+        """Apply a feedback signal using cumulative moving average.
+
+        Each signal is averaged into usage_score proportionally:
+          new_count = old_count + 1
+          new_score = old_score + (signal - old_score) / new_count
+
+        This naturally bounds usage_score to [-5, +5] (the signal range)
+        and gives each signal proportional weight.
+        """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
 
         with self._conn:
-            # Verify doc exists
             row = self._conn.execute(
-                "SELECT doc_id, usage_score, tombstoned FROM doc_weights WHERE doc_id = ?",
+                "SELECT doc_id, usage_score, signal_count, tombstoned FROM doc_weights WHERE doc_id = ?",
                 (doc_id,),
             ).fetchone()
             if row is None:
                 raise ValueError(f"No weight entry for doc_id={doc_id}")
 
-            new_score = max(
-                self.MIN_USAGE_SCORE,
-                min(self.MAX_USAGE_SCORE, row[1] + signal),
-            )
+            old_score = row[1]
+            old_count = row[2]
+            new_count = old_count + 1
+            new_score = old_score + (signal - old_score) / new_count
 
             if tombstone is not None:
                 self._conn.execute(
                     """UPDATE doc_weights
-                       SET usage_score = ?, last_accessed = datetime('now'),
-                           tombstoned = ?
+                       SET usage_score = ?, signal_count = ?,
+                           last_accessed = datetime('now'), tombstoned = ?
                        WHERE doc_id = ?""",
-                    (new_score, 1 if tombstone else 0, doc_id),
+                    (new_score, new_count, 1 if tombstone else 0, doc_id),
                 )
             else:
                 self._conn.execute(
                     """UPDATE doc_weights
-                       SET usage_score = ?, last_accessed = datetime('now')
+                       SET usage_score = ?, signal_count = ?,
+                           last_accessed = datetime('now')
                        WHERE doc_id = ?""",
-                    (new_score, doc_id),
+                    (new_score, new_count, doc_id),
                 )
 
             updated = self._conn.execute(
-                "SELECT usage_score, tombstoned, last_accessed FROM doc_weights WHERE doc_id = ?",
+                "SELECT usage_score, signal_count, tombstoned, last_accessed FROM doc_weights WHERE doc_id = ?",
                 (doc_id,),
             ).fetchone()
 
             return {
                 "doc_id": doc_id,
                 "usage_score": updated[0],
-                "tombstoned": bool(updated[1]),
-                "last_accessed": updated[2],
+                "signal_count": updated[1],
+                "tombstoned": bool(updated[2]),
+                "last_accessed": updated[3],
             }
 
     def retrieve_by_vector_similarity(
