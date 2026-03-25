@@ -1,5 +1,7 @@
 # System Architecture Overview
 
+> **Building a plugin?** Start with the [Plugin Developer Guide](plugin-developer-guide.md) — it covers what you own, what the platform provides, and how to build with both storage modes.
+
 ## Design Philosophy
 
 The core philosophy of "Team Mind" is to provide an intelligent, token-optimized, and highly extensible enterprise knowledge base. Moving beyond traditional "dumb" RAG (Retrieval-Augmented Generation) which relies solely on text chunking and semantic fuzziness, this system embraces a **Structured, Pluggable Architecture**. 

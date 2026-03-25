@@ -78,11 +78,16 @@ uv run team-mind-mcp ingest ./docs/ https://example.com/api.md ./notes.txt
 
 When the server is running, connected AI agents have access to the `ingest_documents` tool. This allows them to dynamically pull in web links or local file paths during a conversation, expanding their context dynamically!
 
+## Building Plugins
+
+Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](agent-os/context/architecture/plugin-developer-guide.md)** — it covers what you own (doctypes, metadata schemas, storage modes, tools), what the platform provides, and includes runnable code examples.
+
 ## Development Status
 
 - **Phase 1: Core Engine (SPEC-001)** - **COMPLETE**
   - Executable packaging, SQLite Vector Storage, MCP Gateway, URI Ingestion Pipeline, Markdown chunking/embedding, Document Retrieval, and dynamic CLI configuration.
-- **Phase 2: AI Client Orchestration (SPEC-002)** - *Upcoming*
+- **Phase 2: Plugin Data Schema (SPEC-002)** - **COMPLETE**
+  - Doctype system, plugin-scoped namespacing, scoped queries, discovery MCP tool, multi-value filtering.
 
 ---
 

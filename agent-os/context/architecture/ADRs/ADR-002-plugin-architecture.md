@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-03-10 (retroactive — originally designed in SPEC-001)
 **Spec:** SPEC-001 (Core Information Architecture, MVP)
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins
 
 ## Context
 

@@ -1,0 +1,238 @@
+# Plugin Developer Guide
+
+> How to build plugins for Team Mind. This is the starting point for anyone extending the system.
+
+## What You Control
+
+When you build a plugin, you own:
+
+1. **Your doctypes** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_doctype`), so you'll never collide with other plugins.
+
+2. **Your metadata schema** — The `metadata` JSON column is yours. Store whatever structure you need per document — free-form fields, nested objects, arrays. You declare an advisory schema so other plugins can understand your data, but it's your design.
+
+3. **Your storage mode per document** — For each document you ingest, you choose:
+   - **Pointer mode**: Store a URI reference. The content lives externally (file, URL, API) and is fetched live on demand. Best for stable, long-lived sources.
+   - **Embedded mode**: Store the full content directly in the `metadata` JSON under a `local_payload` key. Best for ephemeral content, user input, or anything without a stable external URL.
+   - You can mix both modes freely within the same doctype.
+
+4. **Your MCP tools** — You define what tools AI agents can call and what those tools do. Tools are your plugin's public API.
+
+5. **Your ingestion logic** — You decide which URIs from a bundle are relevant, how to process them, how to chunk/transform content, and what to store.
+
+## What the Platform Provides
+
+You don't build these — they're shared infrastructure:
+
+- **The `documents` table** — A shared table with columns: `id`, `uri`, `plugin`, `doctype`, `metadata` (JSON). Your plugin writes rows tagged with your plugin name and doctype. Other plugins can read your data by querying your doctype.
+- **The `vec_documents` table** — Vector embeddings linked to document rows. Used for semantic (KNN) search.
+- **The `PluginRegistry`** — Handles registration, tool routing, and doctype catalog. You register; it routes.
+- **The `IngestionPipeline`** — Broadcasts bundles to all listeners. You just implement `process_bundle()`.
+- **Cross-plugin queries** — Any plugin can query by `plugins` and/or `doctypes` lists. If your data is useful to others, they can discover it via `list_doctypes` and query it via `semantic_search`.
+
+## Plugin Interfaces
+
+Pick one or both depending on what your plugin does:
+
+### ToolProvider — Expose tools to AI clients
+
+```python
+from team_mind_mcp.server import ToolProvider, DoctypeSpec
+from mcp.types import Tool, TextContent
+
+class MyPlugin(ToolProvider):
+    @property
+    def name(self) -> str:
+        return "my_plugin"
+
+    @property
+    def doctypes(self) -> list[DoctypeSpec]:
+        return [
+            DoctypeSpec(
+                name="my_data_type",
+                description="What this document type represents.",
+                schema={
+                    "field_a": {"type": "string", "description": "..."},
+                    "field_b": {"type": "integer", "description": "..."},
+                }
+            )
+        ]
+
+    def get_tools(self) -> list[Tool]:
+        return [
+            Tool(
+                name="my_tool",
+                description="What this tool does.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"}
+                    },
+                    "required": ["query"]
+                }
+            )
+        ]
+
+    async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
+        if name == "my_tool":
+            # Your logic here
+            return [TextContent(type="text", text="result")]
+        raise ValueError(f"Unknown tool: {name}")
+```
+
+### IngestListener — Process incoming documents
+
+```python
+from team_mind_mcp.server import IngestListener, DoctypeSpec
+from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.ingestion import IngestionBundle
+
+class MyIngestionPlugin(IngestListener):
+    def __init__(self, storage: StorageAdapter):
+        self.storage = storage
+
+    @property
+    def name(self) -> str:
+        return "my_ingestion_plugin"
+
+    @property
+    def doctypes(self) -> list[DoctypeSpec]:
+        return [
+            DoctypeSpec(
+                name="processed_item",
+                description="An item extracted during ingestion.",
+                schema={"content": {"type": "string"}}
+            )
+        ]
+
+    async def process_bundle(self, bundle: IngestionBundle) -> None:
+        for uri in bundle.uris:
+            if not self._is_relevant(uri):
+                continue
+
+            content = self._fetch_and_process(uri)
+            vector = self._generate_embedding(content)
+
+            # Pointer mode: store URI reference, fetch content on demand
+            self.storage.save_payload(
+                uri=uri,
+                metadata={"summary": content[:200]},
+                vector=vector,
+                plugin=self.name,
+                doctype="processed_item"
+            )
+
+            # OR Embedded mode: store full content in metadata
+            self.storage.save_payload(
+                uri=uri,
+                metadata={"local_payload": content, "summary": content[:200]},
+                vector=vector,
+                plugin=self.name,
+                doctype="processed_item"
+            )
+```
+
+### Both — Ingest and expose tools (like MarkdownPlugin)
+
+```python
+class MyFullPlugin(ToolProvider, IngestListener):
+    # Implement all of: name, doctypes, get_tools, call_tool, process_bundle
+    ...
+```
+
+## Storage: How Your Data Lives in the Database
+
+The `documents` table is shared, but your data is yours:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        documents table                           │
+├────┬──────────────────┬───────────────────┬───────────┬──────────┤
+│ id │ uri              │ plugin            │ doctype   │ metadata │
+├────┼──────────────────┼───────────────────┼───────────┼──────────┤
+│  1 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
+│  2 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
+│  3 │ user://input     │ travel_plugin     │ interest  │ {local…} │
+│  4 │ https://dest.com │ travel_plugin     │ dest_info │ {name…}  │
+│  5 │ file:///code.py  │ ast_plugin        │ signature │ {func…}  │
+└────┴──────────────────┴───────────────────┴───────────┴──────────┘
+
+ Your plugin's rows are scoped by the `plugin` and `doctype` columns.
+ Other plugins can query your data by doctype, but you own it.
+```
+
+**Key points:**
+- The `plugin` column is always set to your plugin's `name` property. This is automatic ownership.
+- The `doctype` column is whatever you declared in your `doctypes` property. One plugin can have multiple doctypes.
+- The `metadata` column is a JSON blob — you define its shape. Your doctype's `schema` tells others what to expect, but it's not enforced (advisory only).
+- The `uri` column identifies the source. For embedded content, it can be any identifier you choose (e.g., `user://preferences/hiking`).
+
+## Querying Data (Yours or Other Plugins')
+
+```python
+# Query your own data
+results = storage.retrieve_by_vector_similarity(
+    vector, limit=10,
+    plugins=["my_plugin"],
+    doctypes=["my_data_type"]
+)
+
+# Query another plugin's data (cross-plugin)
+results = storage.retrieve_by_vector_similarity(
+    vector, limit=10,
+    plugins=["travel_plugin"],
+    doctypes=["interest", "dest_info"]
+)
+
+# Query across all plugins (no filters)
+results = storage.retrieve_by_vector_similarity(vector, limit=10)
+```
+
+All filter parameters accept **lists**, so you can query multiple plugins and doctypes in a single call.
+
+## Registering Your Plugin
+
+In `cli.py` (or wherever the server is wired up):
+
+```python
+my_plugin = MyPlugin(storage)
+gateway.registry.register(my_plugin)
+```
+
+On registration:
+- Your tools are added to the MCP tool catalog (visible to AI clients).
+- Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
+- If you implement `IngestListener`, you start receiving bundles.
+
+## Discovery: How Others Find Your Data
+
+AI clients can call the `list_doctypes` MCP tool to discover what's available:
+
+```json
+// list_doctypes(plugins=["travel_plugin"])
+[
+  {
+    "plugin": "travel_plugin",
+    "name": "interest",
+    "description": "A user's stated travel interest or preference.",
+    "schema": {"category": {"type": "string"}, "sentiment": {"type": "string"}}
+  },
+  {
+    "plugin": "travel_plugin",
+    "name": "dest_info",
+    "description": "Information about a travel destination.",
+    "schema": {"name": {"type": "string"}, "region": {"type": "string"}}
+  }
+]
+```
+
+This makes the knowledge base self-describing. An AI agent can ask "what data exists?" and adapt its queries.
+
+## Reference
+
+| Document | What it covers |
+|----------|---------------|
+| [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Broadcast model, dual interfaces, dual-mode storage, design rationale |
+| [ADR-001: Plugin-Scoped Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md) | Doctype namespacing, cross-plugin queries, schema contracts |
+| [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
+| [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | DoctypeSpec model, scoped queries, discovery tool |
+| [System Overview](system-overview.md) | High-level architecture and design philosophy |

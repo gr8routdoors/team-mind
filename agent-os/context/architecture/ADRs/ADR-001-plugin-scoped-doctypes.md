@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-03-25
 **Spec:** SPEC-002 (Plugin Data Schema & Doctype System)
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins
 
 ## Context
 
