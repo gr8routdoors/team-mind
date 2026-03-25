@@ -84,10 +84,13 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
 
 ## Development Status
 
-- **Phase 1: Core Engine (SPEC-001)** - **COMPLETE**
-  - Executable packaging, SQLite Vector Storage, MCP Gateway, URI Ingestion Pipeline, Markdown chunking/embedding, Document Retrieval, and dynamic CLI configuration.
-- **Phase 2: Plugin Data Schema (SPEC-002)** - **COMPLETE**
-  - Doctype system, plugin-scoped namespacing, scoped queries, discovery MCP tool, multi-value filtering.
+- **Phase 1: Core Engine** - **COMPLETE**
+  - SPEC-001: MCP Gateway, SQLite storage, ingestion pipeline, Markdown plugin, CLI
+  - SPEC-002: Doctype system, plugin-scoped namespacing, scoped queries, discovery tool
+  - SPEC-003: IngestProcessor/IngestObserver split, two-phase pipeline, IngestionEvent
+- **Phase 2: Intelligence & Weighting** - **IN PROGRESS**
+  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
+  - SPEC-005: Semantic deduplication — *Not started*
 
 ---
 

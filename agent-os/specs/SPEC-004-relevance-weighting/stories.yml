@@ -56,6 +56,24 @@ stories:
     status: passing
     verified_by: tests/core/test_composite_scoring.py
 
+  STORY-007:
+    name: Cumulative Moving Average Scoring
+    description: >
+      Replace additive score accumulation with cumulative moving average.
+      Add signal_count to doc_weights. Each signal is proportionally averaged
+      into usage_score, naturally bounding it to [-5, +5] without clamping.
+    status: passing
+    verified_by: tests/core/test_doc_updates.py
+
+  STORY-008:
+    name: Document Update and Deletion
+    description: >
+      Add update_payload(doc_id, metadata, vector) for in-place chunk updates
+      that preserve weights, and delete_by_uri(uri, plugin, doctype) for
+      wipe-and-replace re-ingestion. Deletion cascades to weights and vectors.
+    status: passing
+    verified_by: tests/core/test_doc_updates.py
+
 verification:
   criteria:
     - Spike produces a clear recommendation with benchmark data.
