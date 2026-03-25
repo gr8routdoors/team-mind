@@ -52,14 +52,29 @@ When documents are ingested:
 
 Plugins are responsible for their own filtering. The pipeline doesn't pre-sort or route based on file type — it simply broadcasts everything to everyone.
 
-### 4. Pointer-Based Storage
+### 4. Dual-Mode Storage: Pointers and Embedded Content
 
-Plugins store **pointers** (URIs) rather than full document content:
+The storage layer supports **two modes** for document content, and they can coexist in the same table:
 
-- The `documents` table holds the URI, metadata (JSON), and an associated embedding vector.
-- When an AI agent needs the full document, `DocumentRetrievalPlugin` fetches it live from the URI (local file or HTTP).
-- This prevents storage bloat at scale — the database holds semantic indexes and metadata, not copies of every document.
-- Exception: short-lived or uploaded content can be stored directly in metadata via `local_payload`.
+**Mode A: Pointer-based (URI reference)**
+- The `documents` table stores the URI as a pointer to the original source.
+- When an AI agent needs the full document, `DocumentRetrievalPlugin` resolves and fetches it live from the URI (local file via `file://`, remote via `http://`/`https://`).
+- Best for: long-lived documents with a stable source location (files on disk, web pages, Confluence docs).
+- Advantage: prevents storage bloat at scale — the database holds semantic indexes and metadata, not copies of every document.
+
+**Mode B: Embedded content (stored in metadata)**
+- The full document content is stored directly in the `metadata` JSON column under a `local_payload` key.
+- When `DocumentRetrievalPlugin` resolves a document, it checks for `local_payload` **first** — if present, it returns the embedded content immediately without any network or filesystem access.
+- Best for: ephemeral content without a stable URI (uploaded text, chat transcripts, user-provided notes, API responses), or situations where the original source may disappear.
+- Advantage: fully self-contained — the database is the source of truth, not dependent on external availability.
+
+**How retrieval works (in order):**
+1. `DocumentRetrievalPlugin` looks up the URI in the `documents` table.
+2. If the matching row's metadata contains `local_payload` → return it directly (Mode B).
+3. Otherwise → resolve the URI and fetch content live from the source (Mode A).
+4. If the live source is unreachable → return an error indicating the document is no longer available.
+
+Plugins choose which mode to use per-document at ingestion time. A single knowledge base can contain a mix of pointer-based and embedded documents. This is not an either/or architectural choice — both modes are first-class.
 
 ### 5. MCP Gateway as Thin Router
 
