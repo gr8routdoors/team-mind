@@ -1,6 +1,7 @@
 """
 SPEC-002 / STORY-002: Storage Schema Evolution
 """
+
 import sqlite3
 import pytest
 from team_mind_mcp.storage import StorageAdapter
@@ -63,9 +64,7 @@ def test_save_payload_requires_plugin_and_doctype(tmp_path):
     # Then a TypeError is raised (missing required arguments)
     with pytest.raises(TypeError):
         adapter.save_payload(
-            uri="file:///tmp/test.md",
-            metadata={"test": True},
-            vector=[0.0] * 768
+            uri="file:///tmp/test.md", metadata={"test": True}, vector=[0.0] * 768
         )
     adapter.close()
 
@@ -85,7 +84,7 @@ def test_saved_record_contains_plugin_and_doctype(tmp_path):
         metadata={"key": "value"},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="test_type"
+        doctype="test_type",
     )
 
     # Then the saved row in the documents table has the correct values

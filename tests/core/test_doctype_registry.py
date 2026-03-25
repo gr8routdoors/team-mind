@@ -1,8 +1,12 @@
 """
 SPEC-002 / STORY-004: Doctype Registry & Catalog
 """
+
 from team_mind_mcp.server import (
-    DoctypeSpec, ToolProvider, IngestListener, PluginRegistry
+    DoctypeSpec,
+    ToolProvider,
+    IngestListener,
+    PluginRegistry,
 )
 
 
@@ -33,6 +37,7 @@ class _PluginB(IngestListener):
 
 class _PluginC(ToolProvider):
     """Plugin that also declares type_x (same doctype name as PluginA)."""
+
     @property
     def name(self) -> str:
         return "plugin_c"
@@ -78,9 +83,9 @@ def test_get_all_doctypes():
     registry = PluginRegistry()
 
     # Given three plugins are registered, declaring a total of five doctypes
-    registry.register(_PluginA())   # 2 doctypes
-    registry.register(_PluginB())   # 1 doctype
-    registry.register(_PluginC())   # 2 doctypes
+    registry.register(_PluginA())  # 2 doctypes
+    registry.register(_PluginB())  # 1 doctype
+    registry.register(_PluginC())  # 2 doctypes
 
     # When get_doctype_catalog() is called
     catalog = registry.get_doctype_catalog()

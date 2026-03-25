@@ -1,6 +1,7 @@
 """
 SPEC-002 / STORY-003: Scoped Storage Queries
 """
+
 import pytest
 from team_mind_mcp.storage import StorageAdapter
 
@@ -19,16 +20,28 @@ def populated_storage(tmp_path):
         return v
 
     # plugin_x: type_a (2 docs), type_b (1 doc)
-    adapter.save_payload("uri_xa1", {"n": "xa1"}, make_vector(0), plugin="plugin_x", doctype="type_a")
-    adapter.save_payload("uri_xa2", {"n": "xa2"}, make_vector(1), plugin="plugin_x", doctype="type_a")
-    adapter.save_payload("uri_xb1", {"n": "xb1"}, make_vector(2), plugin="plugin_x", doctype="type_b")
+    adapter.save_payload(
+        "uri_xa1", {"n": "xa1"}, make_vector(0), plugin="plugin_x", doctype="type_a"
+    )
+    adapter.save_payload(
+        "uri_xa2", {"n": "xa2"}, make_vector(1), plugin="plugin_x", doctype="type_a"
+    )
+    adapter.save_payload(
+        "uri_xb1", {"n": "xb1"}, make_vector(2), plugin="plugin_x", doctype="type_b"
+    )
 
     # plugin_y: type_a (1 doc), type_c (1 doc)
-    adapter.save_payload("uri_ya1", {"n": "ya1"}, make_vector(3), plugin="plugin_y", doctype="type_a")
-    adapter.save_payload("uri_yc1", {"n": "yc1"}, make_vector(4), plugin="plugin_y", doctype="type_c")
+    adapter.save_payload(
+        "uri_ya1", {"n": "ya1"}, make_vector(3), plugin="plugin_y", doctype="type_a"
+    )
+    adapter.save_payload(
+        "uri_yc1", {"n": "yc1"}, make_vector(4), plugin="plugin_y", doctype="type_c"
+    )
 
     # plugin_z: type_b (1 doc)
-    adapter.save_payload("uri_zb1", {"n": "zb1"}, make_vector(5), plugin="plugin_z", doctype="type_b")
+    adapter.save_payload(
+        "uri_zb1", {"n": "zb1"}, make_vector(5), plugin="plugin_z", doctype="type_b"
+    )
 
     yield adapter
     adapter.close()

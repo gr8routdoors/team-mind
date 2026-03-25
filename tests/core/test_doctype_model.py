@@ -1,6 +1,7 @@
 """
 SPEC-002 / STORY-001: Doctype Specification Model
 """
+
 import json
 from team_mind_mcp.server import DoctypeSpec, ToolProvider, IngestListener
 
@@ -16,7 +17,7 @@ class _PluginWithDoctypes(ToolProvider):
             DoctypeSpec(
                 name="note",
                 description="A short note.",
-                schema={"body": {"type": "string"}}
+                schema={"body": {"type": "string"}},
             )
         ]
 
@@ -38,7 +39,7 @@ class _ListenerWithDoctypes(IngestListener):
             DoctypeSpec(
                 name="event",
                 description="An ingested event.",
-                schema={"timestamp": {"type": "string"}}
+                schema={"timestamp": {"type": "string"}},
             )
         ]
 
@@ -52,7 +53,7 @@ def test_doctype_spec_fields():
     spec = DoctypeSpec(
         name="user_interest",
         description="A user's stated interest",
-        schema={"category": {"type": "string"}, "sentiment": {"type": "string"}}
+        schema={"category": {"type": "string"}, "sentiment": {"type": "string"}},
     )
 
     # Then all three fields are accessible on the instance
@@ -104,7 +105,7 @@ def test_schema_is_advisory_dict():
     spec = DoctypeSpec(
         name="test",
         description="test",
-        schema={"field_a": {"type": "string"}, "field_b": {"type": "integer"}}
+        schema={"field_a": {"type": "string"}, "field_b": {"type": "integer"}},
     )
 
     # When the schema is accessed

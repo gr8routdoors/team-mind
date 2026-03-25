@@ -1,9 +1,15 @@
 """
 SPEC-002 / STORY-005: Doctype Discovery MCP Tool
 """
+
 import json
 import pytest
-from team_mind_mcp.server import DoctypeSpec, ToolProvider, IngestListener, PluginRegistry
+from team_mind_mcp.server import (
+    DoctypeSpec,
+    ToolProvider,
+    IngestListener,
+    PluginRegistry,
+)
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
 
 
@@ -15,7 +21,9 @@ class _Alpha(ToolProvider):
     @property
     def doctypes(self) -> list[DoctypeSpec]:
         return [
-            DoctypeSpec(name="type_a", description="Alpha A", schema={"f": {"type": "string"}}),
+            DoctypeSpec(
+                name="type_a", description="Alpha A", schema={"f": {"type": "string"}}
+            ),
             DoctypeSpec(name="type_b", description="Alpha B"),
         ]
 
@@ -133,7 +141,9 @@ async def test_filter_by_doctype_names(registry_with_plugins):
 
     # Given plugins declare doctypes "type_a", "type_b", "type_c", "type_d"
     # When list_doctypes is called with doctypes=["type_a", "type_b"]
-    response = await plugin.call_tool("list_doctypes", {"doctypes": ["type_a", "type_b"]})
+    response = await plugin.call_tool(
+        "list_doctypes", {"doctypes": ["type_a", "type_b"]}
+    )
     result = json.loads(response[0].text)
 
     # Then only doctype specs with those names are returned
@@ -152,10 +162,9 @@ async def test_combined_plugin_and_doctype_filters(registry_with_plugins):
 
     # Given multiple plugins each declare multiple doctypes
     # When list_doctypes is called with plugins=["alpha"] and doctypes=["type_a"]
-    response = await plugin.call_tool("list_doctypes", {
-        "plugins": ["alpha"],
-        "doctypes": ["type_a"]
-    })
+    response = await plugin.call_tool(
+        "list_doctypes", {"plugins": ["alpha"], "doctypes": ["type_a"]}
+    )
     result = json.loads(response[0].text)
 
     # Then only doctypes matching BOTH filters are returned

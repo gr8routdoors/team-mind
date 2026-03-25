@@ -1,6 +1,7 @@
 """
 SPEC-002 / STORY-006: Migrate Existing Plugins to Doctypes
 """
+
 import json
 import pytest
 from team_mind_mcp.markdown import MarkdownPlugin
@@ -55,9 +56,7 @@ async def test_markdown_plugin_passes_plugin_and_doctype_on_save(tmp_path):
 
     # Then it passes plugin="markdown_plugin" and doctype="markdown_chunk"
     with storage._conn:
-        cursor = storage._conn.execute(
-            "SELECT plugin, doctype FROM documents"
-        )
+        cursor = storage._conn.execute("SELECT plugin, doctype FROM documents")
         rows = cursor.fetchall()
 
     assert len(rows) >= 1
@@ -85,16 +84,22 @@ async def test_semantic_search_accepts_filters(tmp_path):
 
     # Also insert a document from a different plugin to test filtering
     storage.save_payload(
-        "other://doc", {"data": "other"}, [0.0] * 768,
-        plugin="other_plugin", doctype="other_type"
+        "other://doc",
+        {"data": "other"},
+        [0.0] * 768,
+        plugin="other_plugin",
+        doctype="other_type",
     )
 
     # When semantic_search is called with plugin and doctype filters
-    response = await plugin.call_tool("semantic_search", {
-        "query": "travel",
-        "plugins": ["markdown_plugin"],
-        "doctypes": ["markdown_chunk"]
-    })
+    response = await plugin.call_tool(
+        "semantic_search",
+        {
+            "query": "travel",
+            "plugins": ["markdown_plugin"],
+            "doctypes": ["markdown_chunk"],
+        },
+    )
     results = json.loads(response[0].text)
 
     # Then results are scoped to the markdown plugin only
@@ -102,10 +107,10 @@ async def test_semantic_search_accepts_filters(tmp_path):
     assert all(r["doctype"] == "markdown_chunk" for r in results)
 
     # Multi-value: search across both plugins
-    response_multi = await plugin.call_tool("semantic_search", {
-        "query": "travel",
-        "plugins": ["markdown_plugin", "other_plugin"]
-    })
+    response_multi = await plugin.call_tool(
+        "semantic_search",
+        {"query": "travel", "plugins": ["markdown_plugin", "other_plugin"]},
+    )
     results_multi = json.loads(response_multi[0].text)
     plugins_found = {r["plugin"] for r in results_multi}
     assert "markdown_plugin" in plugins_found

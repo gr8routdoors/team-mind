@@ -6,13 +6,15 @@ from team_mind_mcp.server import ToolProvider, IngestListener, DoctypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
+
 def _mock_embed(text: str) -> list[float]:
     """Deterministically generates a 768-d vector from text for MVP."""
     vector = [0.0] * 768
-    h = hashlib.md5(text.encode('utf-8')).digest()
+    h = hashlib.md5(text.encode("utf-8")).digest()
     for i in range(min(16, len(h))):
         vector[i] = h[i] / 255.0
     return vector
+
 
 class MarkdownPlugin(ToolProvider, IngestListener):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
@@ -31,9 +33,12 @@ class MarkdownPlugin(ToolProvider, IngestListener):
                 name="markdown_chunk",
                 description="A paragraph-level chunk extracted from a markdown document.",
                 schema={
-                    "chunk": {"type": "string", "description": "The text content of the chunk."},
-                    "plugin": {"type": "string", "description": "Owning plugin name."}
-                }
+                    "chunk": {
+                        "type": "string",
+                        "description": "The text content of the chunk.",
+                    },
+                    "plugin": {"type": "string", "description": "Owning plugin name."},
+                },
             )
         ]
 
@@ -45,21 +50,27 @@ class MarkdownPlugin(ToolProvider, IngestListener):
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "The search query text."},
-                        "limit": {"type": "integer", "description": "Max results to return."},
+                        "query": {
+                            "type": "string",
+                            "description": "The search query text.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max results to return.",
+                        },
                         "plugins": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter results to these plugins only."
+                            "description": "Filter results to these plugins only.",
                         },
                         "doctypes": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter results to these document types only."
-                        }
+                            "description": "Filter results to these document types only.",
+                        },
                     },
-                    "required": ["query"]
-                }
+                    "required": ["query"],
+                },
             )
         ]
 
@@ -77,9 +88,7 @@ class MarkdownPlugin(ToolProvider, IngestListener):
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit,
-            plugins=plugins_filter,
-            doctypes=doctypes_filter
+            vector, limit=limit, plugins=plugins_filter, doctypes=doctypes_filter
         )
 
         # Format the SQLite results into an MCP TextContent response
@@ -96,7 +105,7 @@ class MarkdownPlugin(ToolProvider, IngestListener):
             try:
                 if uri.startswith("file://"):
                     req = urllib.request.urlopen(uri)
-                    content = req.read().decode('utf-8')
+                    content = req.read().decode("utf-8")
                 else:
                     # In a real system, we'd use ResourceResolver for http/https etc
                     continue
@@ -110,6 +119,5 @@ class MarkdownPlugin(ToolProvider, IngestListener):
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
                 self.storage.save_payload(
-                    uri, metadata, vector,
-                    plugin=self.name, doctype="markdown_chunk"
+                    uri, metadata, vector, plugin=self.name, doctype="markdown_chunk"
                 )

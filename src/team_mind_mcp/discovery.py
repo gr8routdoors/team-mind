@@ -24,15 +24,15 @@ class DoctypeDiscoveryPlugin(ToolProvider):
                         "plugins": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter to doctypes from these plugins only."
+                            "description": "Filter to doctypes from these plugins only.",
                         },
                         "doctypes": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter to these doctype names only."
-                        }
-                    }
-                }
+                            "description": "Filter to these doctype names only.",
+                        },
+                    },
+                },
             )
         ]
 
@@ -56,7 +56,7 @@ class DoctypeDiscoveryPlugin(ToolProvider):
                 "plugin": dt.plugin,
                 "name": dt.name,
                 "description": dt.description,
-                "schema": dt.schema
+                "schema": dt.schema,
             }
             for dt in catalog
         ]

@@ -3,6 +3,7 @@ import json
 import struct
 import sqlite_vec
 
+
 class StorageAdapter:
     """Embedded SQLite storage for tracking documents and vector embeddings."""
 
@@ -44,9 +45,13 @@ class StorageAdapter:
             cursor = self._conn.execute("PRAGMA table_info(documents)")
             existing_columns = {row[1] for row in cursor.fetchall()}
             if "plugin" not in existing_columns:
-                self._conn.execute("ALTER TABLE documents ADD COLUMN plugin TEXT NOT NULL DEFAULT ''")
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN plugin TEXT NOT NULL DEFAULT ''"
+                )
             if "doctype" not in existing_columns:
-                self._conn.execute("ALTER TABLE documents ADD COLUMN doctype TEXT NOT NULL DEFAULT ''")
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN doctype TEXT NOT NULL DEFAULT ''"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -67,8 +72,9 @@ class StorageAdapter:
                 )
             """)
 
-    def save_payload(self, uri: str, metadata: dict, vector: list[float],
-                     plugin: str, doctype: str) -> int:
+    def save_payload(
+        self, uri: str, metadata: dict, vector: list[float], plugin: str, doctype: str
+    ) -> int:
         """Saves a document and its embedding vector."""
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -76,20 +82,24 @@ class StorageAdapter:
         with self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO documents (uri, plugin, doctype, metadata) VALUES (?, ?, ?, ?) RETURNING id",
-                (uri, plugin, doctype, json.dumps(metadata))
+                (uri, plugin, doctype, json.dumps(metadata)),
             )
             doc_id = cursor.fetchone()[0]
 
             vec_bytes = struct.pack(f"{len(vector)}f", *vector)
             self._conn.execute(
                 "INSERT INTO vec_documents (id, embedding) VALUES (?, ?)",
-                (doc_id, vec_bytes)
+                (doc_id, vec_bytes),
             )
             return doc_id
 
-    def retrieve_by_vector_similarity(self, target_vector: list[float], limit: int = 5,
-                                      plugins: list[str] | None = None,
-                                      doctypes: list[str] | None = None) -> list[dict]:
+    def retrieve_by_vector_similarity(
+        self,
+        target_vector: list[float],
+        limit: int = 5,
+        plugins: list[str] | None = None,
+        doctypes: list[str] | None = None,
+    ) -> list[dict]:
         """Retrieves documents by KNN similarity search with optional filters.
 
         Note: sqlite-vec performs KNN *before* filters are applied (post-filter).
@@ -144,14 +154,16 @@ class StorageAdapter:
 
         results = []
         for row in cursor.fetchall():
-            results.append({
-                "id": row[0],
-                "uri": row[1],
-                "plugin": row[2],
-                "doctype": row[3],
-                "metadata": json.loads(row[4]) if row[4] else {},
-                "score": row[5]
-            })
+            results.append(
+                {
+                    "id": row[0],
+                    "uri": row[1],
+                    "plugin": row[2],
+                    "doctype": row[3],
+                    "metadata": json.loads(row[4]) if row[4] else {},
+                    "score": row[5],
+                }
+            )
         return results
 
     def close(self):
