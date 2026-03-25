@@ -1,19 +1,19 @@
-import json
 from mcp.types import Tool, TextContent
 from team_mind_mcp.server import ToolProvider, PluginRegistry
-from team_mind_mcp.ingestion import IngestionPipeline, IngestionBundle
+from team_mind_mcp.ingestion import IngestionPipeline
+
 
 class IngestionPlugin(ToolProvider):
     """Exposes the internal ingestion loop to external MCP Clients."""
-    
+
     def __init__(self, registry: PluginRegistry):
         self.registry = registry
         self.pipeline = IngestionPipeline(self.registry)
-        
+
     @property
     def name(self) -> str:
         return "ingestion_plugin"
-        
+
     def get_tools(self) -> list[Tool]:
         return [
             Tool(
@@ -25,27 +25,42 @@ class IngestionPlugin(ToolProvider):
                         "uris": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of URIs to ingest (e.g., file:///path/to/docs, https://example.com/api.md)"
+                            "description": "List of URIs to ingest (e.g., file:///path/to/docs, https://example.com/api.md)",
                         }
                     },
-                    "required": ["uris"]
-                }
+                    "required": ["uris"],
+                },
             )
         ]
-        
+
     async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
         if name != "ingest_documents":
             raise ValueError(f"Unsupported tool: {name}")
-            
+
         uris = arguments.get("uris", [])
         if not uris:
             raise ValueError("At least one URI is required for ingest_documents")
-            
+
         try:
             bundle = await self.pipeline.ingest(uris)
             if bundle:
-                return [TextContent(type="text", text=f"Successfully queued {len(bundle.uris)} items for ingestion.")]
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Successfully queued {len(bundle.uris)} items for ingestion.",
+                    )
+                ]
             else:
-                return [TextContent(type="text", text="Failed to queue any items or no valid URIs found.")]
+                return [
+                    TextContent(
+                        type="text",
+                        text="Failed to queue any items or no valid URIs found.",
+                    )
+                ]
         except Exception as e:
-            return [TextContent(type="text", text=f"Failed to queue any items or no valid URIs found. Error: {str(e)}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Failed to queue any items or no valid URIs found. Error: {str(e)}",
+                )
+            ]

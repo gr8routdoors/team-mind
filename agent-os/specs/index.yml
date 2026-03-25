@@ -12,9 +12,33 @@ specs:
   SPEC-001:
     name: Core Information Architecture (MVP)
     slug: core-engine
-    status: in_requirements
+    status: complete
     created: 2026-03-10
-    stories: 6
-    stories_complete: 0
+    stories: 10
+    stories_complete: 10
 
-# Next spec number: 002
+  SPEC-002:
+    name: Plugin Data Schema & Doctype System
+    slug: plugin-data-schema
+    status: complete
+    created: 2026-03-25
+    stories: 6
+    stories_complete: 6
+
+  SPEC-003:
+    name: Ingestion Interface Split (Processor + Observer)
+    slug: ingestion-interface-split
+    status: complete
+    created: 2026-03-25
+    stories: 5
+    stories_complete: 5
+
+  SPEC-004:
+    name: Relevance Weighting System
+    slug: relevance-weighting
+    status: complete
+    created: 2026-03-25
+    stories: 8
+    stories_complete: 8
+
+# Next spec number: 005

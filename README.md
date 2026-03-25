@@ -45,8 +45,8 @@ graph TD
 ### Core Components
 
 - **MCP Gateway**: Handles the standard MCP protocol lifecycle and routing between the connected AI client (e.g., Claude) and the internal registry.
-- **Plugin Registry**: Manages registered tools (`ToolProvider`) and ingestion event listeners (`IngestListener`).
-- **Ingestion Pipeline**: An event-driven loop that resolves local files or remote URIs, bundling them and broadcasting to all registered listeners.
+- **Plugin Registry**: Manages registered tools (`ToolProvider`), ingestion processors (`IngestProcessor`), and ingestion observers (`IngestObserver`).
+- **Ingestion Pipeline**: A two-phase event-driven loop that resolves URIs, broadcasts bundles to processors (Phase 1), then notifies observers with structured events (Phase 2).
 - **Storage Adapter**: An embedded SQLite database utilizing the `sqlite-vec` extension for high-performance semantic vector search and `json1` for metadata.
 
 ## Usage
@@ -78,11 +78,19 @@ uv run team-mind-mcp ingest ./docs/ https://example.com/api.md ./notes.txt
 
 When the server is running, connected AI agents have access to the `ingest_documents` tool. This allows them to dynamically pull in web links or local file paths during a conversation, expanding their context dynamically!
 
+## Building Plugins
+
+Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](agent-os/context/architecture/plugin-developer-guide.md)** — it covers what you own (doctypes, metadata schemas, storage modes, tools), what the platform provides, and includes runnable code examples.
+
 ## Development Status
 
-- **Phase 1: Core Engine (SPEC-001)** - **COMPLETE**
-  - Executable packaging, SQLite Vector Storage, MCP Gateway, URI Ingestion Pipeline, Markdown chunking/embedding, Document Retrieval, and dynamic CLI configuration.
-- **Phase 2: AI Client Orchestration (SPEC-002)** - *Upcoming*
+- **Phase 1: Core Engine** - **COMPLETE**
+  - SPEC-001: MCP Gateway, SQLite storage, ingestion pipeline, Markdown plugin, CLI
+  - SPEC-002: Doctype system, plugin-scoped namespacing, scoped queries, discovery tool
+  - SPEC-003: IngestProcessor/IngestObserver split, two-phase pipeline, IngestionEvent
+- **Phase 2: Intelligence & Weighting** - **IN PROGRESS**
+  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
+  - SPEC-005: Semantic deduplication — *Not started*
 
 ---
 

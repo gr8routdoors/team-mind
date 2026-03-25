@@ -1,0 +1,86 @@
+# Stories for SPEC-004
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: "Spike: sqlite-vec Composite Scoring Feasibility"
+    description: >
+      Validate whether sqlite-vec's KNN MATCH operator can be composed with
+      a scoring JOIN against a weights table. Test three approaches: (1) SQL-side
+      composite scoring via JOIN + ORDER BY, (2) over-fetch KNN then re-rank in
+      Python, (3) hybrid with SQL pre-filter and Python re-rank. Determine
+      performance characteristics and recommend the approach for production.
+    status: passing
+    verified_by: tests/spikes/test_weighted_scoring.py
+
+  STORY-002:
+    name: Doc Weights Table & Ingestion Hook
+    description: >
+      Create the doc_weights table. Auto-populate a weight row when documents
+      are saved, copying decay_half_life_days from the doctype's DoctypeSpec.
+    status: passing
+    verified_by: tests/core/test_doc_weights.py
+
+  STORY-003:
+    name: Provide Feedback MCP Tool
+    description: >
+      Build a FeedbackPlugin (ToolProvider) that exposes provide_feedback(doc_id,
+      signal, reason?) as an MCP tool. Signals range from -5 to +5. The tool
+      updates usage_score and last_accessed in doc_weights.
+    status: passing
+    verified_by: tests/core/test_feedback_tool.py
+
+  STORY-004:
+    name: Decay Policy on DoctypeSpec
+    description: >
+      Add optional decay_half_life_days field to DoctypeSpec. Plugins declare
+      how fast their data ages. The field is nullable (None = no decay).
+    status: passing
+    verified_by: tests/core/test_doc_weights.py
+
+  STORY-005:
+    name: Composite Scoring in Retrieval
+    description: >
+      Integrate weighting into retrieve_by_vector_similarity. Combine vector
+      distance with usage_score and age decay into a final_rank. Approach
+      determined by spike results (STORY-001).
+    status: passing
+    verified_by: tests/core/test_composite_scoring.py
+
+  STORY-006:
+    name: Tombstone Support
+    description: >
+      Add tombstone flag to doc_weights. Tombstoned documents are excluded from
+      all search results. Tombstoning is done via provide_feedback with a special
+      flag. Tombstoning is reversible.
+    status: passing
+    verified_by: tests/core/test_composite_scoring.py
+
+  STORY-007:
+    name: Cumulative Moving Average Scoring
+    description: >
+      Replace additive score accumulation with cumulative moving average.
+      Add signal_count to doc_weights. Each signal is proportionally averaged
+      into usage_score, naturally bounding it to [-5, +5] without clamping.
+    status: passing
+    verified_by: tests/core/test_doc_updates.py
+
+  STORY-008:
+    name: Document Update and Deletion
+    description: >
+      Add update_payload(doc_id, metadata, vector) for in-place chunk updates
+      that preserve weights, and delete_by_uri(uri, plugin, doctype) for
+      wipe-and-replace re-ingestion. Deletion cascades to weights and vectors.
+    status: passing
+    verified_by: tests/core/test_doc_updates.py
+
+verification:
+  criteria:
+    - Spike produces a clear recommendation with benchmark data.
+    - All pytest BDD tests pass for every story.
+    - Existing SPEC-001, SPEC-002, and SPEC-003 tests pass (no regressions).
+    - provide_feedback tool correctly updates weights.
+    - Tombstoned documents are excluded from search results.
+    - Decay-configured doctypes produce time-decayed scores at query time.
+  completed: false
+  completed_date: null
