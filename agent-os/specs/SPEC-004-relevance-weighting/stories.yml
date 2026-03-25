@@ -18,8 +18,8 @@ stories:
     description: >
       Create the doc_weights table. Auto-populate a weight row when documents
       are saved, copying decay_half_life_days from the doctype's DoctypeSpec.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_doc_weights.py
 
   STORY-003:
     name: Provide Feedback MCP Tool
@@ -27,16 +27,16 @@ stories:
       Build a FeedbackPlugin (ToolProvider) that exposes provide_feedback(doc_id,
       signal, reason?) as an MCP tool. Signals range from -5 to +5. The tool
       updates usage_score and last_accessed in doc_weights.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_feedback_tool.py
 
   STORY-004:
     name: Decay Policy on DoctypeSpec
     description: >
       Add optional decay_half_life_days field to DoctypeSpec. Plugins declare
       how fast their data ages. The field is nullable (None = no decay).
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_doc_weights.py
 
   STORY-005:
     name: Composite Scoring in Retrieval
@@ -44,8 +44,8 @@ stories:
       Integrate weighting into retrieve_by_vector_similarity. Combine vector
       distance with usage_score and age decay into a final_rank. Approach
       determined by spike results (STORY-001).
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_composite_scoring.py
 
   STORY-006:
     name: Tombstone Support
@@ -53,8 +53,8 @@ stories:
       Add tombstone flag to doc_weights. Tombstoned documents are excluded from
       all search results. Tombstoning is done via provide_feedback with a special
       flag. Tombstoning is reversible.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_composite_scoring.py
 
 verification:
   criteria:

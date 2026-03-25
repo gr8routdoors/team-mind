@@ -12,6 +12,9 @@ class StorageAdapter:
     # candidates and filter in Python to compensate.
     KNN_OVERFETCH_MULTIPLIER = 4
 
+    # How much usage_score influences ranking relative to vector distance.
+    WEIGHT_INFLUENCE = 0.1
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn = None
@@ -72,10 +75,32 @@ class StorageAdapter:
                 )
             """)
 
+            # Weighting tables
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS doc_weights (
+                    doc_id INTEGER PRIMARY KEY REFERENCES documents(id),
+                    usage_score REAL DEFAULT 0.0,
+                    last_accessed TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    tombstoned INTEGER DEFAULT 0,
+                    decay_half_life_days REAL
+                )
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_doc_weights_tombstoned
+                ON doc_weights(tombstoned)
+            """)
+
     def save_payload(
-        self, uri: str, metadata: dict, vector: list[float], plugin: str, doctype: str
+        self,
+        uri: str,
+        metadata: dict,
+        vector: list[float],
+        plugin: str,
+        doctype: str,
+        decay_half_life_days: float | None = None,
     ) -> int:
-        """Saves a document and its embedding vector."""
+        """Saves a document, its embedding vector, and initializes its weight row."""
         if self._conn is None:
             raise RuntimeError("Database not initialized")
 
@@ -91,7 +116,63 @@ class StorageAdapter:
                 "INSERT INTO vec_documents (id, embedding) VALUES (?, ?)",
                 (doc_id, vec_bytes),
             )
+
+            # Auto-create weight row
+            self._conn.execute(
+                "INSERT INTO doc_weights (doc_id, decay_half_life_days) VALUES (?, ?)",
+                (doc_id, decay_half_life_days),
+            )
+
             return doc_id
+
+    def update_weight(
+        self,
+        doc_id: int,
+        signal: int,
+        tombstone: bool | None = None,
+    ) -> dict:
+        """Apply a feedback signal to a document's weight. Returns updated weight info."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            # Verify doc exists
+            row = self._conn.execute(
+                "SELECT doc_id, usage_score, tombstoned FROM doc_weights WHERE doc_id = ?",
+                (doc_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No weight entry for doc_id={doc_id}")
+
+            new_score = row[1] + signal
+
+            if tombstone is not None:
+                self._conn.execute(
+                    """UPDATE doc_weights
+                       SET usage_score = ?, last_accessed = datetime('now'),
+                           tombstoned = ?
+                       WHERE doc_id = ?""",
+                    (new_score, 1 if tombstone else 0, doc_id),
+                )
+            else:
+                self._conn.execute(
+                    """UPDATE doc_weights
+                       SET usage_score = ?, last_accessed = datetime('now')
+                       WHERE doc_id = ?""",
+                    (new_score, doc_id),
+                )
+
+            updated = self._conn.execute(
+                "SELECT usage_score, tombstoned, last_accessed FROM doc_weights WHERE doc_id = ?",
+                (doc_id,),
+            ).fetchone()
+
+            return {
+                "doc_id": doc_id,
+                "usage_score": updated[0],
+                "tombstoned": bool(updated[1]),
+                "last_accessed": updated[2],
+            }
 
     def retrieve_by_vector_similarity(
         self,
@@ -100,12 +181,11 @@ class StorageAdapter:
         plugins: list[str] | None = None,
         doctypes: list[str] | None = None,
     ) -> list[dict]:
-        """Retrieves documents by KNN similarity search with optional filters.
+        """Retrieves documents by KNN similarity with composite scoring.
 
-        Note: sqlite-vec performs KNN *before* filters are applied (post-filter).
-        When filters are provided, we over-fetch from the vector index and filter
-        in the SQL JOIN. The `limit` is a maximum, not a guarantee, when filters
-        are active.
+        Combines vector distance with usage-based weighting and time decay.
+        Tombstoned documents are always excluded. When no weights exist,
+        results are ranked by pure vector distance (equivalent to no weighting).
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -122,7 +202,7 @@ class StorageAdapter:
         vec_bytes = struct.pack(f"{len(target_vector)}f", *target_vector)
 
         # Build the query with optional filters
-        where_clauses = []
+        where_clauses = ["COALESCE(w.tombstoned, 0) = 0"]
         params: list = [vec_bytes, fetch_k]
 
         if plugins is not None:
@@ -135,17 +215,30 @@ class StorageAdapter:
             where_clauses.append(f"d.doctype IN ({placeholders})")
             params.extend(doctypes)
 
-        extra_where = ""
-        if where_clauses:
-            extra_where = "AND " + " AND ".join(where_clauses)
+        extra_where = "AND " + " AND ".join(where_clauses)
 
+        wi = self.WEIGHT_INFLUENCE
         query = f"""
-            SELECT d.id, d.uri, d.plugin, d.doctype, d.metadata, v.distance
+            SELECT d.id, d.uri, d.plugin, d.doctype, d.metadata, v.distance,
+                   COALESCE(w.usage_score, 0.0) AS usage_score,
+                   COALESCE(w.decay_half_life_days, 0) AS decay_half_life,
+                   w.created_at,
+                   (v.distance - COALESCE(w.usage_score, 0.0) * {wi}
+                    * CASE
+                        WHEN w.decay_half_life_days IS NOT NULL
+                             AND w.decay_half_life_days > 0
+                        THEN POWER(0.5,
+                             (JULIANDAY('now') - JULIANDAY(COALESCE(w.created_at, datetime('now'))))
+                             / w.decay_half_life_days)
+                        ELSE 1.0
+                      END
+                   ) AS final_rank
             FROM vec_documents v
             JOIN documents d ON v.id = d.id
+            LEFT JOIN doc_weights w ON d.id = w.doc_id
             WHERE v.embedding MATCH ? AND k = ?
             {extra_where}
-            ORDER BY v.distance
+            ORDER BY final_rank ASC
             LIMIT ?
         """
         params.append(limit)
@@ -162,6 +255,8 @@ class StorageAdapter:
                     "doctype": row[3],
                     "metadata": json.loads(row[4]) if row[4] else {},
                     "score": row[5],
+                    "usage_score": row[6],
+                    "final_rank": row[9],
                 }
             )
         return results

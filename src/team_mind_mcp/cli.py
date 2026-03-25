@@ -10,6 +10,7 @@ from team_mind_mcp.markdown import MarkdownPlugin
 from team_mind_mcp.retrieval import DocumentRetrievalPlugin
 from team_mind_mcp.ingestion_plugin import IngestionPlugin
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
+from team_mind_mcp.feedback import FeedbackPlugin
 
 
 def get_default_db_path() -> Path:
@@ -41,11 +42,13 @@ async def run_server(db_path: Path) -> int:
     ingestion_plugin = IngestionPlugin(gateway.registry)
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
+    feedback_plugin = FeedbackPlugin(storage)
 
     gateway.registry.register(markdown_plugin)
     gateway.registry.register(retrieval_plugin)
     gateway.registry.register(ingestion_plugin)
     gateway.registry.register(discovery_plugin)
+    gateway.registry.register(feedback_plugin)
 
     # Import the stdio server here to prevent overhead on simple CLI commands
     from mcp.server.stdio import stdio_server
