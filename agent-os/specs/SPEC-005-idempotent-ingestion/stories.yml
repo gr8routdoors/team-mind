@@ -1,0 +1,69 @@
+# Stories for SPEC-005
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Content Hash & Plugin Version Columns
+    description: >
+      Add content_hash (TEXT, nullable) and plugin_version (TEXT, default '0.0.0')
+      columns to the documents table. Update save_payload to accept and store both.
+      Add lookup_existing_docs method to query existing rows by URI+plugin+doctype.
+      Handle migration for existing databases.
+    status: pending
+    verified_by: null
+
+  STORY-002:
+    name: Plugin Version Property
+    description: >
+      Add optional version property to IngestProcessor ABC, defaulting to '0.0.0'.
+      Update MarkdownPlugin to declare a version. Version is stored with each
+      document on ingestion.
+    status: pending
+    verified_by: null
+
+  STORY-003:
+    name: IngestionContext Data Model
+    description: >
+      Define IngestionContext dataclass with is_update, content_changed,
+      plugin_version_changed, previous_doc_ids, previous_content_hash, and
+      previous_plugin_version. Build context generation logic that performs
+      URI lookup and hash comparison.
+    status: pending
+    verified_by: null
+
+  STORY-004:
+    name: Two-Phase Pipeline Provides Context
+    description: >
+      Update IngestionPipeline to build IngestionContext per URI before Phase 1.
+      Attach contexts to the IngestionBundle so processors can access them.
+      Context generation happens between URI resolution and processor broadcast.
+    status: pending
+    verified_by: null
+
+  STORY-005:
+    name: MarkdownPlugin Idempotent Optimization
+    description: >
+      Update MarkdownPlugin to check IngestionContext for each URI. Skip
+      processing when content_hash is unchanged and plugin version matches.
+      Use delete_by_uri + re-insert when content has changed. Pass content_hash
+      and plugin version on save_payload.
+    status: pending
+    verified_by: null
+
+  STORY-006:
+    name: Update Documentation
+    description: >
+      Update plugin developer guide with IngestionContext, decision matrix,
+      version property, and content hash. Update ADR-002 if needed.
+    status: pending
+    verified_by: null
+
+verification:
+  criteria:
+    - All pytest BDD tests pass for every story.
+    - Existing SPEC-001 through SPEC-004 tests pass (no regressions).
+    - MarkdownPlugin skips re-ingestion of unchanged content.
+    - Re-ingestion of changed content replaces old chunks.
+    - Plugin version change triggers re-processing even if content unchanged.
+  completed: false
+  completed_date: null
