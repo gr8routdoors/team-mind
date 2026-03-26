@@ -13,7 +13,8 @@
 - **Information Decay:** Plugin-declared decay half-life on doctypes, computed at query time. *(SPEC-004 — COMPLETE)*
 - **Document Lifecycle:** In-place updates (`update_payload`) and wipe-and-replace (`delete_by_uri`). *(SPEC-004 — COMPLETE)*
 - **Tombstoning:** Flag bad documents out of results without deletion, reversible. *(SPEC-004 — COMPLETE)*
-- **Idempotent Ingestion:** Content hashing, plugin versioning, and IngestionContext for smart re-ingestion decisions. *(SPEC-005 — IN DESIGN)*
+- **Idempotent Ingestion:** Content hashing, plugin versioning, and IngestionContext for smart re-ingestion decisions. *(SPEC-005 — COMPLETE)*
+- **Plugin Lifecycle Management:** Dynamic registration/unregistration at runtime, filtered event subscriptions (topic-based + fire hose), persistent plugin state. *(SPEC-006 — IN DESIGN)*
 
 ## Phase 3: Scale & Enterprise
 - **Database Migration:** Move from SQLite to self-hosted MongoDB (or similar) for robust vector and document storage at scale.
