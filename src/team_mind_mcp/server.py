@@ -54,6 +54,11 @@ class IngestProcessor(ABC):
         pass
 
     @property
+    def version(self) -> str:
+        """Plugin version. Override to declare. Used for version-aware re-ingestion."""
+        return "0.0.0"
+
+    @property
     def doctypes(self) -> List[DoctypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
         return []

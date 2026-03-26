@@ -16,6 +16,11 @@ def _mock_embed(text: str) -> list[float]:
     return vector
 
 
+def _content_hash(text: str) -> str:
+    """SHA-256 hash of content for idempotent ingestion."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 class MarkdownPlugin(ToolProvider, IngestProcessor):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
 
@@ -25,6 +30,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
     @property
     def name(self) -> str:
         return "markdown_plugin"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
 
     @property
     def doctypes(self) -> list[DoctypeSpec]:
@@ -110,10 +119,28 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     req = urllib.request.urlopen(uri)
                     content = req.read().decode("utf-8")
                 else:
-                    # In a real system, we'd use ResourceResolver for http/https etc
                     continue
             except Exception:
                 continue
+
+            # Check ingestion context for idempotent processing
+            ctx = bundle.contexts.get(uri)
+            if ctx and ctx.is_update:
+                current_hash = _content_hash(content)
+
+                # Content unchanged and same plugin version → skip
+                if (
+                    ctx.previous_content_hash == current_hash
+                    and not ctx.plugin_version_changed
+                ):
+                    continue
+
+                # Content changed or version changed → wipe old chunks and re-ingest
+                self.storage.delete_by_uri(
+                    uri, plugin=self.name, doctype="markdown_chunk"
+                )
+            else:
+                current_hash = _content_hash(content)
 
             processed_uris.append(uri)
 
@@ -124,7 +151,13 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
                 doc_id = self.storage.save_payload(
-                    uri, metadata, vector, plugin=self.name, doctype="markdown_chunk"
+                    uri,
+                    metadata,
+                    vector,
+                    plugin=self.name,
+                    doctype="markdown_chunk",
+                    content_hash=current_hash,
+                    plugin_version=self.version,
                 )
                 doc_ids.append(doc_id)
 

@@ -353,6 +353,54 @@ doc_weights
 
 There is **one row per document**, not one row per feedback event. The running average is maintained via `signal_count` — no compaction or aggregation needed at scale.
 
+### Idempotent ingestion (content hashing & plugin versioning)
+
+When the pipeline broadcasts a bundle, it provides an `IngestionContext` for each URI in `bundle.contexts[uri]`. This tells your processor whether the URI has been ingested before, whether the content changed, and whether your plugin version has changed:
+
+```python
+async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
+    for uri in bundle.uris:
+        ctx = bundle.contexts.get(uri)
+
+        if ctx and ctx.is_update:
+            # We've seen this URI before
+            current_hash = hashlib.sha256(content.encode()).hexdigest()
+
+            if ctx.previous_content_hash == current_hash and not ctx.plugin_version_changed:
+                continue  # Nothing changed — skip
+
+            # Content or version changed — wipe and re-ingest
+            self.storage.delete_by_uri(uri, plugin=self.name, doctype="my_type")
+
+        # Process and save with hash + version
+        doc_id = self.storage.save_payload(
+            uri, metadata, vector,
+            plugin=self.name, doctype="my_type",
+            content_hash=current_hash, plugin_version=self.version,
+        )
+```
+
+**Plugin decision matrix:**
+
+| is_update | content_changed | version_changed | Typical action |
+|-----------|----------------|-----------------|----------------|
+| false | N/A | N/A | Fresh insert |
+| true | false | false | Skip (nothing changed) |
+| true | true | false | Wipe and replace |
+| true | false | true | Re-process (plugin logic changed) |
+| true | true | true | Wipe and replace |
+
+**Declaring your plugin version:**
+
+```python
+class MyPlugin(IngestProcessor):
+    @property
+    def version(self) -> str:
+        return "1.0.0"  # Bump when your processing logic changes
+```
+
+Default is `"0.0.0"`. The platform stores this with every document so future versions of your plugin can detect docs processed by older logic.
+
 ### Updating and replacing documents
 
 The platform provides two methods for keeping data current:
@@ -455,4 +503,6 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |
 | [ADR-003: Relevance Weighting](ADRs/ADR-003-relevance-weighting.md) | Scoring model, decay policy, tombstoning, signal design |
 | [SPEC-004: Relevance Weighting](../../specs/SPEC-004-relevance-weighting/design.md) | doc_weights table, feedback tool, composite scoring, spike results |
+| [ADR-004: Idempotent Ingestion](ADRs/ADR-004-idempotent-ingestion.md) | Content hashing, plugin versioning, IngestionContext, decision matrix |
+| [SPEC-005: Idempotent Ingestion](../../specs/SPEC-005-idempotent-ingestion/design.md) | Schema changes, pipeline integration, MarkdownPlugin optimization |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |
