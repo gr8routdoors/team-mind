@@ -1,7 +1,7 @@
 import asyncio
 import pathlib
 from dataclasses import dataclass, field
-from typing import List, Any
+from typing import List, Any, Dict
 from urllib.parse import urlparse
 
 
@@ -16,9 +16,27 @@ class IngestionEvent:
 
 
 @dataclass
+class IngestionContext:
+    """Per-URI context provided to processors during ingestion.
+
+    The platform builds this by looking up existing documents for each URI.
+    Processors use it to decide: skip, re-process, or wipe-and-replace.
+    """
+
+    uri: str
+    is_update: bool = False
+    content_changed: bool | None = None
+    plugin_version_changed: bool = False
+    previous_doc_ids: list[int] = field(default_factory=list)
+    previous_content_hash: str | None = None
+    previous_plugin_version: str | None = None
+
+
+@dataclass
 class IngestionBundle:
     uris: List[str]
     events: List[IngestionEvent] = field(default_factory=list)
+    contexts: Dict[str, IngestionContext] = field(default_factory=dict)
 
 
 class ResourceResolver:
@@ -50,10 +68,59 @@ class ResourceResolver:
 
 
 class IngestionPipeline:
-    """Two-phase ingestion pipeline: process then observe."""
+    """Two-phase ingestion pipeline with context-aware processing."""
 
-    def __init__(self, registry: Any):
+    def __init__(self, registry: Any, storage: Any = None):
         self.registry = registry
+        self.storage = storage
+
+    def _build_contexts(
+        self,
+        uris: List[str],
+        processor_name: str,
+        processor_version: str,
+        processor_doctypes: list[str],
+    ) -> Dict[str, IngestionContext]:
+        """Build IngestionContext per URI by looking up existing docs."""
+        contexts: Dict[str, IngestionContext] = {}
+
+        if self.storage is None:
+            # No storage = no context (all fresh)
+            for uri in uris:
+                contexts[uri] = IngestionContext(uri=uri)
+            return contexts
+
+        for uri in uris:
+            # Check each doctype the processor declares
+            all_previous_ids = []
+            prev_hash = None
+            prev_version = None
+            is_update = False
+
+            for dt in processor_doctypes:
+                existing = self.storage.lookup_existing_docs(uri, processor_name, dt)
+                if existing:
+                    is_update = True
+                    all_previous_ids.extend(doc["id"] for doc in existing)
+                    # Use the most recent hash/version (last in list)
+                    prev_hash = existing[-1].get("content_hash")
+                    prev_version = existing[-1].get("plugin_version")
+
+            version_changed = (
+                prev_version is not None and prev_version != processor_version
+            )
+
+            contexts[uri] = IngestionContext(
+                uri=uri,
+                is_update=is_update,
+                content_changed=None,  # Set by processor after hashing content
+                plugin_version_changed=version_changed,
+                previous_doc_ids=all_previous_ids,
+                previous_content_hash=prev_hash,
+                previous_plugin_version=prev_version,
+            )
+
+        return contexts
 
     async def ingest(self, uris: List[str]) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
@@ -65,9 +132,20 @@ class IngestionPipeline:
 
         bundle = IngestionBundle(uris=resolved_uris)
 
-        # Phase 1: Broadcast to all processors, collect events
+        # Phase 1: Build contexts and broadcast to all processors
+        processors = self.registry.get_ingest_processors()
         processor_tasks = []
-        for processor in self.registry.get_ingest_processors():
+
+        for processor in processors:
+            doctype_names = [dt.name for dt in processor.doctypes]
+            contexts = self._build_contexts(
+                resolved_uris,
+                processor.name,
+                processor.version,
+                doctype_names,
+            )
+            # Attach contexts to bundle for this processor
+            bundle.contexts = contexts
             processor_tasks.append(processor.process_bundle(bundle))
 
         all_events: List[IngestionEvent] = []

@@ -40,7 +40,9 @@ class StorageAdapter:
                     uri TEXT NOT NULL,
                     plugin TEXT NOT NULL DEFAULT '',
                     doctype TEXT NOT NULL DEFAULT '',
-                    metadata JSON
+                    metadata JSON,
+                    content_hash TEXT,
+                    plugin_version TEXT DEFAULT '0.0.0'
                 )
             """)
 
@@ -55,6 +57,12 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN doctype TEXT NOT NULL DEFAULT ''"
                 )
+            if "content_hash" not in existing_columns:
+                self._conn.execute("ALTER TABLE documents ADD COLUMN content_hash TEXT")
+            if "plugin_version" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN plugin_version TEXT DEFAULT '0.0.0'"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -67,6 +75,10 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin_doctype
                 ON documents(plugin, doctype)
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_uri_plugin_doctype
+                ON documents(uri, plugin, doctype)
             """)
             self._conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
@@ -108,6 +120,8 @@ class StorageAdapter:
         plugin: str,
         doctype: str,
         decay_half_life_days: float | None = None,
+        content_hash: str | None = None,
+        plugin_version: str = "0.0.0",
     ) -> int:
         """Saves a document, its embedding vector, and initializes its weight row."""
         if self._conn is None:
@@ -115,8 +129,16 @@ class StorageAdapter:
 
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, doctype, metadata) VALUES (?, ?, ?, ?) RETURNING id",
-                (uri, plugin, doctype, json.dumps(metadata)),
+                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version) "
+                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                (
+                    uri,
+                    plugin,
+                    doctype,
+                    json.dumps(metadata),
+                    content_hash,
+                    plugin_version,
+                ),
             )
             doc_id = cursor.fetchone()[0]
 
@@ -208,6 +230,34 @@ class StorageAdapter:
             )
 
             return len(doc_ids)
+
+    def lookup_existing_docs(
+        self,
+        uri: str,
+        plugin: str,
+        doctype: str,
+    ) -> list[dict]:
+        """Look up existing documents for a URI+plugin+doctype combo.
+
+        Returns a list of dicts with id, content_hash, and plugin_version
+        for each matching row. Used by the pipeline to build IngestionContext.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        cursor = self._conn.execute(
+            "SELECT id, content_hash, plugin_version FROM documents "
+            "WHERE uri = ? AND plugin = ? AND doctype = ?",
+            (uri, plugin, doctype),
+        )
+        return [
+            {
+                "id": row[0],
+                "content_hash": row[1],
+                "plugin_version": row[2],
+            }
+            for row in cursor.fetchall()
+        ]
 
     def update_weight(
         self,

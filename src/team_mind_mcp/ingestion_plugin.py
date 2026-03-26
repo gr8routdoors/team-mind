@@ -6,9 +6,9 @@ from team_mind_mcp.ingestion import IngestionPipeline
 class IngestionPlugin(ToolProvider):
     """Exposes the internal ingestion loop to external MCP Clients."""
 
-    def __init__(self, registry: PluginRegistry):
+    def __init__(self, registry: PluginRegistry, storage=None):
         self.registry = registry
-        self.pipeline = IngestionPipeline(self.registry)
+        self.pipeline = IngestionPipeline(self.registry, storage=storage)
 
     @property
     def name(self) -> str:

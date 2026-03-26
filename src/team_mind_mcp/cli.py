@@ -39,7 +39,7 @@ async def run_server(db_path: Path) -> int:
     # Register core plugins
     markdown_plugin = MarkdownPlugin(storage)
     retrieval_plugin = DocumentRetrievalPlugin(storage)
-    ingestion_plugin = IngestionPlugin(gateway.registry)
+    ingestion_plugin = IngestionPlugin(gateway.registry, storage=storage)
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
     feedback_plugin = FeedbackPlugin(storage)
@@ -75,7 +75,7 @@ async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
 
     from team_mind_mcp.ingestion import IngestionPipeline
 
-    pipeline = IngestionPipeline(gateway.registry)
+    pipeline = IngestionPipeline(gateway.registry, storage=storage)
 
     # Flatten targets if recursive
     final_uris = []
