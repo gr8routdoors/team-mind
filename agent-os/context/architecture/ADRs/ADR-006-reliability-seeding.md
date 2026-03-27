@@ -38,7 +38,7 @@ await pipeline.ingest(uris, reliability_hint=0.8)
 ```
 
 **Layer 2: Plugin default (declared on DoctypeSpec)**
-Plugins declare a default reliability for their doctypes:
+Plugins declare a default reliability for their doctypes. This is the fallback when no ingest hint is provided:
 
 ```python
 DoctypeSpec(
@@ -51,21 +51,26 @@ DoctypeSpec(
 )
 ```
 
-**Layer 3: Plugin override (at process time)**
-The plugin sees both the ingest hint and its own default, then decides the final seed value. The plugin always has the last word.
+**Layer 3: Plugin resolution (at process time)**
+The plugin sees both the ingest hint and its own default, then resolves the final seed value. The **ingest hint takes priority** when provided — the caller knows the source context (e.g., "this is from the architecture repo") which the plugin cannot determine on its own. The plugin default is used only when no hint is provided.
 
 ```python
 async def process_bundle(self, bundle):
-    hint = bundle.reliability_hint  # From caller
-    default = self.doctypes[0].default_reliability  # From doctype
+    hint = bundle.reliability_hint  # From caller (authority when present)
+    default = self.doctypes[0].default_reliability  # From doctype (fallback)
 
-    # Plugin decides: use hint, use default, or compute its own
-    final_reliability = hint if hint is not None else default
+    # Standard resolution: hint wins, then default, then zero
+    final_reliability = hint if hint is not None else (default or 0.0)
+
+    # Plugin CAN override in exceptional cases (e.g., detected malformed content)
+    # but should respect the hint as the primary authority
 
     storage.save_payload(..., initial_score=final_reliability)
 ```
 
-The `initial_score` seeds the `usage_score` in `doc_weights` at ingestion time. Documents with higher initial reliability rank higher in search results from the start, before any feedback signals arrive.
+**Priority chain:** Ingest hint (caller authority) > Plugin default (domain fallback) > Zero (baseline)
+
+The plugin mechanically makes the final `save_payload` call, but the convention is clear: respect the hint when provided. Override only in exceptional cases (e.g., content validation failure).
 
 ### 2. Background Conflict Detection (external, not inline)
 
