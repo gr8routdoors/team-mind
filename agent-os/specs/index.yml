@@ -65,4 +65,12 @@ specs:
     stories: 6
     stories_complete: 0
 
-# Next spec number: 008
+  SPEC-008:
+    name: Semantic Type Routing (Phase A)
+    slug: semantic-type-routing
+    status: in_design
+    created: 2026-03-27
+    stories: 9
+    stories_complete: 0
+
+# Next spec number: 009

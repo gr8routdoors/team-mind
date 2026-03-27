@@ -1,0 +1,94 @@
+# Stories for SPEC-008
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Semantic Type and Media Type Schema
+    description: >
+      Add semantic_type and media_type columns to documents table. Add index
+      on semantic_type. Handle migration for existing databases.
+    status: pending
+    verified_by: null
+
+  STORY-002:
+    name: Supported Media Types on IngestProcessor
+    description: >
+      Add optional supported_media_types property to IngestProcessor ABC.
+      Default None = accept all URIs (backward compatible). When set, only
+      URIs matching the declared media types are passed to the processor.
+    status: pending
+    verified_by: null
+
+  STORY-003:
+    name: Semantic Types on Plugin Registration
+    description: >
+      Add semantic_types and supported_media_types columns to registered_plugins
+      table. LifecyclePlugin accepts these on register_plugin. Semantic types
+      can be updated without reinstalling the plugin.
+    status: pending
+    verified_by: null
+
+  STORY-004:
+    name: Semantic Type on IngestionBundle and IngestionEvent
+    description: >
+      Add semantic_type field to IngestionBundle (from caller) and IngestionEvent
+      (from processor). Events carry the semantic type so observers can filter on it.
+    status: pending
+    verified_by: null
+
+  STORY-005:
+    name: Pipeline Semantic Type Routing
+    description: >
+      When semantic_type is specified on ingest, route only to processors
+      registered for that semantic type. Filter URIs within the bundle by
+      each processor's supported_media_types. When no semantic_type, fall
+      back to broadcast-to-all (backward compatible).
+    status: pending
+    verified_by: null
+
+  STORY-006:
+    name: EventFilter Semantic Type Support
+    description: >
+      Add semantic_types field to EventFilter. Observers can filter by
+      semantic type alongside plugins and doctypes. Pipeline Phase 2
+      applies semantic type filtering.
+    status: pending
+    verified_by: null
+
+  STORY-007:
+    name: MCP Tool and CLI Semantic Type Parameter
+    description: >
+      Update ingest_documents MCP tool to accept optional semantic_type
+      parameter. Update CLI ingest subcommand to accept --semantic-type flag.
+    status: pending
+    verified_by: null
+
+  STORY-008:
+    name: MarkdownPlugin Media Type and Semantic Type Awareness
+    description: >
+      Update MarkdownPlugin to declare supported_media_types=["text/markdown",
+      "text/plain"]. Store semantic_type and media_type on save_payload.
+      Remove hardcoded .md extension check in favor of media type filtering.
+    status: pending
+    verified_by: null
+
+  STORY-009:
+    name: Update Documentation
+    description: >
+      Update plugin developer guide with semantic type, media type, and
+      routing concepts. Update system overview and ADR-002. Document the
+      three-type model and registration-time semantic type configuration.
+    status: pending
+    verified_by: null
+
+verification:
+  criteria:
+    - All pytest BDD tests pass for every story.
+    - Existing tests pass (no regressions).
+    - Semantic type routing correctly directs bundles to registered processors.
+    - Media type filtering correctly scopes URIs within a bundle.
+    - No semantic type = broadcast to all (backward compatible).
+    - Observers can filter by semantic_type.
+    - save_payload stores semantic_type and media_type on documents.
+  completed: false
+  completed_date: null
