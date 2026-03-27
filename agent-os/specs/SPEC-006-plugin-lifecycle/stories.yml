@@ -1,0 +1,68 @@
+# Stories for SPEC-006
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: EventFilter Data Model
+    description: >
+      Define EventFilter dataclass with optional plugins and doctypes lists.
+      Add event_filter property to IngestObserver (default None = fire hose).
+    status: pending
+    verified_by: null
+
+  STORY-002:
+    name: Filtered Observer Broadcast
+    description: >
+      Update IngestionPipeline Phase 2 to apply EventFilter before broadcasting
+      to each observer. Observers with no filter get all events. Observers with
+      a filter get only matching events. Empty match list means observer is skipped.
+    status: pending
+    verified_by: null
+
+  STORY-003:
+    name: Plugin State Persistence Table
+    description: >
+      Create registered_plugins table with plugin_name, plugin_type, module_path,
+      config, event_filter, enabled flag, and registered_at. Persists dynamically
+      registered plugins across restarts.
+    status: pending
+    verified_by: null
+
+  STORY-004:
+    name: Dynamic Registration MCP Tools
+    description: >
+      Build a LifecyclePlugin (ToolProvider) that exposes register_plugin,
+      unregister_plugin, and list_plugins MCP tools. Registration validates
+      the module path, instantiates the plugin, and persists to the table.
+      Unregistration removes from registry and marks as disabled.
+    status: pending
+    verified_by: null
+
+  STORY-005:
+    name: Plugin Loader & Startup Recovery
+    description: >
+      On server startup, load enabled plugins from registered_plugins table.
+      Import by module_path, instantiate with stored config, apply event_filter,
+      and register with PluginRegistry. Failed loads are logged but don't block startup.
+    status: pending
+    verified_by: null
+
+  STORY-006:
+    name: Update Documentation
+    description: >
+      Update plugin developer guide with EventFilter, dynamic registration,
+      persistence. Update ADR-002 and system overview as needed.
+    status: pending
+    verified_by: null
+
+verification:
+  criteria:
+    - All pytest BDD tests pass for every story.
+    - Existing tests pass (no regressions).
+    - Observers with EventFilter only receive matching events.
+    - Observers without EventFilter receive all events (fire hose).
+    - Dynamically registered plugins survive server restart.
+    - Unregistered plugins' tools are removed from MCP catalog.
+    - Failed plugin loads on startup are logged, not fatal.
+  completed: false
+  completed_date: null

@@ -90,7 +90,8 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
   - SPEC-003: IngestProcessor/IngestObserver split, two-phase pipeline, IngestionEvent
 - **Phase 2: Intelligence & Weighting** - **IN PROGRESS**
   - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
-  - SPEC-005: Semantic deduplication — *Not started*
+  - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext) — **COMPLETE**
+  - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence) — *In design*
 
 ---
 
