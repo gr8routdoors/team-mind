@@ -17,8 +17,9 @@
 - **Plugin Lifecycle Management:** Dynamic registration/unregistration at runtime, filtered event subscriptions (topic-based + fire hose), persistent plugin state. *(SPEC-006 — IN DESIGN)*
 
 ## Phase 3: Scale & Enterprise
+- **Reliability Seeding:** Three-layer initial quality scoring (ingest hint, plugin default, plugin override). *(SPEC-007 — IN DESIGN)*
 - **Database Migration:** Move from SQLite to self-hosted MongoDB (or similar) for robust vector and document storage at scale.
-- **Validation Pipeline (Librarian):** Implement LLM-as-a-judge to detect conflicts and verify facts during transcript/meeting ingestion.
+- **Background Conflict Detection:** External reaper process using LLM inference to detect contradictions across documents. *(Replaces original inline Librarian concept — see ADR-006)*
 - **Access Control & RBAC:** Add security layers for different project access levels.
 - **Team Integrations:** MS Teams bot for querying and contributing knowledge directly from chat.
 - **Frontend UI:** Lightweight JavaScript UI for human browsing and management of the knowledge graph.
