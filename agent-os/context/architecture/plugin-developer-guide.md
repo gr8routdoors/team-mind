@@ -279,18 +279,79 @@ All filter parameters accept **lists**, so you can query multiple plugins and do
 
 ## Registering Your Plugin
 
-In `cli.py` (or wherever the server is wired up):
+There are two ways to register plugins:
+
+### Compile-time registration (core plugins)
+
+Core plugins are registered in `cli.py` at server startup:
 
 ```python
 my_plugin = MyPlugin(storage)
 gateway.registry.register(my_plugin)
 ```
 
-On registration:
+### Runtime registration (dynamic plugins)
+
+Plugins can be registered at runtime via the `register_plugin` MCP tool — no server restart needed:
+
+```json
+// AI agent or admin calls:
+register_plugin(module_path="my_plugins.travel.TravelPlugin", config={...})
+```
+
+Dynamically registered plugins:
+- Are persisted to the `registered_plugins` table — they survive restarts
+- Can be unregistered via `unregister_plugin(plugin_name)`
+- Can be listed via `list_plugins()`
+
+### What happens on registration:
 - Your tools are added to the MCP tool catalog (visible to AI clients).
 - Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
 - If you implement `IngestProcessor`, you start receiving bundles during ingestion.
 - If you implement `IngestObserver`, you start receiving events after ingestion completes.
+
+### Event subscriptions for observers
+
+By default, observers receive **all** ingestion events (fire hose). To subscribe to specific events only, override the `event_filter` property:
+
+```python
+from team_mind_mcp.server import IngestObserver, EventFilter
+
+class AuditPlugin(IngestObserver):
+    @property
+    def event_filter(self) -> EventFilter | None:
+        # Only care about Java code changes
+        return EventFilter(
+            plugins=["java_plugin"],
+            doctypes=["code_signature"]
+        )
+
+    async def on_ingest_complete(self, events):
+        # Only receives java_plugin:code_signature events
+        for event in events:
+            await self._run_audit(event.uris)
+```
+
+| Pattern | event_filter returns | What the observer receives |
+|---------|---------------------|--------------------------|
+| Fire hose | `None` (default) | Every event from every processor |
+| Plugin filter | `EventFilter(plugins=["java_plugin"])` | Only events from that plugin |
+| Doctype filter | `EventFilter(doctypes=["code_signature"])` | Only events with that doctype |
+| Combined | `EventFilter(plugins=[...], doctypes=[...])` | Events matching both |
+
+## Integration Options Summary
+
+Team Mind plugins support a wide array of integration patterns:
+
+| Capability | Options |
+|-----------|---------|
+| **Interfaces** | `ToolProvider`, `IngestProcessor`, `IngestObserver` — any combination |
+| **Registration** | Compile-time (hardcoded in cli.py) or runtime (via `register_plugin` MCP tool) |
+| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype) |
+| **Storage mode** | Pointer (URI reference) or embedded (`local_payload` in metadata) |
+| **Idempotent ingestion** | Content hashing, plugin versioning, `IngestionContext` per URI |
+| **Relevance weighting** | Decay policy per doctype, feedback signals, tombstoning |
+| **Document updates** | In-place (`update_payload`) or wipe-and-replace (`delete_by_uri`) |
 
 ## Relevance Weighting (Platform-Managed)
 
@@ -505,4 +566,6 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [SPEC-004: Relevance Weighting](../../specs/SPEC-004-relevance-weighting/design.md) | doc_weights table, feedback tool, composite scoring, spike results |
 | [ADR-004: Idempotent Ingestion](ADRs/ADR-004-idempotent-ingestion.md) | Content hashing, plugin versioning, IngestionContext, decision matrix |
 | [SPEC-005: Idempotent Ingestion](../../specs/SPEC-005-idempotent-ingestion/design.md) | Schema changes, pipeline integration, MarkdownPlugin optimization |
+| [ADR-005: Plugin Lifecycle](ADRs/ADR-005-plugin-lifecycle.md) | Dynamic registration, event subscriptions, persistent state |
+| [SPEC-006: Plugin Lifecycle](../../specs/SPEC-006-plugin-lifecycle/design.md) | EventFilter, persistence table, MCP tools, startup recovery |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |

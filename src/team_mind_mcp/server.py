@@ -68,6 +68,17 @@ class IngestProcessor(ABC):
         return []
 
 
+@dataclass
+class EventFilter:
+    """Optional filter for observer event subscriptions.
+
+    None fields mean "match all" (fire hose). Set fields restrict to listed values.
+    """
+
+    plugins: list[str] | None = None
+    doctypes: list[str] | None = None
+
+
 class IngestObserver(ABC):
     """Base interface for plugins that react to completed ingestion.
 
@@ -80,6 +91,11 @@ class IngestObserver(ABC):
     @abstractmethod
     def name(self) -> str:
         pass
+
+    @property
+    def event_filter(self) -> EventFilter | None:
+        """Override to subscribe to specific event types. None = all events (fire hose)."""
+        return None
 
     async def on_ingest_complete(self, events: list) -> None:
         """Called after all processors finish with the collected events."""
@@ -124,6 +140,29 @@ class PluginRegistry:
                     stamped.append(dt)
                 self._doctype_catalog.extend(stamped)
                 self._doctypes_by_plugin[plugin.name] = stamped
+
+    def unregister(self, plugin_name: str) -> list[str]:
+        """Remove a plugin from all internal collections. Returns list of removed tool names."""
+        removed_tools = []
+
+        if plugin_name in self._tool_providers:
+            provider = self._tool_providers.pop(plugin_name)
+            for tool in provider.get_tools():
+                self._tool_routes.pop(tool.name, None)
+                removed_tools.append(tool.name)
+
+        self._ingest_processors = [
+            p for p in self._ingest_processors if p.name != plugin_name
+        ]
+        self._ingest_observers = [
+            o for o in self._ingest_observers if o.name != plugin_name
+        ]
+        self._doctype_catalog = [
+            dt for dt in self._doctype_catalog if dt.plugin != plugin_name
+        ]
+        self._doctypes_by_plugin.pop(plugin_name, None)
+
+        return removed_tools
 
     def get_all_tools(self) -> List[Tool]:
         """Aggregate all tools from all registered providers."""

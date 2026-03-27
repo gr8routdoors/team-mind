@@ -7,8 +7,8 @@ stories:
     description: >
       Define EventFilter dataclass with optional plugins and doctypes lists.
       Add event_filter property to IngestObserver (default None = fire hose).
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_event_filter.py
 
   STORY-002:
     name: Filtered Observer Broadcast
@@ -16,8 +16,8 @@ stories:
       Update IngestionPipeline Phase 2 to apply EventFilter before broadcasting
       to each observer. Observers with no filter get all events. Observers with
       a filter get only matching events. Empty match list means observer is skipped.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_event_filter.py
 
   STORY-003:
     name: Plugin State Persistence Table
@@ -25,8 +25,8 @@ stories:
       Create registered_plugins table with plugin_name, plugin_type, module_path,
       config, event_filter, enabled flag, and registered_at. Persists dynamically
       registered plugins across restarts.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_plugin_lifecycle.py
 
   STORY-004:
     name: Dynamic Registration MCP Tools
@@ -35,8 +35,8 @@ stories:
       unregister_plugin, and list_plugins MCP tools. Registration validates
       the module path, instantiates the plugin, and persists to the table.
       Unregistration removes from registry and marks as disabled.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_plugin_lifecycle.py
 
   STORY-005:
     name: Plugin Loader & Startup Recovery
@@ -44,15 +44,17 @@ stories:
       On server startup, load enabled plugins from registered_plugins table.
       Import by module_path, instantiate with stored config, apply event_filter,
       and register with PluginRegistry. Failed loads are logged but don't block startup.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: tests/core/test_plugin_lifecycle.py
 
   STORY-006:
     name: Update Documentation
     description: >
       Update plugin developer guide with EventFilter, dynamic registration,
-      persistence. Update ADR-002 and system overview as needed.
-    status: pending
+      integration options summary. Update ADR-002 (unregister, LifecyclePlugin,
+      key files), system overview (dynamic plugins), and SPEC-003 design
+      (event_filter on observer, filtered Phase 2).
+    status: passing
     verified_by: null
 
 verification:

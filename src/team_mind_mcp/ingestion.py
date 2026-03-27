@@ -157,10 +157,24 @@ class IngestionPipeline:
 
         bundle.events = all_events
 
-        # Phase 2: Broadcast collected events to all observers
+        # Phase 2: Broadcast collected events to observers (with filtering)
         observer_tasks = []
         for observer in self.registry.get_ingest_observers():
-            observer_tasks.append(observer.on_ingest_complete(all_events))
+            ef = observer.event_filter
+            if ef is None:
+                # Fire hose — send all events
+                filtered = all_events
+            else:
+                filtered = [
+                    e
+                    for e in all_events
+                    if (ef.plugins is None or e.plugin in ef.plugins)
+                    and (ef.doctypes is None or e.doctype in ef.doctypes)
+                ]
+                if not filtered:
+                    continue  # Skip observer entirely if nothing matches
+
+            observer_tasks.append(observer.on_ingest_complete(filtered))
 
         if observer_tasks:
             await asyncio.gather(*observer_tasks)
