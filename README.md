@@ -88,10 +88,10 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
   - SPEC-001: MCP Gateway, SQLite storage, ingestion pipeline, Markdown plugin, CLI
   - SPEC-002: Doctype system, plugin-scoped namespacing, scoped queries, discovery tool
   - SPEC-003: IngestProcessor/IngestObserver split, two-phase pipeline, IngestionEvent
-- **Phase 2: Intelligence & Weighting** - **IN PROGRESS**
-  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
-  - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext) — **COMPLETE**
-  - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence) — *In design*
+- **Phase 2: Intelligence & Weighting** - **COMPLETE**
+  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates
+  - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext)
+  - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence)
 
 ---
 
