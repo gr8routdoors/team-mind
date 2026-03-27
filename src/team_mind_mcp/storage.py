@@ -112,6 +112,87 @@ class StorageAdapter:
                 ON doc_weights(tombstoned)
             """)
 
+            # Plugin lifecycle persistence
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS registered_plugins (
+                    plugin_name TEXT PRIMARY KEY,
+                    plugin_type TEXT NOT NULL,
+                    module_path TEXT NOT NULL,
+                    config JSON,
+                    event_filter JSON,
+                    enabled INTEGER DEFAULT 1,
+                    registered_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+
+    # --- Plugin persistence CRUD ---
+
+    def save_plugin_record(
+        self,
+        plugin_name: str,
+        plugin_type: str,
+        module_path: str,
+        config: dict | None = None,
+        event_filter_json: dict | None = None,
+    ) -> None:
+        """Persist a dynamically registered plugin."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO registered_plugins "
+                "(plugin_name, plugin_type, module_path, config, event_filter) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    plugin_name,
+                    plugin_type,
+                    module_path,
+                    json.dumps(config) if config else None,
+                    json.dumps(event_filter_json) if event_filter_json else None,
+                ),
+            )
+
+    def get_enabled_plugin_records(self) -> list[dict]:
+        """Retrieve all enabled plugin records for startup recovery."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+        cursor = self._conn.execute(
+            "SELECT plugin_name, plugin_type, module_path, config, event_filter "
+            "FROM registered_plugins WHERE enabled = 1"
+        )
+        return [
+            {
+                "plugin_name": row[0],
+                "plugin_type": row[1],
+                "module_path": row[2],
+                "config": json.loads(row[3]) if row[3] else None,
+                "event_filter": json.loads(row[4]) if row[4] else None,
+            }
+            for row in cursor.fetchall()
+        ]
+
+    def disable_plugin_record(self, plugin_name: str) -> bool:
+        """Mark a plugin as disabled. Returns True if found."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+        with self._conn:
+            cursor = self._conn.execute(
+                "UPDATE registered_plugins SET enabled = 0 WHERE plugin_name = ?",
+                (plugin_name,),
+            )
+            return cursor.rowcount > 0
+
+    def delete_plugin_record(self, plugin_name: str) -> bool:
+        """Remove a plugin record entirely. Returns True if found."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+        with self._conn:
+            cursor = self._conn.execute(
+                "DELETE FROM registered_plugins WHERE plugin_name = ?",
+                (plugin_name,),
+            )
+            return cursor.rowcount > 0
+
     def save_payload(
         self,
         uri: str,

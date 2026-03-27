@@ -55,6 +55,12 @@ class IngestObserver(ABC):
     @abstractmethod
     def name(self) -> str: ...
 
+    @property
+    def event_filter(self) -> EventFilter | None:
+        """Optional: filter which events this observer receives. None = all events (fire hose).
+        See SPEC-006 for EventFilter details and filtered broadcast implementation."""
+        return None
+
     async def on_ingest_complete(self, events: list[IngestionEvent]) -> None:
         pass
 ```
@@ -67,8 +73,11 @@ Phase 1 — Processing:
   → each returns list[IngestionEvent]
   → pipeline flattens all events into one list
 
-Phase 2 — Observation (only if events were produced):
-  list[IngestionEvent] → broadcast to IngestObservers (asyncio.gather)
+Phase 2 — Observation (filtered, per observer):
+  for each IngestObserver:
+    if event_filter is None → all events broadcast (fire hose)
+    else → filter events by plugin/doctype, broadcast only matching
+  → filtered events broadcast via asyncio.gather
   → each observer reacts to events it cares about
 ```
 

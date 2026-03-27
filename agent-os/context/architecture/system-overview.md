@@ -16,9 +16,10 @@ It prioritizes:
 The system is decomposed into three primary layers:
 
 ### 1. The Gateway Layer (MCP Server)
-The universal entry point for the system is a **Model Context Protocol (MCP) Server**. 
+The universal entry point for the system is a **Model Context Protocol (MCP) Server**.
 - It acts as the Host/Router that registers tools exposed by the underlying plugins.
 - It normalizes the interface so that any MCP-compliant client (Claude, Cursor, custom agents) can seamlessly interact with the enterprise knowledge base.
+- **Dynamic plugin management:** Plugins can be registered and unregistered at runtime via `register_plugin` / `unregister_plugin` MCP tools, without restarting the server. Core plugins (Markdown, Retrieval, etc.) are bundled; additional plugins are loaded dynamically from Python module paths and persisted across restarts.
 - For non-MCP human interfaces (like MS Teams bots), a lightweight "Router API" (potentially backed by a fast LLM) will act as an intermediary client to query the MCP server on the human's behalf.
 
 ### 2. The Ingestion Pipeline (Bundle Broadcast & Validation)

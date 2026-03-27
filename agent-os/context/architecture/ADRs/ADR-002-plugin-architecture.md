@@ -83,6 +83,7 @@ The `PluginRegistry` manages all plugin lifecycle:
 
 - **Registration:** `register(plugin)` inspects the plugin via `isinstance` checks and routes it to the appropriate internal collections (`_tool_providers`, `_ingest_processors`, `_ingest_observers`). Multi-interface plugins are registered in all applicable collections.
 - **Tool routing:** Maps tool names to their owning provider. Enforces uniqueness — no two plugins can register the same tool name.
+- **Unregistration:** `unregister(plugin_name)` removes a plugin from all internal collections — tools, processors, observers, doctypes. Does not delete the plugin's data.
 - **Broadcast:** Exposes `get_ingest_processors()` and `get_ingest_observers()` for the ingestion pipeline.
 
 ### 5. Broadcast Ingestion (Fan-Out)
@@ -218,14 +219,17 @@ One `IngestListener` interface that receives bundles and is used for both active
 | `DocumentRetrievalPlugin` | ToolProvider | `get_full_document` | Fetches full document content from URI pointers |
 | `IngestionPlugin` | ToolProvider | `ingest_documents` | Exposes ingestion pipeline as an MCP tool for live use |
 | `DoctypeDiscoveryPlugin` | ToolProvider | `list_doctypes` | Exposes doctype catalog for AI client discovery |
+| `FeedbackPlugin` | ToolProvider | `provide_feedback` | Relevance feedback signals for weighting |
+| `LifecyclePlugin` | ToolProvider | `register_plugin`, `unregister_plugin`, `list_plugins` | Runtime plugin management |
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `src/team_mind_mcp/server.py` | `ToolProvider`, `IngestProcessor`, `IngestObserver` ABCs, `DoctypeSpec`, `PluginRegistry`, `MCPGateway` |
-| `src/team_mind_mcp/ingestion.py` | `IngestionPipeline`, `IngestionBundle`, `IngestionEvent`, `ResourceResolver` |
-| `src/team_mind_mcp/storage.py` | `StorageAdapter` (SQLite + sqlite-vec) |
+| `src/team_mind_mcp/server.py` | `ToolProvider`, `IngestProcessor`, `IngestObserver`, `EventFilter` ABCs, `DoctypeSpec`, `PluginRegistry`, `MCPGateway` |
+| `src/team_mind_mcp/ingestion.py` | `IngestionPipeline`, `IngestionBundle`, `IngestionEvent`, `IngestionContext`, `ResourceResolver` |
+| `src/team_mind_mcp/storage.py` | `StorageAdapter` (SQLite + sqlite-vec), `registered_plugins` table |
+| `src/team_mind_mcp/lifecycle.py` | `LifecyclePlugin`, `PluginLoader`, `load_persisted_plugins` |
 | `src/team_mind_mcp/markdown.py` | `MarkdownPlugin` (ToolProvider + IngestProcessor) |
 | `src/team_mind_mcp/retrieval.py` | `DocumentRetrievalPlugin` (ToolProvider only) |
 | `src/team_mind_mcp/ingestion_plugin.py` | `IngestionPlugin` (ToolProvider only) |

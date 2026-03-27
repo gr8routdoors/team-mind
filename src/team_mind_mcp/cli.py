@@ -11,6 +11,7 @@ from team_mind_mcp.retrieval import DocumentRetrievalPlugin
 from team_mind_mcp.ingestion_plugin import IngestionPlugin
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
 from team_mind_mcp.feedback import FeedbackPlugin
+from team_mind_mcp.lifecycle import LifecyclePlugin, load_persisted_plugins
 
 
 def get_default_db_path() -> Path:
@@ -43,12 +44,17 @@ async def run_server(db_path: Path) -> int:
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
     feedback_plugin = FeedbackPlugin(storage)
+    lifecycle_plugin = LifecyclePlugin(gateway.registry, storage)
 
     gateway.registry.register(markdown_plugin)
     gateway.registry.register(retrieval_plugin)
     gateway.registry.register(ingestion_plugin)
     gateway.registry.register(discovery_plugin)
     gateway.registry.register(feedback_plugin)
+    gateway.registry.register(lifecycle_plugin)
+
+    # Load dynamically registered plugins from persistence table
+    load_persisted_plugins(storage, gateway.registry)
 
     # Import the stdio server here to prevent overhead on simple CLI commands
     from mcp.server.stdio import stdio_server
