@@ -12,13 +12,11 @@
 | STORY-006 | AC-001, AC-002 | AC-004 | AC-003 | — | — | — |
 | STORY-007 | AC-001, AC-002 | — | — | — | AC-003 | — |
 | STORY-008 | AC-001, AC-002, AC-003 | — | — | — | — | AC-004 |
-| STORY-009 | AC-001, AC-002, AC-003 | — | — | — | — | — |
+| STORY-009 | AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007 | AC-008 | — | — | — | — |
 
 ## Summary
 
 - Total stories: 9
-- Total ACs: 34
+- Total ACs: 39
 - Coverage gaps: None
-- All stories have at least happy path coverage
-- Edge cases covered in STORY-001 (migration), STORY-002 (backward compat), STORY-004 (defaults), STORY-005 (broadcast fallback, no match), STORY-006 (None matches all)
-- Integration covered in STORY-004 (bundle-to-event propagation), STORY-007 (MCP/CLI to pipeline)
+- STORY-009 covers 5 documents: plugin developer guide (3 ACs), system overview, ADR-002, roadmap, README + stale reference check

@@ -75,9 +75,12 @@ stories:
   STORY-009:
     name: Update Documentation
     description: >
-      Update plugin developer guide with semantic type, media type, and
-      routing concepts. Update system overview and ADR-002. Document the
-      three-type model and registration-time semantic type configuration.
+      Update 5 documents: plugin developer guide (three-type model,
+      available-vs-enabled activation, registration with semantic types,
+      integration options summary), system overview (routing model,
+      activation model), ADR-002 (semantic type references, link to ADR-007),
+      roadmap (SPEC-008 status), README (development status). Ensure no
+      stale references to broadcast-and-self-filter as current behavior.
     status: pending
     verified_by: null
 
@@ -87,7 +90,8 @@ verification:
     - Existing tests pass (no regressions).
     - Semantic type routing correctly directs bundles to registered processors.
     - Media type filtering correctly scopes URIs within a bundle.
-    - No semantic type = broadcast to all (backward compatible).
+    - No semantic type and no wildcard = no processing (available but not enabled).
+    - Wildcard semantic_types=["*"] processes all content.
     - Observers can filter by semantic_type.
     - save_payload stores semantic_type and media_type on documents.
   completed: false

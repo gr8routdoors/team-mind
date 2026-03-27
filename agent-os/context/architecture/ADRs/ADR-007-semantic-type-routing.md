@@ -63,6 +63,33 @@ This means:
 - Semantic types can be added or removed without plugin changes or restarts
 - A plugin's media type capabilities are intrinsic; its semantic type assignments are configurable
 
+### Available vs Enabled: Plugin Activation Model
+
+A plugin exists in one of three states:
+
+| State | Code installed? | Registered? | Has semantic types? | Processes content? |
+|-------|----------------|------------|--------------------|--------------------|
+| **Unavailable** | No | No | — | No |
+| **Available** | Yes | Yes | No | No |
+| **Enabled** | Yes | Yes | Yes (specific types or `*`) | Yes, for matching types |
+
+**Key design: no semantic types = no processing.** A registered plugin with no semantic type associations is idle — available but not actively processing content. This is intentional:
+
+- **Compile-time plugins are available by default, not enabled by default.** Registering a plugin in `cli.py` makes it available, but it doesn't process ingestion until an admin associates semantic types with it.
+- **`*` is explicit opt-in for "process everything"** — not the default. A wildcard semantic type must be deliberately configured.
+- **Safety:** A newly installed plugin doesn't automatically process all historical data. The admin explicitly activates it for specific semantic types.
+
+The `register()` method on PluginRegistry accepts optional `semantic_types`:
+```python
+# Core plugins registered at startup — available but not routing until configured
+gateway.registry.register(markdown_plugin, semantic_types=["architecture_docs"])
+
+# Or available with no semantic types (idle until configured)
+gateway.registry.register(markdown_plugin)
+```
+
+**First-run experience:** A fresh install requires the admin to associate core plugins with semantic types. The CLI could offer a `--enable-defaults` flag or an interactive setup to streamline this.
+
 ### 3. Media Type as Plugin Capability
 
 Plugins declare what media types they can parse:
@@ -169,6 +196,15 @@ Don't rename to record_type.
 - "Record type" clearly communicates "what the plugin wrote to the database."
 - We also want to persist semantic_type and media_type, so the naming needs to be distinct.
 
+### 5. Auto-enable compile-time plugins with wildcard semantic type
+
+Compile-time plugins (registered in cli.py) automatically process all content by default (`semantic_types=["*"]`).
+
+**Rejected because:**
+- Processing everything is potentially prohibitive for performance at scale.
+- A newly added plugin shouldn't automatically process all existing and incoming content without explicit admin intent.
+- The available-vs-enabled model is safer: plugins are available by default, enabled when the admin associates semantic types.
+
 ## Consequences
 
 ### Positive
@@ -177,6 +213,7 @@ Don't rename to record_type.
 - **Clear type semantics.** Three distinct concepts, three distinct names, three distinct columns.
 - **Flexible configuration.** Semantic types are managed at registration time, not hardcoded.
 - **Observer precision.** EventFilter can match on semantic type, record type, or plugin independently.
+- **Safe activation.** Plugins don't process content until explicitly enabled with semantic types.
 - **Foundation for meta-plugins.** (Future) Observer-triggered secondary ingestion composes naturally with semantic type routing.
 
 ### Negative
@@ -184,6 +221,7 @@ Don't rename to record_type.
 - **Breaking rename.** `doctype` → `record_type` touches many files. Mitigated by the small codebase and comprehensive tests.
 - **Routing complexity.** The pipeline goes from "send to all" to "look up registrations, match media types, route." More logic, more tests needed.
 - **Caller must know semantic types.** The ingestion caller needs to specify what the data means. This is additional burden but also additional clarity.
+- **First-run friction.** Fresh install requires admin to associate plugins with semantic types before ingestion works. Mitigated by CLI setup tooling.
 
 ### Neutral
 
