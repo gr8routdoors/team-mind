@@ -42,11 +42,15 @@ def test_default_initial_score_is_zero(storage):
     """
     # Given
     # When
-    doc_id = storage.save_payload("uri://doc1", {}, BASE_VEC, plugin="p", record_type="t")
+    doc_id = storage.save_payload(
+        "uri://doc1", {}, BASE_VEC, plugin="p", record_type="t"
+    )
 
     # Then
     weights = _get_doc_weights(storage, doc_id)
-    assert weights["usage_score"] == 0.0, f"Expected usage_score=0.0, got {weights['usage_score']}"
+    assert weights["usage_score"] == 0.0, (
+        f"Expected usage_score=0.0, got {weights['usage_score']}"
+    )
 
 
 # AC-002: Custom Initial Score Seeds usage_score

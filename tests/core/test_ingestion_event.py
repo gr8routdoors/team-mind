@@ -32,7 +32,9 @@ def test_event_serializable():
     AC-002: Event Serializable
     """
     # Given an IngestionEvent with populated fields
-    event = IngestionEvent(plugin="p", record_type="d", uris=["file:///x.md"], doc_ids=[42])
+    event = IngestionEvent(
+        plugin="p", record_type="d", uris=["file:///x.md"], doc_ids=[42]
+    )
 
     # When it is converted to a dict
     d = asdict(event)

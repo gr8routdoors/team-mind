@@ -102,7 +102,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit, plugins=plugins_filter, record_types=record_types_filter
+            vector,
+            limit=limit,
+            plugins=plugins_filter,
+            record_types=record_types_filter,
         )
 
         # Format the SQLite results into an MCP TextContent response

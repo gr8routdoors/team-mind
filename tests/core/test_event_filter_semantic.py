@@ -250,7 +250,9 @@ def test_semantic_type_filter_any_match():
 
     # Event with one overlapping type → passes
     e1 = IngestionEvent(
-        plugin="p", record_type="d", semantic_types=["architecture_docs", "meeting_notes"]
+        plugin="p",
+        record_type="d",
+        semantic_types=["architecture_docs", "meeting_notes"],
     )
     assert ef.semantic_types is None or any(
         st in ef.semantic_types for st in e1.semantic_types

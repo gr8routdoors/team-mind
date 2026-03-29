@@ -18,7 +18,9 @@ def test_ac001_field_defaults_to_none():
 def test_ac002_plugin_declares_default():
     """AC-002: default_reliability stores the declared value."""
     # Given a RecordTypeSpec with default_reliability=0.9
-    spec = RecordTypeSpec(name="code_sig", description="Code signature", default_reliability=0.9)
+    spec = RecordTypeSpec(
+        name="code_sig", description="Code signature", default_reliability=0.9
+    )
 
     # When the field is accessed
     result = spec.default_reliability
@@ -34,7 +36,9 @@ def test_ac003_backward_compatible():
     try:
         spec = RecordTypeSpec(name="legacy_type", description="A legacy type")
     except TypeError as exc:
-        raise AssertionError(f"Unexpected error creating RecordTypeSpec without default_reliability: {exc}") from exc
+        raise AssertionError(
+            f"Unexpected error creating RecordTypeSpec without default_reliability: {exc}"
+        ) from exc
 
     # Then no error occurs and default_reliability is None
     assert spec.default_reliability is None

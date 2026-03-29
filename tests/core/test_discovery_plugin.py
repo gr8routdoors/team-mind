@@ -123,7 +123,9 @@ async def test_filter_by_multiple_plugins(registry_with_plugins):
 
     # Given plugins "alpha", "beta", and "gamma" are registered
     # When list_doctypes is called with plugins=["alpha", "gamma"]
-    response = await plugin.call_tool("list_record_types", {"plugins": ["alpha", "gamma"]})
+    response = await plugin.call_tool(
+        "list_record_types", {"plugins": ["alpha", "gamma"]}
+    )
     result = json.loads(response[0].text)
 
     # Then doctypes from both "alpha" and "gamma" are returned

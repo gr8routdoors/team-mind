@@ -254,7 +254,9 @@ def test_delete_by_uri_scoped_to_plugin_and_record_type(tmp_path):
         "file:///doc.md", {}, [0.2] * 768, plugin="plugin_b", record_type="type_y"
     )
 
-    count = adapter.delete_by_uri("file:///doc.md", plugin="plugin_a", record_type="type_x")
+    count = adapter.delete_by_uri(
+        "file:///doc.md", plugin="plugin_a", record_type="type_x"
+    )
 
     assert count == 1
     with adapter._conn:

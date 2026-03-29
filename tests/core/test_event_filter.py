@@ -128,13 +128,22 @@ def sample_events():
             plugin="java_plugin", record_type="test_case", uris=["u2"], doc_ids=[2]
         ),
         IngestionEvent(
-            plugin="markdown_plugin", record_type="markdown_chunk", uris=["u3"], doc_ids=[3]
+            plugin="markdown_plugin",
+            record_type="markdown_chunk",
+            uris=["u3"],
+            doc_ids=[3],
         ),
         IngestionEvent(
-            plugin="travel_plugin", record_type="user_interest", uris=["u4"], doc_ids=[4]
+            plugin="travel_plugin",
+            record_type="user_interest",
+            uris=["u4"],
+            doc_ids=[4],
         ),
         IngestionEvent(
-            plugin="python_plugin", record_type="code_signature", uris=["u5"], doc_ids=[5]
+            plugin="python_plugin",
+            record_type="code_signature",
+            uris=["u5"],
+            doc_ids=[5],
         ),
     ]
 
