@@ -1,7 +1,12 @@
 """Sample plugins for testing dynamic loading. Not part of production."""
 
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestObserver, IngestProcessor, EventFilter
+from team_mind_mcp.server import (
+    ToolProvider,
+    IngestObserver,
+    IngestProcessor,
+    EventFilter,
+)
 
 
 class SampleToolPlugin(ToolProvider):

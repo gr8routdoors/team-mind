@@ -3,7 +3,7 @@ SPEC-002 / STORY-001: Doctype Specification Model
 """
 
 import json
-from team_mind_mcp.server import DoctypeSpec, ToolProvider, IngestProcessor
+from team_mind_mcp.server import RecordTypeSpec, ToolProvider, IngestProcessor
 
 
 class _PluginWithDoctypes(ToolProvider):
@@ -12,9 +12,9 @@ class _PluginWithDoctypes(ToolProvider):
         return "test_plugin"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="note",
                 description="A short note.",
                 schema={"body": {"type": "string"}},
@@ -34,9 +34,9 @@ class _ProcessorWithDoctypes(IngestProcessor):
         return "listener_plugin"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="event",
                 description="An ingested event.",
                 schema={"timestamp": {"type": "string"}},
@@ -46,11 +46,11 @@ class _ProcessorWithDoctypes(IngestProcessor):
 
 def test_doctype_spec_fields():
     """
-    AC-001: DoctypeSpec Dataclass Fields
+    AC-001: RecordTypeSpec Dataclass Fields
     """
-    # Given the DoctypeSpec dataclass is defined
+    # Given the RecordTypeSpec dataclass is defined
     # When a new instance is created with name, description, and schema
-    spec = DoctypeSpec(
+    spec = RecordTypeSpec(
         name="user_interest",
         description="A user's stated interest",
         schema={"category": {"type": "string"}, "sentiment": {"type": "string"}},
@@ -71,11 +71,11 @@ def test_plugin_declares_doctypes():
     plugin = _PluginWithDoctypes()
 
     # When the plugin overrides the doctypes property
-    specs = plugin.doctypes
+    specs = plugin.record_types
 
-    # Then it returns a list of DoctypeSpec instances
+    # Then it returns a list of RecordTypeSpec instances
     assert len(specs) == 1
-    assert isinstance(specs[0], DoctypeSpec)
+    assert isinstance(specs[0], RecordTypeSpec)
 
     # And each spec has a non-empty name and description
     assert specs[0].name == "note"
@@ -90,7 +90,7 @@ def test_doctypes_property_defaults_empty():
     plugin = _PluginWithoutDoctypes()
 
     # When the doctypes property is accessed
-    specs = plugin.doctypes
+    specs = plugin.record_types
 
     # Then it returns an empty list
     assert specs == []
@@ -101,8 +101,8 @@ def test_schema_is_advisory_dict():
     """
     AC-004: Schema Is Advisory Dict
     """
-    # Given a DoctypeSpec with a schema containing JSON Schema-style field definitions
-    spec = DoctypeSpec(
+    # Given a RecordTypeSpec with a schema containing JSON Schema-style field definitions
+    spec = RecordTypeSpec(
         name="test",
         description="test",
         schema={"field_a": {"type": "string"}, "field_b": {"type": "integer"}},

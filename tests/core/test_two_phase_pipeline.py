@@ -16,10 +16,10 @@ class _ProcessorA(IngestProcessor):
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         return [
             IngestionEvent(
-                plugin=self.name, doctype="type_a", uris=bundle.uris[:1], doc_ids=[10]
+                plugin=self.name, record_type="type_a", uris=bundle.uris[:1], doc_ids=[10]
             ),
             IngestionEvent(
-                plugin=self.name, doctype="type_b", uris=bundle.uris[:1], doc_ids=[11]
+                plugin=self.name, record_type="type_b", uris=bundle.uris[:1], doc_ids=[11]
             ),
         ]
 
@@ -33,7 +33,7 @@ class _ProcessorB(IngestProcessor):
         return [
             IngestionEvent(
                 plugin=self.name,
-                doctype="type_c",
+                record_type="type_c",
                 uris=bundle.uris,
                 doc_ids=[20, 21, 22],
             )
@@ -64,7 +64,7 @@ class _SlowProcessor(IngestProcessor):
         self.completed = True
         return [
             IngestionEvent(
-                plugin=self.name, doctype="slow_type", uris=bundle.uris, doc_ids=[99]
+                plugin=self.name, record_type="slow_type", uris=bundle.uris, doc_ids=[99]
             )
         ]
 

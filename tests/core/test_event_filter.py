@@ -9,7 +9,7 @@ from team_mind_mcp.server import (
     IngestObserver,
     IngestProcessor,
     PluginRegistry,
-    DoctypeSpec,
+    RecordTypeSpec,
 )
 from team_mind_mcp.ingestion import IngestionEvent, IngestionPipeline, IngestionBundle
 
@@ -66,8 +66,8 @@ class _EventEmittingProcessor(IngestProcessor):
         return self._name
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
-        return [DoctypeSpec(name="test_type", description="test")]
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [RecordTypeSpec(name="test_type", description="test")]
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         return list(self._events)
@@ -78,9 +78,9 @@ class _EventEmittingProcessor(IngestProcessor):
 
 def test_event_filter_fields():
     """AC-001: EventFilter Fields"""
-    ef = EventFilter(plugins=["java_plugin"], doctypes=["code_signature"])
+    ef = EventFilter(plugins=["java_plugin"], record_types=["code_signature"])
     assert ef.plugins == ["java_plugin"]
-    assert ef.doctypes == ["code_signature"]
+    assert ef.record_types == ["code_signature"]
 
 
 def test_default_event_filter_is_none():
@@ -91,26 +91,26 @@ def test_default_event_filter_is_none():
 
 def test_observer_declares_filter():
     """AC-003: Observer Declares Filter"""
-    ef = EventFilter(plugins=["plugin_a"], doctypes=["type_x"])
+    ef = EventFilter(plugins=["plugin_a"], record_types=["type_x"])
     obs = _FilteredObserver("test", ef)
     assert obs.event_filter is not None
     assert obs.event_filter.plugins == ["plugin_a"]
-    assert obs.event_filter.doctypes == ["type_x"]
+    assert obs.event_filter.record_types == ["type_x"]
 
 
 def test_none_means_fire_hose():
     """AC-004: None Means Fire Hose (both fields None matches everything)"""
-    ef = EventFilter(plugins=None, doctypes=None)
+    ef = EventFilter(plugins=None, record_types=None)
     events = [
-        IngestionEvent(plugin="a", doctype="x"),
-        IngestionEvent(plugin="b", doctype="y"),
+        IngestionEvent(plugin="a", record_type="x"),
+        IngestionEvent(plugin="b", record_type="y"),
     ]
     # Filter with both None should match all
     filtered = [
         e
         for e in events
         if (ef.plugins is None or e.plugin in ef.plugins)
-        and (ef.doctypes is None or e.doctype in ef.doctypes)
+        and (ef.record_types is None or e.record_type in ef.record_types)
     ]
     assert len(filtered) == 2
 
@@ -122,19 +122,19 @@ def test_none_means_fire_hose():
 def sample_events():
     return [
         IngestionEvent(
-            plugin="java_plugin", doctype="code_signature", uris=["u1"], doc_ids=[1]
+            plugin="java_plugin", record_type="code_signature", uris=["u1"], doc_ids=[1]
         ),
         IngestionEvent(
-            plugin="java_plugin", doctype="test_case", uris=["u2"], doc_ids=[2]
+            plugin="java_plugin", record_type="test_case", uris=["u2"], doc_ids=[2]
         ),
         IngestionEvent(
-            plugin="markdown_plugin", doctype="markdown_chunk", uris=["u3"], doc_ids=[3]
+            plugin="markdown_plugin", record_type="markdown_chunk", uris=["u3"], doc_ids=[3]
         ),
         IngestionEvent(
-            plugin="travel_plugin", doctype="user_interest", uris=["u4"], doc_ids=[4]
+            plugin="travel_plugin", record_type="user_interest", uris=["u4"], doc_ids=[4]
         ),
         IngestionEvent(
-            plugin="python_plugin", doctype="code_signature", uris=["u5"], doc_ids=[5]
+            plugin="python_plugin", record_type="code_signature", uris=["u5"], doc_ids=[5]
         ),
     ]
 
@@ -197,7 +197,7 @@ async def test_filter_by_doctype_only(tmp_path, sample_events):
     """AC-004: Filter by Doctype Only"""
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
-    obs = _FilteredObserver("filtered", EventFilter(doctypes=["code_signature"]))
+    obs = _FilteredObserver("filtered", EventFilter(record_types=["code_signature"]))
     registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
@@ -206,7 +206,7 @@ async def test_filter_by_doctype_only(tmp_path, sample_events):
     f.write_text("x")
     await pipeline.ingest([f.as_uri()])
 
-    assert all(e.doctype == "code_signature" for e in obs.received_events)
+    assert all(e.record_type == "code_signature" for e in obs.received_events)
     assert len(obs.received_events) == 2  # java + python
 
 
@@ -217,7 +217,7 @@ async def test_combined_filter(tmp_path, sample_events):
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FilteredObserver(
         "filtered",
-        EventFilter(plugins=["java_plugin"], doctypes=["code_signature"]),
+        EventFilter(plugins=["java_plugin"], record_types=["code_signature"]),
     )
     registry.register(proc, semantic_types=["*"])
     registry.register(obs)
@@ -229,7 +229,7 @@ async def test_combined_filter(tmp_path, sample_events):
 
     assert len(obs.received_events) == 1
     assert obs.received_events[0].plugin == "java_plugin"
-    assert obs.received_events[0].doctype == "code_signature"
+    assert obs.received_events[0].record_type == "code_signature"
 
 
 @pytest.mark.asyncio

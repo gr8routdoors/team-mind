@@ -7,7 +7,7 @@ import hashlib
 import sqlite3
 import pytest
 from team_mind_mcp.storage import StorageAdapter
-from team_mind_mcp.server import IngestProcessor, PluginRegistry, DoctypeSpec
+from team_mind_mcp.server import IngestProcessor, PluginRegistry, RecordTypeSpec
 from team_mind_mcp.ingestion import (
     IngestionBundle,
     IngestionContext,
@@ -162,8 +162,8 @@ class _VersionedProcessor(IngestProcessor):
         return "2.1.0"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
-        return [DoctypeSpec(name="test_type", description="test")]
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [RecordTypeSpec(name="test_type", description="test")]
 
 
 class _UnversionedProcessor(IngestProcessor):
@@ -292,8 +292,8 @@ class _ContextTrackingProcessor(IngestProcessor):
         return "1.0.0"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
-        return [DoctypeSpec(name="tracked_type", description="test")]
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [RecordTypeSpec(name="tracked_type", description="test")]
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         self.received_contexts = dict(bundle.contexts)

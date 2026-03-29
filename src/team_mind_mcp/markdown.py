@@ -2,7 +2,7 @@ import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestProcessor, DoctypeSpec
+from team_mind_mcp.server import ToolProvider, IngestProcessor, RecordTypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 from team_mind_mcp.media_types import get_media_type
@@ -41,9 +41,14 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         return ["text/markdown", "text/plain"]
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def doctypes(self) -> list[RecordTypeSpec]:
+        """Backward-compat alias — delegates to record_types."""
+        return self.record_types
+
+    @property
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="markdown_chunk",
                 description="A paragraph-level chunk extracted from a markdown document.",
                 schema={
@@ -171,7 +176,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             return [
                 IngestionEvent(
                     plugin=self.name,
-                    doctype="markdown_chunk",
+                    record_type="markdown_chunk",
                     uris=processed_uris,
                     doc_ids=doc_ids,
                     semantic_types=bundle.semantic_types,

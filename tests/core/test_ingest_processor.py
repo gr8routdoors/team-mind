@@ -17,7 +17,7 @@ class _MockProcessor(IngestProcessor):
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         return [
             IngestionEvent(
-                plugin=self.name, doctype="mock_type", uris=bundle.uris, doc_ids=[1]
+                plugin=self.name, record_type="mock_type", uris=bundle.uris, doc_ids=[1]
             )
         ]
 
@@ -86,7 +86,7 @@ async def test_markdown_plugin_returns_events(tmp_path):
     assert len(events) == 1
     event = events[0]
     assert event.plugin == "markdown_plugin"
-    assert event.doctype == "markdown_chunk"
+    assert event.record_type == "markdown_chunk"
     assert len(event.uris) == 2
     assert len(event.doc_ids) == 3  # 2 chunks from a.md + 1 from b.md
 

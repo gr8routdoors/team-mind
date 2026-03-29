@@ -47,8 +47,8 @@ async def test_observer_receives_events():
     # Given a mock IngestObserver
     observer = _MockObserver()
     events = [
-        IngestionEvent(plugin="p", doctype="d", uris=["file:///a.md"], doc_ids=[1]),
-        IngestionEvent(plugin="q", doctype="e", uris=["file:///b.md"], doc_ids=[2]),
+        IngestionEvent(plugin="p", record_type="d", uris=["file:///a.md"], doc_ids=[1]),
+        IngestionEvent(plugin="q", record_type="e", uris=["file:///b.md"], doc_ids=[2]),
     ]
 
     # When on_ingest_complete is called with events
@@ -88,7 +88,7 @@ async def test_observer_default_noop():
     # When on_ingest_complete is called
     # Then it completes without error
     await observer.on_ingest_complete(
-        [IngestionEvent(plugin="p", doctype="d", uris=[], doc_ids=[])]
+        [IngestionEvent(plugin="p", record_type="d", uris=[], doc_ids=[])]
     )
 
 
@@ -100,7 +100,7 @@ async def test_multiple_observers():
     # Given two IngestObserver plugins
     obs1 = _MockObserver("obs1")
     obs2 = _MockObserver("obs2")
-    events = [IngestionEvent(plugin="p", doctype="d", uris=["u"], doc_ids=[1])]
+    events = [IngestionEvent(plugin="p", record_type="d", uris=["u"], doc_ids=[1])]
 
     # When events are broadcast to both observers
     await obs1.on_ingest_complete(events)

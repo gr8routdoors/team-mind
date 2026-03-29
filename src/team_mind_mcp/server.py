@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 
 
 @dataclass
-class DoctypeSpec:
+class RecordTypeSpec:
     """Declares a document type that a plugin produces, with an advisory schema."""
 
     name: str
@@ -17,6 +17,10 @@ class DoctypeSpec:
     schema: dict = field(default_factory=dict)
     plugin: str = ""
     decay_half_life_days: float | None = None
+
+
+# Backward-compatibility alias — to be removed in a future story
+DoctypeSpec = RecordTypeSpec
 
 
 class ToolProvider(ABC):
@@ -28,8 +32,13 @@ class ToolProvider(ABC):
         pass
 
     @property
-    def doctypes(self) -> List[DoctypeSpec]:
+    def record_types(self) -> List[RecordTypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
+        return self.doctypes
+
+    @property
+    def doctypes(self) -> List[RecordTypeSpec]:
+        """Backward-compat name for record_types. Override record_types in new plugins."""
         return []
 
     def get_tools(self) -> List[Tool]:
@@ -69,8 +78,13 @@ class IngestProcessor(ABC):
         return None
 
     @property
-    def doctypes(self) -> List[DoctypeSpec]:
+    def record_types(self) -> List[RecordTypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
+        return self.doctypes
+
+    @property
+    def doctypes(self) -> List[RecordTypeSpec]:
+        """Backward-compat name for record_types. Override record_types in new plugins."""
         return []
 
     async def process_bundle(self, bundle: Any) -> list:
@@ -86,8 +100,13 @@ class EventFilter:
     """
 
     plugins: list[str] | None = None
-    doctypes: list[str] | None = None
+    record_types: list[str] | None = None
     semantic_types: list[str] | None = None
+
+    @property
+    def doctypes(self) -> list[str] | None:
+        """Backward-compat alias for record_types — to be removed in a future story."""
+        return self.record_types
 
 
 class IngestObserver(ABC):
@@ -121,8 +140,8 @@ class PluginRegistry:
         self._tool_routes: Dict[str, ToolProvider] = {}
         self._ingest_processors: List[IngestProcessor] = []
         self._ingest_observers: List[IngestObserver] = []
-        self._doctype_catalog: List[DoctypeSpec] = []
-        self._doctypes_by_plugin: Dict[str, List[DoctypeSpec]] = {}
+        self._record_type_catalog: List[RecordTypeSpec] = []
+        self._record_types_by_plugin: Dict[str, List[RecordTypeSpec]] = {}
         self._processor_semantic_types: Dict[str, list[str] | None] = {}
 
     def register(self, plugin: Any, semantic_types: list[str] | None = None) -> None:
@@ -143,16 +162,16 @@ class PluginRegistry:
         if isinstance(plugin, IngestObserver):
             self._ingest_observers.append(plugin)
 
-        # Collect doctypes from any interface that declares them
+        # Collect record types from any interface that declares them
         if isinstance(plugin, (ToolProvider, IngestProcessor)):
-            plugin_doctypes = plugin.doctypes
-            if plugin_doctypes:
+            plugin_record_types = plugin.record_types
+            if plugin_record_types:
                 stamped = []
-                for dt in plugin_doctypes:
+                for dt in plugin_record_types:
                     dt.plugin = plugin.name
                     stamped.append(dt)
-                self._doctype_catalog.extend(stamped)
-                self._doctypes_by_plugin[plugin.name] = stamped
+                self._record_type_catalog.extend(stamped)
+                self._record_types_by_plugin[plugin.name] = stamped
 
     def unregister(self, plugin_name: str) -> list[str]:
         """Remove a plugin from all internal collections. Returns list of removed tool names."""
@@ -170,10 +189,10 @@ class PluginRegistry:
         self._ingest_observers = [
             o for o in self._ingest_observers if o.name != plugin_name
         ]
-        self._doctype_catalog = [
-            dt for dt in self._doctype_catalog if dt.plugin != plugin_name
+        self._record_type_catalog = [
+            dt for dt in self._record_type_catalog if dt.plugin != plugin_name
         ]
-        self._doctypes_by_plugin.pop(plugin_name, None)
+        self._record_types_by_plugin.pop(plugin_name, None)
         self._processor_semantic_types.pop(plugin_name, None)
 
         return removed_tools
@@ -218,17 +237,19 @@ class PluginRegistry:
         """Return the ordered list of ingestion observers."""
         return self._ingest_observers
 
-    def get_doctype_catalog(self) -> List[DoctypeSpec]:
-        """All doctypes across all registered plugins."""
-        return list(self._doctype_catalog)
+    def get_doctype_catalog(self) -> List[RecordTypeSpec]:
+        """All record types across all registered plugins."""
+        return list(self._record_type_catalog)
 
-    def get_doctypes_for_plugin(self, plugin_name: str) -> List[DoctypeSpec]:
-        """What doctypes does a specific plugin declare?"""
-        return list(self._doctypes_by_plugin.get(plugin_name, []))
+    def get_doctypes_for_plugin(self, plugin_name: str) -> List[RecordTypeSpec]:
+        """What record types does a specific plugin declare?"""
+        return list(self._record_types_by_plugin.get(plugin_name, []))
 
     def get_plugins_for_doctype(self, doctype_name: str) -> List[str]:
-        """Which plugins produce a given doctype?"""
-        return [dt.plugin for dt in self._doctype_catalog if dt.name == doctype_name]
+        """Which plugins produce a given record type?"""
+        return [
+            dt.plugin for dt in self._record_type_catalog if dt.name == doctype_name
+        ]
 
 
 class MCPGateway:
