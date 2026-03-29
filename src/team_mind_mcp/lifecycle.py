@@ -252,6 +252,7 @@ class LifecyclePlugin(ToolProvider):
                         "event_filter": {
                             "plugins": ef.plugins,
                             "doctypes": ef.doctypes,
+                            "semantic_types": ef.semantic_types,
                         }
                         if ef
                         else None,
