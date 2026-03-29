@@ -22,14 +22,14 @@
 
 ## Phase 3: Reliability & Extensibility — IN PROGRESS
 
-- **Reliability Seeding:** Three-layer initial quality scoring (ingest hint, plugin default, plugin override). Replaces the original inline Librarian concept — see ADR-006. *(SPEC-007 — IN DESIGN)*
-- **Background Conflict Detection:** External reaper process using LLM inference to detect contradictions across documents. Runs asynchronously post-ingestion. *(Future — see ADR-006)*
-- **Semantic Deduplication:** Detect near-duplicate content across different URIs using vector similarity thresholds. *(Future)*
+- **Reliability Seeding:** Three-layer initial quality scoring — ingest hint, plugin-declared default on RecordTypeSpec, per-document plugin override. Replaces the original inline Librarian concept (ADR-006). *(SPEC-007 — IN DESIGN, not yet built)*
+- **LLM Background Reaper:** Async post-ingestion process that scans for near-duplicate content across different URIs and cross-document contradictions. Covers both semantic deduplication (same fact, different URI) and conflict detection (contradicting facts). *(Future — see ADR-006)*
 - **Meta-Plugins / Chained Processing:** Observer-triggered secondary ingestion enabling complex processing pipelines (e.g., dependency audit across code + POM output). *(Future — see ADR-007)*
 
-## Phase 4: Scale & Enterprise
+## Phase 4: Scale & Integrations
 
 - **Database Migration:** Move from SQLite to self-hosted MongoDB (or similar) for robust vector and document storage at scale.
 - **Access Control & RBAC:** Add security layers for different project access levels.
-- **Team Integrations:** MS Teams bot for querying and contributing knowledge directly from chat.
+- **MS Teams Integration:** Bot for querying and contributing knowledge directly from chat.
+- **Additional Tooling Integrations:** Other workspace and developer tool integrations as the platform matures.
 - **Frontend UI:** Lightweight JavaScript UI for human browsing and management of the knowledge graph.
