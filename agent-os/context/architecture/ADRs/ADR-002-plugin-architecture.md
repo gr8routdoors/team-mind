@@ -207,7 +207,7 @@ One `IngestListener` interface that receives bundles and is used for both active
 
 ### Neutral
 
-- The Librarian (future) will sit between processing and observation, adding a validation gate.
+- The inline Librarian concept has been retired (ADR-006). Reliability is addressed via Reliability Seeding (SPEC-007) and a future background conflict detection reaper.
 - Storage is currently SQLite but the `StorageAdapter` abstraction allows migration without plugin changes.
 
 ## Current Plugin Inventory
