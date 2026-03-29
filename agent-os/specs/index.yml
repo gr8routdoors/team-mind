@@ -81,4 +81,12 @@ specs:
     stories: 5
     stories_complete: 5
 
-# Next spec number: 010
+  SPEC-010:
+    name: Multi-Tenancy & Metadata Search
+    slug: multi-tenancy-metadata-search
+    status: in_design
+    created: 2026-03-29
+    stories: 9
+    stories_complete: 0
+
+# Next spec number: 011
