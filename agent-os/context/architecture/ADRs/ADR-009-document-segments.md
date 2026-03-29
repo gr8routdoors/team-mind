@@ -44,13 +44,13 @@ CREATE INDEX idx_documents_parent_id ON documents(parent_id);
 - `parent_id = NULL` — This is a root document (either a standalone document or a parent with children).
 - `parent_id = <id>` — This is a segment (child) of the referenced document.
 
-**Why not a separate `segments` table:** A segment needs everything a document already has — URI, metadata, vector, weight, tenant_id, semantic_type. A separate table would duplicate the entire schema. Using `parent_id` on the same table means all existing query machinery (vector search, metadata filters, weight joins, tenant scoping) works on segments without modification.
+**Why not a separate `segments` table:** A segment needs everything a document already has — URI, metadata, vector, weight, semantic_type. A separate table would duplicate the entire schema. Using `parent_id` on the same table means all existing query machinery (vector search, metadata filters, weight joins, tenant scoping) works on segments without modification.
 
 ### 2. Parent Documents — Containers, Not Searchable Units
 
 A parent document is a row that serves as a logical container:
 
-- Has its own URI, tenant_id, semantic_type, record_type, metadata.
+- Has its own URI, semantic_type, record_type, metadata. (Tenant scoping is structural — the database file IS the tenant, per ADR-010.)
 - **Has no vector embedding** — it is not a searchable unit in KNN.
 - **Has no `doc_weights` row** — its effective score is derived from its children (see below).
 - Stores document-level metadata (e.g., `{"profile_type": "sports", "user_name": "Alice"}` for a travel profile, or `{"source_file": "architecture.md", "last_modified": "2026-03-29"}` for a markdown file).
@@ -73,7 +73,7 @@ Segments are the unit of retrieval and the unit of weighting. This formalizes wh
 A parent's effective score is **computed at query time** as the average of its non-tombstoned children's scores:
 
 ```sql
-SELECT p.id, p.uri, p.tenant_id, p.metadata,
+SELECT p.id, p.uri, p.metadata,
        AVG(w.usage_score) AS aggregate_score,
        COUNT(s.id) AS segment_count
 FROM documents p
@@ -103,13 +103,14 @@ Search results (from `retrieve_by_vector_similarity`) gain a `parent_id` field:
 {
   "id": 57,
   "uri": "user://user-123/sports/nfl-bears",
-  "tenant_id": "user-123",
   "parent_id": 42,
   "metadata": {"league": "nfl", "team": "bears"},
   "usage_score": 3.2,
   "final_rank": 0.45
 }
 ```
+
+Note: `tenant_id` is not in StorageAdapter results — it operates within a single per-tenant database (per ADR-010). `TenantStorageManager` injects `tenant_id` during scatter-gather.
 
 When `parent_id` is non-null, the client knows this result is a segment and can look up its parent and siblings for broader context.
 
@@ -134,10 +135,11 @@ This is the discoverability path: "I found this segment in search — what else 
 Plugins create parent-child relationships during ingestion:
 
 ```python
-# Option A: Create parent first, then segments
+# Create parent first, then segments
+# (StorageAdapter has no tenant_id parameter — it operates on a per-tenant
+# database routed by TenantStorageManager, per ADR-010)
 parent_id = storage.save_parent(
     uri="user://user-123/sports-preferences",
-    tenant_id="user-123",
     plugin="travel_plugin",
     record_type="interest_profile",
     metadata={"profile_type": "sports"},
@@ -147,7 +149,6 @@ parent_id = storage.save_parent(
 for interest in user_interests:
     storage.save_payload(
         uri=f"user://user-123/sports/{interest['team']}",
-        tenant_id="user-123",
         parent_id=parent_id,           # Links to parent
         plugin="travel_plugin",
         record_type="sport_interest",
@@ -167,7 +168,7 @@ for interest in user_interests:
 
 - When deleting a parent document, all its child segments (and their vectors and weights) are also deleted.
 - When deleting a specific segment, only that segment is removed — the parent and siblings are unaffected.
-- The idempotency key remains `(uri, plugin, record_type, tenant_id)` — unchanged from SPEC-010.
+- The idempotency key remains `(uri, plugin, record_type)` — tenant scoping is structural (per-tenant database file, per ADR-010).
 
 For MarkdownPlugin's wipe-and-replace pattern: deleting by the source file's URI removes the parent and all paragraph segments, then re-ingestion creates a new parent with new segments.
 
@@ -193,7 +194,7 @@ Segments are a **structural improvement** (explicit hierarchy, framework-level g
 Create a dedicated table for segments with its own schema.
 
 **Rejected because:**
-- A segment needs the same fields as a document (URI, metadata, vector, weight, tenant_id).
+- A segment needs the same fields as a document (URI, metadata, vector, weight).
 - Duplicating the schema means duplicating all query logic — vector search, metadata filters, weight joins.
 - A `parent_id` column on the existing table achieves the same relationship with zero duplication.
 
