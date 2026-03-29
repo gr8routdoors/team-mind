@@ -239,6 +239,8 @@ class StorageAdapter:
         decay_half_life_days: float | None = None,
         content_hash: str | None = None,
         plugin_version: str = "0.0.0",
+        semantic_type: str = "",
+        media_type: str = "",
     ) -> int:
         """Saves a document, its embedding vector, and initializes its weight row."""
         if self._conn is None:
@@ -246,8 +248,8 @@ class StorageAdapter:
 
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version) "
-                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version, semantic_type, media_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 (
                     uri,
                     plugin,
@@ -255,6 +257,8 @@ class StorageAdapter:
                     json.dumps(metadata),
                     content_hash,
                     plugin_version,
+                    semantic_type,
+                    media_type,
                 ),
             )
             doc_id = cursor.fetchone()[0]
