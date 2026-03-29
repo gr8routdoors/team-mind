@@ -5,7 +5,7 @@ SPEC-002 / STORY-006: Migrate Existing Plugins to Doctypes
 import json
 import pytest
 from team_mind_mcp.markdown import MarkdownPlugin
-from team_mind_mcp.server import DoctypeSpec
+from team_mind_mcp.server import RecordTypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
@@ -22,11 +22,11 @@ def test_markdown_plugin_declares_doctype(tmp_path):
     plugin = MarkdownPlugin(storage)
 
     # When its doctypes property is accessed
-    specs = plugin.doctypes
+    specs = plugin.record_types
 
-    # Then it returns a list containing a DoctypeSpec with name="markdown_chunk"
+    # Then it returns a list containing a RecordTypeSpec with name="markdown_chunk"
     assert len(specs) == 1
-    assert isinstance(specs[0], DoctypeSpec)
+    assert isinstance(specs[0], RecordTypeSpec)
     assert specs[0].name == "markdown_chunk"
 
     # And the spec includes a description and schema describing the chunk metadata

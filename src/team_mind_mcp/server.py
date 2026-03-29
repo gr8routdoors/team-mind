@@ -19,10 +19,6 @@ class RecordTypeSpec:
     decay_half_life_days: float | None = None
 
 
-# Backward-compatibility alias — to be removed in a future story
-DoctypeSpec = RecordTypeSpec
-
-
 class ToolProvider(ABC):
     """Base interface for plugins that expose MCP Tools."""
 
@@ -34,11 +30,6 @@ class ToolProvider(ABC):
     @property
     def record_types(self) -> List[RecordTypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
-        return self.doctypes
-
-    @property
-    def doctypes(self) -> List[RecordTypeSpec]:
-        """Backward-compat name for record_types. Override record_types in new plugins."""
         return []
 
     def get_tools(self) -> List[Tool]:
@@ -80,11 +71,6 @@ class IngestProcessor(ABC):
     @property
     def record_types(self) -> List[RecordTypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
-        return self.doctypes
-
-    @property
-    def doctypes(self) -> List[RecordTypeSpec]:
-        """Backward-compat name for record_types. Override record_types in new plugins."""
         return []
 
     async def process_bundle(self, bundle: Any) -> list:
@@ -102,11 +88,6 @@ class EventFilter:
     plugins: list[str] | None = None
     record_types: list[str] | None = None
     semantic_types: list[str] | None = None
-
-    @property
-    def doctypes(self) -> list[str] | None:
-        """Backward-compat alias for record_types — to be removed in a future story."""
-        return self.record_types
 
 
 class IngestObserver(ABC):
@@ -237,18 +218,18 @@ class PluginRegistry:
         """Return the ordered list of ingestion observers."""
         return self._ingest_observers
 
-    def get_doctype_catalog(self) -> List[RecordTypeSpec]:
+    def get_record_type_catalog(self) -> List[RecordTypeSpec]:
         """All record types across all registered plugins."""
         return list(self._record_type_catalog)
 
-    def get_doctypes_for_plugin(self, plugin_name: str) -> List[RecordTypeSpec]:
+    def get_record_types_for_plugin(self, plugin_name: str) -> List[RecordTypeSpec]:
         """What record types does a specific plugin declare?"""
         return list(self._record_types_by_plugin.get(plugin_name, []))
 
-    def get_plugins_for_doctype(self, doctype_name: str) -> List[str]:
+    def get_plugins_for_record_type(self, record_type_name: str) -> List[str]:
         """Which plugins produce a given record type?"""
         return [
-            dt.plugin for dt in self._record_type_catalog if dt.name == doctype_name
+            dt.plugin for dt in self._record_type_catalog if dt.name == record_type_name
         ]
 
 

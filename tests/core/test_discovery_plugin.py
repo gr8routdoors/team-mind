@@ -5,7 +5,7 @@ SPEC-002 / STORY-005: Doctype Discovery MCP Tool
 import json
 import pytest
 from team_mind_mcp.server import (
-    DoctypeSpec,
+    RecordTypeSpec,
     ToolProvider,
     IngestProcessor,
     PluginRegistry,
@@ -19,12 +19,12 @@ class _Alpha(ToolProvider):
         return "alpha"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="type_a", description="Alpha A", schema={"f": {"type": "string"}}
             ),
-            DoctypeSpec(name="type_b", description="Alpha B"),
+            RecordTypeSpec(name="type_b", description="Alpha B"),
         ]
 
 
@@ -34,10 +34,10 @@ class _Beta(IngestProcessor):
         return "beta"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(name="type_a", description="Beta A"),
-            DoctypeSpec(name="type_c", description="Beta C"),
+            RecordTypeSpec(name="type_a", description="Beta A"),
+            RecordTypeSpec(name="type_c", description="Beta C"),
         ]
 
 
@@ -47,8 +47,8 @@ class _Gamma(ToolProvider):
         return "gamma"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
-        return [DoctypeSpec(name="type_d", description="Gamma D")]
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [RecordTypeSpec(name="type_d", description="Gamma D")]
 
 
 @pytest.fixture
@@ -71,12 +71,12 @@ def test_tool_registered(registry_with_plugins):
     # When an MCP client requests the list of available tools
     tools = registry_with_plugins.get_all_tools()
 
-    # Then list_doctypes appears in the tools list
+    # Then list_record_types appears in the tools list
     tool_names = [t.name for t in tools]
-    assert "list_doctypes" in tool_names
+    assert "list_record_types" in tool_names
 
     # And it includes a description and input schema
-    list_tool = next(t for t in tools if t.name == "list_doctypes")
+    list_tool = next(t for t in tools if t.name == "list_record_types")
     assert list_tool.description
     assert list_tool.inputSchema
 
@@ -90,7 +90,7 @@ async def test_returns_all_doctypes(registry_with_plugins):
 
     # Given multiple plugins have been registered with various doctypes
     # When list_doctypes is called with no arguments
-    response = await plugin.call_tool("list_doctypes", {})
+    response = await plugin.call_tool("list_record_types", {})
     result = json.loads(response[0].text)
 
     # Then the response includes every doctype from every registered plugin
@@ -106,7 +106,7 @@ async def test_filter_by_single_plugin(registry_with_plugins):
 
     # Given plugins "alpha" and "beta" are registered
     # When list_doctypes is called with plugins=["alpha"]
-    response = await plugin.call_tool("list_doctypes", {"plugins": ["alpha"]})
+    response = await plugin.call_tool("list_record_types", {"plugins": ["alpha"]})
     result = json.loads(response[0].text)
 
     # Then only doctypes from "alpha" are returned
@@ -123,7 +123,7 @@ async def test_filter_by_multiple_plugins(registry_with_plugins):
 
     # Given plugins "alpha", "beta", and "gamma" are registered
     # When list_doctypes is called with plugins=["alpha", "gamma"]
-    response = await plugin.call_tool("list_doctypes", {"plugins": ["alpha", "gamma"]})
+    response = await plugin.call_tool("list_record_types", {"plugins": ["alpha", "gamma"]})
     result = json.loads(response[0].text)
 
     # Then doctypes from both "alpha" and "gamma" are returned
@@ -142,7 +142,7 @@ async def test_filter_by_doctype_names(registry_with_plugins):
     # Given plugins declare doctypes "type_a", "type_b", "type_c", "type_d"
     # When list_doctypes is called with doctypes=["type_a", "type_b"]
     response = await plugin.call_tool(
-        "list_doctypes", {"doctypes": ["type_a", "type_b"]}
+        "list_record_types", {"record_types": ["type_a", "type_b"]}
     )
     result = json.loads(response[0].text)
 
@@ -163,7 +163,7 @@ async def test_combined_plugin_and_doctype_filters(registry_with_plugins):
     # Given multiple plugins each declare multiple doctypes
     # When list_doctypes is called with plugins=["alpha"] and doctypes=["type_a"]
     response = await plugin.call_tool(
-        "list_doctypes", {"plugins": ["alpha"], "doctypes": ["type_a"]}
+        "list_record_types", {"plugins": ["alpha"], "record_types": ["type_a"]}
     )
     result = json.loads(response[0].text)
 
@@ -182,7 +182,7 @@ async def test_response_structure(registry_with_plugins):
 
     # Given a plugin declares a doctype with name, description, and schema
     # When list_doctypes is called
-    response = await plugin.call_tool("list_doctypes", {"plugins": ["alpha"]})
+    response = await plugin.call_tool("list_record_types", {"plugins": ["alpha"]})
     result = json.loads(response[0].text)
 
     # Then each entry includes plugin, name, description, and schema fields
@@ -205,7 +205,7 @@ async def test_no_doctypes_registered():
     plugin = DoctypeDiscoveryPlugin(empty_registry)
 
     # When list_doctypes is called
-    response = await plugin.call_tool("list_doctypes", {})
+    response = await plugin.call_tool("list_record_types", {})
     result = json.loads(response[0].text)
 
     # Then an empty list is returned
