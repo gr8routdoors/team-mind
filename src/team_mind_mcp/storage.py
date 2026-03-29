@@ -138,30 +138,6 @@ class StorageAdapter:
                 ON doc_weights(tombstoned)
             """)
 
-            # Plugin lifecycle persistence
-            self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS registered_plugins (
-                    plugin_name TEXT PRIMARY KEY,
-                    plugin_type TEXT NOT NULL,
-                    module_path TEXT NOT NULL,
-                    config JSON,
-                    event_filter JSON,
-                    enabled INTEGER DEFAULT 1,
-                    registered_at TEXT NOT NULL DEFAULT (datetime('now'))
-                )
-            """)
-
-            # Migrate existing registered_plugins: add semantic_types and supported_media_types if missing
-            cursor = self._conn.execute("PRAGMA table_info(registered_plugins)")
-            plugin_columns = {row[1] for row in cursor.fetchall()}
-            if "semantic_types" not in plugin_columns:
-                self._conn.execute(
-                    "ALTER TABLE registered_plugins ADD COLUMN semantic_types JSON"
-                )
-            if "supported_media_types" not in plugin_columns:
-                self._conn.execute(
-                    "ALTER TABLE registered_plugins ADD COLUMN supported_media_types JSON"
-                )
 
     # --- Plugin persistence CRUD ---
 
