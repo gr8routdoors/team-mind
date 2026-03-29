@@ -43,7 +43,7 @@ def test_weight_row_auto_created_on_save(tmp_path):
         metadata={"test": True},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="test_type",
+        record_type="test_type",
     )
 
     # Then a corresponding row in doc_weights exists
@@ -73,7 +73,7 @@ def test_decay_half_life_copied_on_save(tmp_path):
         metadata={},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="notes",
+        record_type="notes",
         decay_half_life_days=30.0,
     )
 
@@ -100,7 +100,7 @@ def test_no_decay_uses_null(tmp_path):
         metadata={},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="unknown_type",
+        record_type="unknown_type",
     )
 
     with adapter._conn:

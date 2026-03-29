@@ -18,22 +18,22 @@ def weighted_storage(tmp_path):
     base_vec = [0.5] * 768
 
     # Doc 1: no weight (default 0)
-    d1 = adapter.save_payload("uri1", {}, base_vec, plugin="p", doctype="t")
+    d1 = adapter.save_payload("uri1", {}, base_vec, plugin="p", record_type="t")
 
     # Doc 2: high weight
-    d2 = adapter.save_payload("uri2", {}, base_vec, plugin="p", doctype="t")
+    d2 = adapter.save_payload("uri2", {}, base_vec, plugin="p", record_type="t")
     adapter.update_weight(d2, signal=5)
 
     # Doc 3: negative weight
-    d3 = adapter.save_payload("uri3", {}, base_vec, plugin="p", doctype="t")
+    d3 = adapter.save_payload("uri3", {}, base_vec, plugin="p", record_type="t")
     adapter.update_weight(d3, signal=-3)
 
     # Doc 4: tombstoned
-    d4 = adapter.save_payload("uri4", {}, base_vec, plugin="p", doctype="t")
+    d4 = adapter.save_payload("uri4", {}, base_vec, plugin="p", record_type="t")
     adapter.update_weight(d4, signal=0, tombstone=True)
 
     # Doc 5: different plugin for filter testing
-    d5 = adapter.save_payload("uri5", {}, base_vec, plugin="other", doctype="t2")
+    d5 = adapter.save_payload("uri5", {}, base_vec, plugin="other", record_type="t2")
     adapter.update_weight(d5, signal=4)
 
     yield adapter, {"d1": d1, "d2": d2, "d3": d3, "d4": d4, "d5": d5}
@@ -67,8 +67,8 @@ def test_no_weights_equals_baseline(tmp_path):
     v1 = [1.0] + [0.0] * 767
     v2 = [0.0, 1.0] + [0.0] * 766
 
-    d1 = adapter.save_payload("uri1", {}, v1, plugin="p", doctype="t")
-    d2 = adapter.save_payload("uri2", {}, v2, plugin="p", doctype="t")
+    d1 = adapter.save_payload("uri1", {}, v1, plugin="p", record_type="t")
+    d2 = adapter.save_payload("uri2", {}, v2, plugin="p", record_type="t")
 
     # No feedback given — all usage_score=0, no decay
     results = adapter.retrieve_by_vector_similarity(v1, limit=2)
@@ -91,7 +91,7 @@ def test_decay_reduces_effective_score(tmp_path):
 
     # Doc with decay, created "30 days ago"
     d1 = adapter.save_payload(
-        "uri1", {}, vec, plugin="p", doctype="t", decay_half_life_days=30
+        "uri1", {}, vec, plugin="p", record_type="t", decay_half_life_days=30
     )
     adapter.update_weight(d1, signal=5)
 
@@ -103,7 +103,7 @@ def test_decay_reduces_effective_score(tmp_path):
         )
 
     # Doc without decay, same weight
-    d2 = adapter.save_payload("uri2", {}, vec, plugin="p", doctype="t")
+    d2 = adapter.save_payload("uri2", {}, vec, plugin="p", record_type="t")
     adapter.update_weight(d2, signal=5)
 
     results = adapter.retrieve_by_vector_similarity(vec, limit=2)
@@ -124,7 +124,7 @@ def test_no_decay_means_full_score(tmp_path):
 
     vec = [0.5] * 768
 
-    d1 = adapter.save_payload("uri1", {}, vec, plugin="p", doctype="t")
+    d1 = adapter.save_payload("uri1", {}, vec, plugin="p", record_type="t")
     adapter.update_weight(d1, signal=5)
 
     # Set created_at to 365 days ago — but no decay configured
@@ -150,7 +150,7 @@ def test_filters_work_with_composite_scoring(weighted_storage):
     query_vec = [0.5] * 768
 
     results = adapter.retrieve_by_vector_similarity(
-        query_vec, limit=10, plugins=["p"], doctypes=["t"]
+        query_vec, limit=10, plugins=["p"], record_types=["t"]
     )
 
     # Only plugin "p", doctype "t" — excludes d5 (plugin="other")
@@ -187,7 +187,7 @@ async def test_tombstone_via_feedback_tool(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
     plugin = FeedbackPlugin(adapter)
 
     response = await plugin.call_tool(
@@ -215,7 +215,7 @@ async def test_un_tombstone_restores_document(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
     plugin = FeedbackPlugin(adapter)
 
     # Tombstone

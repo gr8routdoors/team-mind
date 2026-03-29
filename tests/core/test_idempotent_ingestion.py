@@ -46,7 +46,7 @@ def test_save_payload_stores_hash_and_version(tmp_path):
         {},
         [0.1] * 768,
         plugin="p",
-        doctype="t",
+        record_type="t",
         content_hash="abc123",
         plugin_version="1.0.0",
     )
@@ -73,7 +73,7 @@ def test_lookup_existing_docs_returns_matches(tmp_path):
         {},
         [0.1] * 768,
         plugin="p",
-        doctype="t",
+        record_type="t",
         content_hash="h1",
         plugin_version="1.0",
     )
@@ -82,7 +82,7 @@ def test_lookup_existing_docs_returns_matches(tmp_path):
         {},
         [0.2] * 768,
         plugin="p",
-        doctype="t",
+        record_type="t",
         content_hash="h1",
         plugin_version="1.0",
     )
@@ -145,7 +145,7 @@ def test_composite_uri_index_created(tmp_path):
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
         index_names = [row[0] for row in cursor.fetchall()]
 
-    assert "idx_documents_uri_plugin_doctype" in index_names
+    assert "idx_documents_uri_plugin_record_type" in index_names
     adapter.close()
 
 
@@ -239,7 +239,7 @@ def test_context_built_for_existing_uri(tmp_path):
         {},
         [0.1] * 768,
         plugin="p",
-        doctype="t",
+        record_type="t",
         content_hash="hash_abc",
         plugin_version="1.0",
     )
@@ -262,7 +262,7 @@ def test_version_changed_context(tmp_path):
         {},
         [0.1] * 768,
         plugin="p",
-        doctype="t",
+        record_type="t",
         content_hash="h",
         plugin_version="1.0.0",
     )
@@ -335,7 +335,7 @@ async def test_context_flags_update_vs_new(tmp_path):
         {},
         [0.1] * 768,
         plugin="context_tracker",
-        doctype="tracked_type",
+        record_type="tracked_type",
         content_hash="old",
         plugin_version="1.0.0",
     )
@@ -471,7 +471,7 @@ async def test_markdown_reprocesses_on_version_change(tmp_path):
         {"chunk": "Same content.", "plugin": "markdown_plugin"},
         [0.1] * 768,
         plugin="markdown_plugin",
-        doctype="markdown_chunk",
+        record_type="markdown_chunk",
         content_hash=content_hash,
         plugin_version="0.9.0",  # Old version
     )

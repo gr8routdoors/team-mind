@@ -78,7 +78,7 @@ def test_sqlite_save_payload(tmp_path):
         metadata={"author": "team-mind", "tags": ["test"]},
         vector=test_vector,
         plugin="test_plugin",
-        doctype="test_type",
+        record_type="test_type",
     )
 
     # Then the record is successfully committed to the database
@@ -111,9 +111,9 @@ def test_sqlite_retrieve_by_vector_similarity(tmp_path):
     v2 = [0.0, 1.0] + [0.0] * 766  # Document 2: 1 at index 1
     v3 = [-1.0] + [0.0] * 767  # Document 3: -1 at index 0 (furthest from v1)
 
-    doc1 = adapter.save_payload("doc1", {"name": "doc1"}, v1, plugin="p", doctype="t")
-    doc2 = adapter.save_payload("doc2", {"name": "doc2"}, v2, plugin="p", doctype="t")
-    adapter.save_payload("doc3", {"name": "doc3"}, v3, plugin="p", doctype="t")
+    doc1 = adapter.save_payload("doc1", {"name": "doc1"}, v1, plugin="p", record_type="t")
+    doc2 = adapter.save_payload("doc2", {"name": "doc2"}, v2, plugin="p", record_type="t")
+    adapter.save_payload("doc3", {"name": "doc3"}, v3, plugin="p", record_type="t")
 
     # When a KNN semantic query is executed with a target vector and a limit=2
     # Search for v1

@@ -57,7 +57,7 @@ def _create_db(tmp_path, doc_count: int):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 uri TEXT NOT NULL,
                 plugin TEXT NOT NULL DEFAULT '',
-                doctype TEXT NOT NULL DEFAULT '',
+                record_type TEXT NOT NULL DEFAULT '',
                 metadata JSON
             )
         """)
@@ -65,7 +65,7 @@ def _create_db(tmp_path, doc_count: int):
             CREATE INDEX idx_documents_plugin ON documents(plugin)
         """)
         conn.execute("""
-            CREATE INDEX idx_documents_doctype ON documents(doctype)
+            CREATE INDEX idx_documents_record_type ON documents(record_type)
         """)
         conn.execute("""
             CREATE VIRTUAL TABLE vec_documents USING vec0(
@@ -91,7 +91,7 @@ def _create_db(tmp_path, doc_count: int):
     with conn:
         for i in range(doc_count):
             cursor = conn.execute(
-                "INSERT INTO documents (uri, plugin, doctype, metadata) VALUES (?, ?, ?, ?) RETURNING id",
+                "INSERT INTO documents (uri, plugin, record_type, metadata) VALUES (?, ?, ?, ?) RETURNING id",
                 (
                     f"file:///doc_{i}.md",
                     "test_plugin",

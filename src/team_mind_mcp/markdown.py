@@ -107,7 +107,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit, plugins=plugins_filter, doctypes=doctypes_filter
+            vector, limit=limit, plugins=plugins_filter, record_types=doctypes_filter
         )
 
         # Format the SQLite results into an MCP TextContent response
@@ -145,7 +145,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
                 # Content changed or version changed → wipe old chunks and re-ingest
                 self.storage.delete_by_uri(
-                    uri, plugin=self.name, doctype="markdown_chunk"
+                    uri, plugin=self.name, record_type="markdown_chunk"
                 )
             else:
                 current_hash = _content_hash(content)
@@ -164,7 +164,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     metadata,
                     vector,
                     plugin=self.name,
-                    doctype="markdown_chunk",
+                    record_type="markdown_chunk",
                     content_hash=current_hash,
                     plugin_version=self.version,
                     semantic_type=semantic_type,

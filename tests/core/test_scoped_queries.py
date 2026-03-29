@@ -21,26 +21,26 @@ def populated_storage(tmp_path):
 
     # plugin_x: type_a (2 docs), type_b (1 doc)
     adapter.save_payload(
-        "uri_xa1", {"n": "xa1"}, make_vector(0), plugin="plugin_x", doctype="type_a"
+        "uri_xa1", {"n": "xa1"}, make_vector(0), plugin="plugin_x", record_type="type_a"
     )
     adapter.save_payload(
-        "uri_xa2", {"n": "xa2"}, make_vector(1), plugin="plugin_x", doctype="type_a"
+        "uri_xa2", {"n": "xa2"}, make_vector(1), plugin="plugin_x", record_type="type_a"
     )
     adapter.save_payload(
-        "uri_xb1", {"n": "xb1"}, make_vector(2), plugin="plugin_x", doctype="type_b"
+        "uri_xb1", {"n": "xb1"}, make_vector(2), plugin="plugin_x", record_type="type_b"
     )
 
     # plugin_y: type_a (1 doc), type_c (1 doc)
     adapter.save_payload(
-        "uri_ya1", {"n": "ya1"}, make_vector(3), plugin="plugin_y", doctype="type_a"
+        "uri_ya1", {"n": "ya1"}, make_vector(3), plugin="plugin_y", record_type="type_a"
     )
     adapter.save_payload(
-        "uri_yc1", {"n": "yc1"}, make_vector(4), plugin="plugin_y", doctype="type_c"
+        "uri_yc1", {"n": "yc1"}, make_vector(4), plugin="plugin_y", record_type="type_c"
     )
 
     # plugin_z: type_b (1 doc)
     adapter.save_payload(
-        "uri_zb1", {"n": "zb1"}, make_vector(5), plugin="plugin_z", doctype="type_b"
+        "uri_zb1", {"n": "zb1"}, make_vector(5), plugin="plugin_z", record_type="type_b"
     )
 
     yield adapter
@@ -75,11 +75,11 @@ def test_filter_by_single_doctype(populated_storage):
     # Given documents with doctypes "type_a" and "type_b" exist
     # When called with doctypes=["type_a"]
     results = populated_storage.retrieve_by_vector_similarity(
-        _query_vector(), limit=10, doctypes=["type_a"]
+        _query_vector(), limit=10, record_types=["type_a"]
     )
 
-    # Then only documents with doctype = "type_a" are returned
-    assert all(r["doctype"] == "type_a" for r in results)
+    # Then only documents with record_type = "type_a" are returned
+    assert all(r["record_type"] == "type_a" for r in results)
     assert len(results) == 3  # xa1, xa2, ya1
 
 
@@ -90,13 +90,13 @@ def test_filter_by_multiple_doctypes(populated_storage):
     # Given documents with doctypes "type_a", "type_b", and "type_c" exist
     # When called with doctypes=["type_a", "type_b"]
     results = populated_storage.retrieve_by_vector_similarity(
-        _query_vector(), limit=10, doctypes=["type_a", "type_b"]
+        _query_vector(), limit=10, record_types=["type_a", "type_b"]
     )
 
-    # Then only documents with doctype in ("type_a", "type_b") are returned
-    assert all(r["doctype"] in ("type_a", "type_b") for r in results)
-    # And documents with doctype = "type_c" are excluded
-    assert not any(r["doctype"] == "type_c" for r in results)
+    # Then only documents with record_type in ("type_a", "type_b") are returned
+    assert all(r["record_type"] in ("type_a", "type_b") for r in results)
+    # And documents with record_type = "type_c" are excluded
+    assert not any(r["record_type"] == "type_c" for r in results)
     assert len(results) == 5
 
 
@@ -137,11 +137,11 @@ def test_combined_plugin_and_doctype_filter(populated_storage):
     # Given documents across multiple plugins and doctypes exist
     # When called with plugins=["plugin_x"] and doctypes=["type_a"]
     results = populated_storage.retrieve_by_vector_similarity(
-        _query_vector(), limit=10, plugins=["plugin_x"], doctypes=["type_a"]
+        _query_vector(), limit=10, plugins=["plugin_x"], record_types=["type_a"]
     )
 
     # Then only documents matching BOTH filters are returned
-    assert all(r["plugin"] == "plugin_x" and r["doctype"] == "type_a" for r in results)
+    assert all(r["plugin"] == "plugin_x" and r["record_type"] == "type_a" for r in results)
     assert len(results) == 2  # xa1, xa2
 
 
@@ -152,7 +152,7 @@ def test_empty_filter_list_returns_nothing(populated_storage):
     # Given documents exist in storage
     # When called with doctypes=[] (empty list)
     results = populated_storage.retrieve_by_vector_similarity(
-        _query_vector(), limit=10, doctypes=[]
+        _query_vector(), limit=10, record_types=[]
     )
 
     # Then no results are returned
@@ -168,23 +168,23 @@ def test_post_filter_knn_behavior(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    # Given 10 documents: 5 with doctype="type_a" and 5 with doctype="type_b"
+    # Given 10 documents: 5 with record_type="type_a" and 5 with record_type="type_b"
     for i in range(5):
         v = [0.0] * 768
         v[i] = 1.0
-        adapter.save_payload(f"uri_a{i}", {}, v, plugin="p", doctype="type_a")
+        adapter.save_payload(f"uri_a{i}", {}, v, plugin="p", record_type="type_a")
     for i in range(5, 10):
         v = [0.0] * 768
         v[i] = 1.0
-        adapter.save_payload(f"uri_b{i}", {}, v, plugin="p", doctype="type_b")
+        adapter.save_payload(f"uri_b{i}", {}, v, plugin="p", record_type="type_b")
 
-    # When called with limit=5 and doctypes=["type_a"]
+    # When called with limit=5 and record_types=["type_a"]
     results = adapter.retrieve_by_vector_similarity(
-        [0.0] * 768, limit=5, doctypes=["type_a"]
+        [0.0] * 768, limit=5, record_types=["type_a"]
     )
 
-    # Then results contain only doctype="type_a" documents
-    assert all(r["doctype"] == "type_a" for r in results)
+    # Then results contain only record_type="type_a" documents
+    assert all(r["record_type"] == "type_a" for r in results)
 
     # And the result count may be fewer than limit due to post-filter KNN behavior
     assert len(results) <= 5

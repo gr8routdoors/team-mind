@@ -54,9 +54,9 @@ async def test_markdown_plugin_passes_plugin_and_doctype_on_save(tmp_path):
     # When it calls storage.save_payload
     await plugin.process_bundle(bundle)
 
-    # Then it passes plugin="markdown_plugin" and doctype="markdown_chunk"
+    # Then it passes plugin="markdown_plugin" and record_type="markdown_chunk"
     with storage._conn:
-        cursor = storage._conn.execute("SELECT plugin, doctype FROM documents")
+        cursor = storage._conn.execute("SELECT plugin, record_type FROM documents")
         rows = cursor.fetchall()
 
     assert len(rows) >= 1
@@ -88,7 +88,7 @@ async def test_semantic_search_accepts_filters(tmp_path):
         {"data": "other"},
         [0.0] * 768,
         plugin="other_plugin",
-        doctype="other_type",
+        record_type="other_type",
     )
 
     # When semantic_search is called with plugin and doctype filters
@@ -104,7 +104,7 @@ async def test_semantic_search_accepts_filters(tmp_path):
 
     # Then results are scoped to the markdown plugin only
     assert all(r["plugin"] == "markdown_plugin" for r in results)
-    assert all(r["doctype"] == "markdown_chunk" for r in results)
+    assert all(r["record_type"] == "markdown_chunk" for r in results)
 
     # Multi-value: search across both plugins
     response_multi = await plugin.call_tool(
@@ -137,12 +137,12 @@ async def test_response_metadata_includes_plugin_and_doctype(tmp_path):
     response = await plugin.call_tool("semantic_search", {"query": "sample"})
     results = json.loads(response[0].text)
 
-    # Then each result includes plugin and doctype
+    # Then each result includes plugin and record_type
     assert len(results) > 0
     for r in results:
         assert "plugin" in r
-        assert "doctype" in r
+        assert "record_type" in r
         assert r["plugin"] == "markdown_plugin"
-        assert r["doctype"] == "markdown_chunk"
+        assert r["record_type"] == "markdown_chunk"
 
     storage.close()

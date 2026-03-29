@@ -20,7 +20,7 @@ def storage_with_doc(tmp_path):
         metadata={"text": "hello"},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="test_type",
+        record_type="test_type",
     )
     return adapter, doc_id
 
