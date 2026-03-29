@@ -69,8 +69,8 @@ stories:
       Update MarkdownPlugin to declare supported_media_types=["text/markdown",
       "text/plain"]. Store semantic_type and media_type on save_payload.
       Remove hardcoded .md extension check in favor of media type filtering.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-009:
     name: Update Documentation
