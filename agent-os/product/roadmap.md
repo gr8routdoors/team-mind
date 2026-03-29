@@ -22,7 +22,7 @@
 
 ## Phase 3: Reliability & Extensibility — IN PROGRESS
 
-- **Reliability Seeding:** Three-layer initial quality scoring — ingest hint, plugin-declared default on RecordTypeSpec, per-document plugin override. Replaces the original inline Librarian concept (ADR-006). *(SPEC-007 — IN DESIGN, not yet built)*
+- **Reliability Seeding:** Three-layer initial quality scoring — ingest hint (from caller), plugin-declared default on `RecordTypeSpec`, platform default (0.0). Seeds `usage_score` at ingestion time so high-quality sources rank higher immediately. Replaces the original inline Librarian concept (ADR-006). *(SPEC-007 — COMPLETE)*
 - **LLM Background Reaper:** Async post-ingestion process that scans for near-duplicate content across different URIs and cross-document contradictions. Covers both semantic deduplication (same fact, different URI) and conflict detection (contradicting facts). *(Future — see ADR-006)*
 - **Meta-Plugins / Chained Processing:** Observer-triggered secondary ingestion enabling complex processing pipelines (e.g., dependency audit across code + POM output). *(Future — see ADR-007)*
 
