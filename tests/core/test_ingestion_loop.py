@@ -32,8 +32,8 @@ async def test_ingestion_successful_broadcast(tmp_path):
     registry = PluginRegistry()
     p1 = TrackerPlugin("p1")
     p2 = TrackerPlugin("p2")
-    registry.register(p1)
-    registry.register(p2)
+    registry.register(p1, semantic_types=["*"])
+    registry.register(p2, semantic_types=["*"])
     pipeline = IngestionPipeline(registry)
 
     file1 = tmp_path / "a.md"
@@ -52,7 +52,9 @@ async def test_ingestion_successful_broadcast(tmp_path):
     # And both plugins receive the .process_bundle() event synchronously or asynchronously
     assert len(p1.received_bundles) == 1
     assert len(p2.received_bundles) == 1
-    assert p1.received_bundles[0] == bundle
+    # Each processor receives its own bundle copy (per-processor isolation)
+    assert p1.received_bundles[0].uris == bundle.uris
+    assert p2.received_bundles[0].uris == bundle.uris
 
 
 @pytest.mark.asyncio
@@ -79,7 +81,7 @@ async def test_ingestion_empty_bundle_prevention(tmp_path):
     # Given an ingestion request for a directory
     registry = PluginRegistry()
     p1 = TrackerPlugin("p1")
-    registry.register(p1)
+    registry.register(p1, semantic_types=["*"])
     pipeline = IngestionPipeline(registry)
 
     empty_dir = tmp_path / "empty_folder"

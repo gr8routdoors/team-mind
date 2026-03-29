@@ -1,9 +1,9 @@
-# ADR-002: Broadcast Plugin Architecture with Three Interfaces
+# ADR-002: Plugin Architecture with Three Interfaces
 
 **Status:** Accepted
-**Date:** 2026-03-10 (retroactive — originally designed in SPEC-001, updated 2026-03-25)
-**Spec:** SPEC-001 (Core Information Architecture, MVP), SPEC-003 (Ingestion Interface Split)
-**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins
+**Date:** 2026-03-10 (retroactive — originally designed in SPEC-001, updated 2026-03-25, updated 2026-03-29 for SPEC-008)
+**Spec:** SPEC-001 (Core Information Architecture, MVP), SPEC-003 (Ingestion Interface Split), SPEC-008 (Semantic Type Routing)
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins; [ADR-007: Three-Type Model](ADR-007-semantic-type-routing.md) — semantic type routing and the three-type model
 
 ## Context
 
@@ -81,22 +81,23 @@ Phase 2 only runs after Phase 1 fully completes. Observers are guaranteed to see
 
 The `PluginRegistry` manages all plugin lifecycle:
 
-- **Registration:** `register(plugin)` inspects the plugin via `isinstance` checks and routes it to the appropriate internal collections (`_tool_providers`, `_ingest_processors`, `_ingest_observers`). Multi-interface plugins are registered in all applicable collections.
+- **Registration:** `register(plugin, semantic_types=None)` inspects the plugin via `isinstance` checks and routes it to the appropriate internal collections (`_tool_providers`, `_ingest_processors`, `_ingest_observers`). Multi-interface plugins are registered in all applicable collections. The optional `semantic_types` list controls which ingestion traffic the processor receives — a processor with no semantic types is available but idle.
+- **Semantic type routing:** The registry maps semantic types to registered processors. `get_ingest_processors(semantic_types)` returns only the processors enabled for those types (plus wildcard processors). See [ADR-007](ADR-007-semantic-type-routing.md) for the full routing model.
 - **Tool routing:** Maps tool names to their owning provider. Enforces uniqueness — no two plugins can register the same tool name.
-- **Unregistration:** `unregister(plugin_name)` removes a plugin from all internal collections — tools, processors, observers, doctypes. Does not delete the plugin's data.
-- **Broadcast:** Exposes `get_ingest_processors()` and `get_ingest_observers()` for the ingestion pipeline.
+- **Unregistration:** `unregister(plugin_name)` removes a plugin from all internal collections — tools, processors, observers, doctypes, semantic type associations. Does not delete the plugin's data.
+- **Observer broadcast:** Exposes `get_ingest_observers()` for Phase 2 of the ingestion pipeline. Observers still receive events via broadcast (filtered by EventFilter, which now supports `semantic_types`).
 
-### 5. Broadcast Ingestion (Fan-Out)
+### 5. Semantic Type Routing (replaces broadcast fan-out, SPEC-008)
 
 When documents are ingested:
 
-1. `IngestionPipeline` receives a list of URIs.
+1. `IngestionPipeline` receives a list of URIs and `semantic_types` (e.g., `["architecture_docs"]`).
 2. `ResourceResolver` expands directories, validates schemes (`file://`, `http://`, `https://`).
-3. An `IngestionBundle` (list of resolved URIs) is created.
-4. **Phase 1:** The bundle is broadcast to **all** registered `IngestProcessor` plugins via `asyncio.gather` (concurrent fan-out). Each processor returns `IngestionEvent` objects describing what it wrote.
-5. **Phase 2:** The collected events are broadcast to **all** registered `IngestObserver` plugins via `asyncio.gather`.
+3. An `IngestionBundle` (list of resolved URIs + semantic types) is created.
+4. **Phase 1:** The pipeline queries the registry for processors registered for those semantic types. The bundle is routed only to matching processors via `asyncio.gather`. Within the routed set, each processor further filters by its declared `supported_media_types`. Each processor returns `IngestionEvent` objects (now including `semantic_types`) describing what it wrote.
+5. **Phase 2:** The collected events are broadcast to all registered `IngestObserver` plugins via `asyncio.gather`. Observers filter by their `EventFilter` (which now supports `semantic_types` filtering).
 
-Processors are responsible for their own URI filtering. The pipeline doesn't pre-sort or route based on file type — it simply broadcasts everything to everyone.
+This replaces the previous model where the bundle was broadcast to all processors and each plugin self-filtered. See [ADR-007](ADR-007-semantic-type-routing.md) for rationale and alternatives considered.
 
 ### 6. Dual-Mode Storage: Pointers and Embedded Content
 
@@ -169,14 +170,11 @@ One `Plugin` ABC with both `get_tools()` and `process_bundle()` methods.
 - Listener-only plugins would carry no-op `get_tools` methods.
 - Multiple interfaces via multiple inheritance is cleaner and more Pythonic.
 
-### 5. Pre-sorted routing (pipeline routes by file type)
+### 5. Pre-sorted routing by file type (partially superseded in SPEC-008)
 
 The ingestion pipeline inspects file extensions and only sends `.md` files to MarkdownPlugin, `.py` files to a code plugin, etc.
 
-**Rejected because:**
-- The pipeline would need to know about every plugin's preferences — tight coupling.
-- Some plugins may want to process the same file type differently.
-- Letting plugins self-filter is simpler and more extensible.
+**Originally rejected** (tight coupling, plugins wanting to share file types). **SPEC-008 adopts semantic-type-based routing** — routing is not by file extension but by the semantic meaning of the data, configured at registration time. Media type filtering (file extension / MIME type) is still applied per-plugin as a secondary filter within a routed bundle, but routing itself is semantic. See [ADR-007](ADR-007-semantic-type-routing.md).
 
 ### 6. Single IngestListener for both processing and observing (original design, superseded in SPEC-003)
 
@@ -201,10 +199,11 @@ One `IngestListener` interface that receives bundles and is used for both active
 
 ### Negative
 
-- **Broadcast inefficiency.** Every bundle goes to every processor, even if only one cares. At small scale this is negligible.
+- **Routing complexity.** SPEC-008 replaces broadcast-to-all with semantic-type-based routing. The pipeline must look up semantic type registrations, match media types, and build the routed processor list. More logic, more tests needed.
 - **No inter-plugin communication.** Plugins can't directly call each other. They share a `StorageAdapter` but can't invoke each other's tools. *(Partially addressed by SPEC-002's doctype system enabling cross-plugin data queries.)*
 - **Single-process bottleneck.** The `asyncio.gather` fan-out is concurrent but not parallel (GIL-bound). CPU-intensive plugins will need offloading.
 - **Tool name collisions.** The registry enforces global uniqueness of tool names. Naming conventions may be needed at scale.
+- **Caller must know semantic types.** The ingestion caller specifies what the data means — additional burden but also clarity about intent.
 
 ### Neutral
 

@@ -14,6 +14,31 @@ from team_mind_mcp.feedback import FeedbackPlugin
 from team_mind_mcp.lifecycle import LifecyclePlugin, load_persisted_plugins
 
 
+def load_cli_config(config_path: Path | None = None) -> dict:
+    """Load CLI config from ~/.team-mind.toml. Returns dict of plugin_name -> {semantic_types: [...]}."""
+    import tomllib
+
+    if config_path is None:
+        config_path = Path.home() / ".team-mind.toml"
+    if not config_path.exists():
+        # Built-in defaults: MarkdownPlugin handles everything
+        return {"markdown_plugin": {"semantic_types": ["*"]}}
+    with open(config_path, "rb") as f:
+        data = tomllib.load(f)
+    # Parse each section: semantic_types can be a list or comma-separated string
+    result = {}
+    for plugin_name, section in data.items():
+        raw = section.get("semantic_types", [])
+        if isinstance(raw, str):
+            types = [t.strip() for t in raw.split(",") if t.strip()]
+        elif isinstance(raw, list):
+            types = raw
+        else:
+            types = []
+        result[plugin_name] = {"semantic_types": types}
+    return result
+
+
 def get_default_db_path() -> Path:
     """Returns the default database path, prioritizing the environment variable."""
     env_path = os.environ.get("TEAM_MIND_DB_PATH")
@@ -38,6 +63,7 @@ async def run_server(db_path: Path) -> int:
     gateway = MCPGateway()
 
     # Register core plugins
+    config = load_cli_config()
     markdown_plugin = MarkdownPlugin(storage)
     retrieval_plugin = DocumentRetrievalPlugin(storage)
     ingestion_plugin = IngestionPlugin(gateway.registry, storage=storage)
@@ -46,7 +72,8 @@ async def run_server(db_path: Path) -> int:
     feedback_plugin = FeedbackPlugin(storage)
     lifecycle_plugin = LifecyclePlugin(gateway.registry, storage)
 
-    gateway.registry.register(markdown_plugin)
+    markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
+    gateway.registry.register(markdown_plugin, semantic_types=markdown_semantic_types)
     gateway.registry.register(retrieval_plugin)
     gateway.registry.register(ingestion_plugin)
     gateway.registry.register(discovery_plugin)
@@ -76,8 +103,12 @@ async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
     storage.initialize()
 
     # Needs Plugins initialized so pipeline has somewhere to send data
+    config = load_cli_config()
     gateway = MCPGateway()
-    gateway.registry.register(MarkdownPlugin(storage))
+    markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
+    gateway.registry.register(
+        MarkdownPlugin(storage), semantic_types=markdown_semantic_types
+    )
 
     from team_mind_mcp.ingestion import IngestionPipeline
 
@@ -110,7 +141,7 @@ async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
     if not final_uris:
         return 1
 
-    bundle = await pipeline.ingest(final_uris)
+    bundle = await pipeline.ingest(final_uris, semantic_types=args.semantic_types)
     if bundle:
         print(
             f"Successfully broadcasted {len(bundle.uris)} items to plugins.",
@@ -151,6 +182,13 @@ def main() -> int:
     )
     ingest_parser.add_argument(
         "--exclude", type=str, action="append", help="Glob patterns to exclude"
+    )
+    ingest_parser.add_argument(
+        "--semantic-type",
+        dest="semantic_types",
+        action="append",
+        metavar="TYPE",
+        help="Semantic type(s) for this ingest. Repeatable.",
     )
 
     # Temporary fallback for testing/backwards compatibility if no args provided

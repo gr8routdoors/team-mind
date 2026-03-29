@@ -1,7 +1,7 @@
 """Sample plugins for testing dynamic loading. Not part of production."""
 
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestObserver, EventFilter
+from team_mind_mcp.server import ToolProvider, IngestObserver, IngestProcessor, EventFilter
 
 
 class SampleToolPlugin(ToolProvider):
@@ -33,3 +33,14 @@ class SampleObserverPlugin(IngestObserver):
     @property
     def event_filter(self) -> EventFilter | None:
         return getattr(self, "_event_filter_override", None)
+
+
+class SampleIngestProcessor(IngestProcessor):
+    """Sample ingest processor for testing semantic type routing."""
+
+    @property
+    def name(self) -> str:
+        return "sample_ingest_processor"
+
+    async def process_bundle(self, bundle) -> list:
+        return []

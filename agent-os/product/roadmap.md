@@ -15,9 +15,10 @@
 - **Tombstoning:** Flag bad documents out of results without deletion, reversible. *(SPEC-004 — COMPLETE)*
 - **Idempotent Ingestion:** Content hashing, plugin versioning, and IngestionContext for smart re-ingestion decisions. *(SPEC-005 — COMPLETE)*
 - **Plugin Lifecycle Management:** Dynamic registration/unregistration at runtime, filtered event subscriptions (topic-based + fire hose), persistent plugin state. *(SPEC-006 — IN DESIGN)*
+- **Semantic Type Routing (Phase A):** Three-type model (semantic type, media type, record type), registration-time routing, available vs enabled activation model, semantic_types on IngestionEvent/EventFilter. *(SPEC-008 — IN PROGRESS)*
 
 ## Phase 3: Scale & Enterprise
-- **Semantic Type Routing:** Three-type model (semantic type, media type, record type), registration-time routing, rename doctype → record_type. *(ADR-007 — ACCEPTED, needs spec)*
+- **Semantic Type Routing (Phase B):** Rename doctype → record_type throughout the codebase (breaking rename, deferred from Phase A). *(SPEC-008 Phase B)*
 - **Reliability Seeding:** Three-layer initial quality scoring (ingest hint, plugin default, plugin override). *(SPEC-007 — IN DESIGN)*
 - **Meta-Plugins / Chained Processing:** Observer-triggered secondary ingestion enabling complex processing pipelines (e.g., dependency audit across code + POM output). *(Future — see ADR-007 notes)*
 - **Database Migration:** Move from SQLite to self-hosted MongoDB (or similar) for robust vector and document storage at scale.

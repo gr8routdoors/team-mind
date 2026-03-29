@@ -26,7 +26,12 @@ class IngestionPlugin(ToolProvider):
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "List of URIs to ingest (e.g., file:///path/to/docs, https://example.com/api.md)",
-                        }
+                        },
+                        "semantic_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Semantic types for routing this ingest to matching processors.",
+                        },
                     },
                     "required": ["uris"],
                 },
@@ -41,8 +46,10 @@ class IngestionPlugin(ToolProvider):
         if not uris:
             raise ValueError("At least one URI is required for ingest_documents")
 
+        semantic_types = arguments.get("semantic_types")
+
         try:
-            bundle = await self.pipeline.ingest(uris)
+            bundle = await self.pipeline.ingest(uris, semantic_types=semantic_types)
             if bundle:
                 return [
                     TextContent(

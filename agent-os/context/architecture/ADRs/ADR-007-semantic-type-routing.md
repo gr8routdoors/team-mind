@@ -39,7 +39,7 @@ Plugins no longer receive every URI. Instead:
 
 1. **Plugins declare media type capabilities at build time** — "I can parse `.md`, `.txt`, `.rst`"
 2. **Semantic types are mapped to plugins at registration time** — "For `architecture_docs`, use MarkdownPlugin and JavaPlugin"
-3. **The ingestion caller specifies semantic type** — `ingest(uris, semantic_type="architecture_docs")`
+3. **The ingestion caller specifies semantic types** — `ingest(uris, semantic_types=["architecture_docs"])` — a list, supporting multiple types per bundle
 4. **The pipeline routes only to registered plugins** for that semantic type
 
 **Registration-time configuration, not build-time:**
@@ -88,7 +88,7 @@ gateway.registry.register(markdown_plugin, semantic_types=["architecture_docs"])
 gateway.registry.register(markdown_plugin)
 ```
 
-**First-run experience:** A fresh install requires the admin to associate core plugins with semantic types. The CLI could offer a `--enable-defaults` flag or an interactive setup to streamline this.
+**First-run experience:** The CLI loads `~/.team-mind.toml` (TOML format, Python 3.11+ stdlib `tomllib`) to configure compile-time plugin semantic type associations. If no config file exists, a built-in default registers MarkdownPlugin with `semantic_types=["*"]`, providing out-of-the-box markdown ingestion. Users override this by creating `~/.team-mind.toml`.
 
 ### 3. Media Type as Plugin Capability
 
@@ -101,7 +101,9 @@ class MarkdownPlugin(IngestProcessor):
         return ["text/markdown", "text/plain"]
 ```
 
-Within a bundle routed by semantic type, the plugin only receives URIs matching its media type capabilities. For a Maven project ingested as `semantic_type="payment_service"`:
+Media type filtering applies in **all pipeline modes** — including wildcard-only mode. Plugins never receive URIs for file types they don't support.
+
+Within a bundle routed by semantic type, the plugin only receives URIs matching its media type capabilities. For a Maven project ingested as `semantic_types=["payment_service"]`:
 - JavaPlugin (media: `text/x-java`) → gets `.java` files
 - MarkdownPlugin (media: `text/markdown`) → gets `.md` files
 - MavenPlugin (media: `application/xml`) → gets `pom.xml`
@@ -114,16 +116,16 @@ Media type can be auto-detected from file extension or explicitly hinted.
 
 ### 5. Updated IngestionEvent and EventFilter
 
-IngestionEvent gains `semantic_type`:
+IngestionEvent gains `semantic_types` (plural list — carries all types from the originating bundle):
 
 ```python
 @dataclass
 class IngestionEvent:
     plugin: str
-    record_type: str          # renamed from doctype
-    semantic_type: str         # NEW — from the ingest request
-    uris: list[str]
-    doc_ids: list[int]
+    doctype: str                                    # Phase A: unchanged (renamed in Phase B)
+    uris: list[str] = field(default_factory=list)
+    doc_ids: list[int] = field(default_factory=list)
+    semantic_types: list[str] = field(default_factory=list)  # NEW — plural
 ```
 
 EventFilter gains `semantic_types`:
@@ -132,20 +134,24 @@ EventFilter gains `semantic_types`:
 @dataclass
 class EventFilter:
     plugins: list[str] | None = None
-    record_types: list[str] | None = None   # renamed from doctypes
+    doctypes: list[str] | None = None        # Phase A: unchanged (renamed in Phase B)
     semantic_types: list[str] | None = None  # NEW
 ```
 
+Observer semantic type filtering uses ANY-match semantics: an event passes if any of its
+`semantic_types` values appears in the filter's `semantic_types` list.
+
 This enables observers to filter on any dimension:
 - "Notify me on any `payment_service` ingest" → `semantic_types=["payment_service"]`
-- "Notify me when `code_signature` records are written" → `record_types=["code_signature"]`
+- "Notify me when `markdown_chunk` records are written" → `doctypes=["markdown_chunk"]`
 - "Notify me on anything from `java_plugin`" → `plugins=["java_plugin"]`
 
-### 6. Schema Changes
+### 6. Schema Changes (Phase A)
+
+Note: `doctype → record_type` rename is Phase B. Phase A only adds new columns.
 
 ```sql
--- Rename doctype → record_type, add semantic_type and media_type
-ALTER TABLE documents RENAME COLUMN doctype TO record_type;
+-- Phase A: Add semantic_type and media_type to documents
 ALTER TABLE documents ADD COLUMN semantic_type TEXT DEFAULT '';
 ALTER TABLE documents ADD COLUMN media_type TEXT DEFAULT '';
 
@@ -153,10 +159,12 @@ ALTER TABLE documents ADD COLUMN media_type TEXT DEFAULT '';
 ALTER TABLE registered_plugins ADD COLUMN semantic_types JSON;
 ALTER TABLE registered_plugins ADD COLUMN supported_media_types JSON;
 
--- Update indexes
+-- Indexes
 CREATE INDEX idx_documents_semantic_type ON documents(semantic_type);
-CREATE INDEX idx_documents_record_type ON documents(record_type);
 ```
+
+`documents.semantic_type` stores a comma-joined string for multiple types
+(e.g., `"architecture_docs,booking_service"`). Default `''` for legacy rows.
 
 ## Alternatives Considered
 

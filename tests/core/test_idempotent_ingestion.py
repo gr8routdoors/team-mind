@@ -309,7 +309,7 @@ async def test_bundle_contains_contexts(tmp_path):
 
     registry = PluginRegistry()
     proc = _ContextTrackingProcessor()
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     f = tmp_path / "test.md"
@@ -342,7 +342,7 @@ async def test_context_flags_update_vs_new(tmp_path):
 
     registry = PluginRegistry()
     proc = _ContextTrackingProcessor()
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     existing_f = tmp_path / "existing.md"
@@ -365,7 +365,7 @@ async def test_no_existing_docs_means_fresh_context(tmp_path):
 
     registry = PluginRegistry()
     proc = _ContextTrackingProcessor()
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     f = tmp_path / "test.md"
@@ -390,7 +390,7 @@ async def test_markdown_skips_unchanged_content(tmp_path):
 
     plugin = MarkdownPlugin(storage)
     registry = PluginRegistry()
-    registry.register(plugin)
+    registry.register(plugin, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     md_file = tmp_path / "test.md"
@@ -423,7 +423,7 @@ async def test_markdown_replaces_changed_content(tmp_path):
 
     plugin = MarkdownPlugin(storage)
     registry = PluginRegistry()
-    registry.register(plugin)
+    registry.register(plugin, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     md_file = tmp_path / "test.md"
@@ -479,7 +479,7 @@ async def test_markdown_reprocesses_on_version_change(tmp_path):
     # Now ingest with current MarkdownPlugin (version 1.0.0)
     plugin = MarkdownPlugin(storage)
     registry = PluginRegistry()
-    registry.register(plugin)
+    registry.register(plugin, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     bundle = await pipeline.ingest([md_file.as_uri()])
@@ -504,7 +504,7 @@ async def test_markdown_fresh_ingest_stores_hash_and_version(tmp_path):
 
     plugin = MarkdownPlugin(storage)
     registry = PluginRegistry()
-    registry.register(plugin)
+    registry.register(plugin, semantic_types=["*"])
     pipeline = IngestionPipeline(registry, storage=storage)
 
     md_file = tmp_path / "test.md"

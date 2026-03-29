@@ -42,7 +42,9 @@ class StorageAdapter:
                     doctype TEXT NOT NULL DEFAULT '',
                     metadata JSON,
                     content_hash TEXT,
-                    plugin_version TEXT DEFAULT '0.0.0'
+                    plugin_version TEXT DEFAULT '0.0.0',
+                    semantic_type TEXT NOT NULL DEFAULT '',
+                    media_type TEXT NOT NULL DEFAULT ''
                 )
             """)
 
@@ -63,6 +65,14 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN plugin_version TEXT DEFAULT '0.0.0'"
                 )
+            if "semantic_type" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN semantic_type TEXT NOT NULL DEFAULT ''"
+                )
+            if "media_type" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN media_type TEXT NOT NULL DEFAULT ''"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -79,6 +89,10 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_uri_plugin_doctype
                 ON documents(uri, plugin, doctype)
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_semantic_type
+                ON documents(semantic_type)
             """)
             self._conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
@@ -125,6 +139,18 @@ class StorageAdapter:
                 )
             """)
 
+            # Migrate existing registered_plugins: add semantic_types and supported_media_types if missing
+            cursor = self._conn.execute("PRAGMA table_info(registered_plugins)")
+            plugin_columns = {row[1] for row in cursor.fetchall()}
+            if "semantic_types" not in plugin_columns:
+                self._conn.execute(
+                    "ALTER TABLE registered_plugins ADD COLUMN semantic_types JSON"
+                )
+            if "supported_media_types" not in plugin_columns:
+                self._conn.execute(
+                    "ALTER TABLE registered_plugins ADD COLUMN supported_media_types JSON"
+                )
+
     # --- Plugin persistence CRUD ---
 
     def save_plugin_record(
@@ -134,6 +160,8 @@ class StorageAdapter:
         module_path: str,
         config: dict | None = None,
         event_filter_json: dict | None = None,
+        semantic_types: list[str] | None = None,
+        supported_media_types: list[str] | None = None,
     ) -> None:
         """Persist a dynamically registered plugin."""
         if self._conn is None:
@@ -141,14 +169,19 @@ class StorageAdapter:
         with self._conn:
             self._conn.execute(
                 "INSERT OR REPLACE INTO registered_plugins "
-                "(plugin_name, plugin_type, module_path, config, event_filter) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(plugin_name, plugin_type, module_path, config, event_filter, "
+                "semantic_types, supported_media_types) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     plugin_name,
                     plugin_type,
                     module_path,
                     json.dumps(config) if config else None,
                     json.dumps(event_filter_json) if event_filter_json else None,
+                    json.dumps(semantic_types) if semantic_types is not None else None,
+                    json.dumps(supported_media_types)
+                    if supported_media_types is not None
+                    else None,
                 ),
             )
 
@@ -157,7 +190,8 @@ class StorageAdapter:
         if self._conn is None:
             raise RuntimeError("Database not initialized")
         cursor = self._conn.execute(
-            "SELECT plugin_name, plugin_type, module_path, config, event_filter "
+            "SELECT plugin_name, plugin_type, module_path, config, event_filter, "
+            "semantic_types, supported_media_types "
             "FROM registered_plugins WHERE enabled = 1"
         )
         return [
@@ -167,6 +201,8 @@ class StorageAdapter:
                 "module_path": row[2],
                 "config": json.loads(row[3]) if row[3] else None,
                 "event_filter": json.loads(row[4]) if row[4] else None,
+                "semantic_types": json.loads(row[5]) if row[5] else None,
+                "supported_media_types": json.loads(row[6]) if row[6] else None,
             }
             for row in cursor.fetchall()
         ]
@@ -203,6 +239,8 @@ class StorageAdapter:
         decay_half_life_days: float | None = None,
         content_hash: str | None = None,
         plugin_version: str = "0.0.0",
+        semantic_type: str = "",
+        media_type: str = "",
     ) -> int:
         """Saves a document, its embedding vector, and initializes its weight row."""
         if self._conn is None:
@@ -210,8 +248,8 @@ class StorageAdapter:
 
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version) "
-                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version, semantic_type, media_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 (
                     uri,
                     plugin,
@@ -219,6 +257,8 @@ class StorageAdapter:
                     json.dumps(metadata),
                     content_hash,
                     plugin_version,
+                    semantic_type,
+                    media_type,
                 ),
             )
             doc_id = cursor.fetchone()[0]

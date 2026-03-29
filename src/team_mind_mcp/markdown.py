@@ -5,6 +5,7 @@ from mcp.types import Tool, TextContent
 from team_mind_mcp.server import ToolProvider, IngestProcessor, DoctypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
+from team_mind_mcp.media_types import get_media_type
 
 
 def _mock_embed(text: str) -> list[float]:
@@ -34,6 +35,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
     @property
     def version(self) -> str:
         return "1.0.0"
+
+    @property
+    def supported_media_types(self) -> list[str]:
+        return ["text/markdown", "text/plain"]
 
     @property
     def doctypes(self) -> list[DoctypeSpec]:
@@ -105,14 +110,12 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         return [TextContent(type="text", text=response_text)]
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
-        """Filter for .md files, read them, chunk them, embed, and store."""
+        """Read URIs from bundle, chunk them, embed, and store."""
         processed_uris: list[str] = []
         doc_ids: list[int] = []
+        semantic_type = ",".join(bundle.semantic_types)
 
         for uri in bundle.uris:
-            if not uri.endswith(".md"):
-                continue
-
             # Fetch content (supporting file:// locally for MVP)
             try:
                 if uri.startswith("file://"):
@@ -143,6 +146,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 current_hash = _content_hash(content)
 
             processed_uris.append(uri)
+            media_type = get_media_type(uri)
 
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]
@@ -158,6 +162,8 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     doctype="markdown_chunk",
                     content_hash=current_hash,
                     plugin_version=self.version,
+                    semantic_type=semantic_type,
+                    media_type=media_type,
                 )
                 doc_ids.append(doc_id)
 
@@ -168,6 +174,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     doctype="markdown_chunk",
                     uris=processed_uris,
                     doc_ids=doc_ids,
+                    semantic_types=bundle.semantic_types,
                 )
             ]
         return []

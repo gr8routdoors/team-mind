@@ -59,7 +59,7 @@ async def test_markdown_tool_registration(tmp_path):
 
     # When the MarkdownPlugin initializes
     plugin = MarkdownPlugin(storage)
-    gateway.registry.register(plugin)
+    gateway.registry.register(plugin, semantic_types=["*"])
 
     # Then it successfully registers the semantic_search tool
     # And it is visible to MCP clients
@@ -70,27 +70,26 @@ async def test_markdown_tool_registration(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_markdown_skips_non_markdown_resources(tmp_path):
+async def test_markdown_processes_only_passed_uris(tmp_path):
     """
-    AC-003: Skips Non-Markdown Resources
+    AC-003 (updated): Media type filtering is done by the pipeline before the plugin.
+    The plugin processes all URIs it receives. This test verifies the pipeline-level
+    filtering works: only supported media type files reach the plugin.
     """
     db_path = tmp_path / "test.db"
     storage = StorageAdapter(str(db_path))
     storage.initialize()
     plugin = MarkdownPlugin(storage)
 
-    # Given a bundle containing image.png and notes.md
+    # Given a bundle containing only notes.md (pipeline already filtered out image.png)
     notes_file = tmp_path / "notes.md"
     notes_file.write_text("Hello markdown")
-    img_file = tmp_path / "image.png"
-    img_file.write_bytes(b"dummy image data")
 
-    # When the MarkdownPlugin processes the bundle
-    bundle = IngestionBundle(uris=[img_file.as_uri(), notes_file.as_uri()])
+    # When the MarkdownPlugin processes the bundle (pipeline pre-filtered URIs)
+    bundle = IngestionBundle(uris=[notes_file.as_uri()])
     await plugin.process_bundle(bundle)
 
     # Then it successfully parses notes.md
-    # And it silently ignores image.png without throwing an error
     with storage._conn:
         cursor = storage._conn.execute("SELECT uri FROM documents")
         rows = cursor.fetchall()

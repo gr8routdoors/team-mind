@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import List, Any, Dict
 from urllib.parse import urlparse
 
+from team_mind_mcp.media_types import filter_uris_by_media_type
+
 
 @dataclass
 class IngestionEvent:
@@ -13,6 +15,7 @@ class IngestionEvent:
     doctype: str
     uris: list[str] = field(default_factory=list)
     doc_ids: list[int] = field(default_factory=list)
+    semantic_types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -37,6 +40,7 @@ class IngestionBundle:
     uris: List[str]
     events: List[IngestionEvent] = field(default_factory=list)
     contexts: Dict[str, IngestionContext] = field(default_factory=dict)
+    semantic_types: list[str] = field(default_factory=list)
 
 
 class ResourceResolver:
@@ -122,7 +126,9 @@ class IngestionPipeline:
 
         return contexts
 
-    async def ingest(self, uris: List[str]) -> IngestionBundle | None:
+    async def ingest(
+        self, uris: List[str], semantic_types: list[str] | None = None
+    ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
         Returns the bundle with collected events, or None if no valid URIs."""
         resolved_uris = ResourceResolver.resolve(uris)
@@ -130,23 +136,40 @@ class IngestionPipeline:
         if not resolved_uris:
             return None  # No-Op
 
-        bundle = IngestionBundle(uris=resolved_uris)
+        bundle = IngestionBundle(
+            uris=resolved_uris, semantic_types=semantic_types or []
+        )
 
-        # Phase 1: Build contexts and broadcast to all processors
-        processors = self.registry.get_ingest_processors()
+        # Phase 1: Route to matching processors with per-processor bundle isolation.
+        # When semantic_types=None (unspecified), treat as [] — only wildcard processors.
+        # When semantic_types=[], only wildcard ["*"] processors receive the bundle.
+        # When semantic_types specified, route to matching + wildcard processors.
+        # Media type filtering always applies: processors only receive supported URIs.
         processor_tasks = []
+        processors = self.registry.get_processors_for_semantic_types(
+            semantic_types or []
+        )
 
         for processor in processors:
+            filtered_uris = filter_uris_by_media_type(
+                resolved_uris, processor.supported_media_types
+            )
+            if not filtered_uris:
+                continue
             doctype_names = [dt.name for dt in processor.doctypes]
             contexts = self._build_contexts(
-                resolved_uris,
+                filtered_uris,
                 processor.name,
                 processor.version,
                 doctype_names,
             )
-            # Attach contexts to bundle for this processor
-            bundle.contexts = contexts
-            processor_tasks.append(processor.process_bundle(bundle))
+            # Create a per-processor bundle with filtered URIs — no shared state
+            proc_bundle = IngestionBundle(
+                uris=filtered_uris,
+                contexts=contexts,
+                semantic_types=bundle.semantic_types,
+            )
+            processor_tasks.append(processor.process_bundle(proc_bundle))
 
         all_events: List[IngestionEvent] = []
         if processor_tasks:
@@ -170,6 +193,10 @@ class IngestionPipeline:
                     for e in all_events
                     if (ef.plugins is None or e.plugin in ef.plugins)
                     and (ef.doctypes is None or e.doctype in ef.doctypes)
+                    and (
+                        ef.semantic_types is None
+                        or any(st in ef.semantic_types for st in e.semantic_types)
+                    )
                 ]
                 if not filtered:
                     continue  # Skip observer entirely if nothing matches
