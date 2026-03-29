@@ -160,14 +160,13 @@ async def test_cli_ingest_argparse_repeatable_flag():
 async def test_ingest_documents_tool_without_semantic_types(tmp_path):
     """
     AC-003: calling ingest_documents without semantic_types passes None to pipeline gracefully.
-    When semantic_types is omitted (None), the pipeline uses the backward-compat path
-    and runs ALL registered processors regardless of their semantic_types registration.
+    When semantic_types is omitted, only wildcard ["*"] processors receive the bundle.
     """
-    # Given a registry with a processor registered without semantic_types
+    # Given a registry with a wildcard processor
     proc = _TrackingProcessor("proc_fallback")
     registry = PluginRegistry()
-    # Registered with no semantic_types — backward-compat: all processors receive the bundle
-    registry.register(proc)
+    # Registered as wildcard — receives all bundles regardless of semantic type
+    registry.register(proc, semantic_types=["*"])
 
     plugin = IngestionPlugin(registry)
 
@@ -184,7 +183,7 @@ async def test_ingest_documents_tool_without_semantic_types(tmp_path):
     assert len(response) == 1
     assert "Successfully queued" in response[0].text
 
-    # And the processor ran (backward-compat path: semantic_types=None passes all processors)
+    # And the wildcard processor received the bundle
     assert len(proc.received_bundles) == 1
 
     # And the bundle has an empty semantic_types list (pipeline assigns [] when None is provided)

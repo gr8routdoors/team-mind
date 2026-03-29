@@ -145,7 +145,7 @@ async def test_unfiltered_observer_gets_all(tmp_path, sample_events):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FireHoseObserver()
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -162,7 +162,7 @@ async def test_filtered_observer_gets_matching(tmp_path, sample_events):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FilteredObserver("filtered", EventFilter(plugins=["java_plugin"]))
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -180,7 +180,7 @@ async def test_filter_by_plugin_only(tmp_path, sample_events):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FilteredObserver("filtered", EventFilter(plugins=["java_plugin"]))
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -198,7 +198,7 @@ async def test_filter_by_doctype_only(tmp_path, sample_events):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FilteredObserver("filtered", EventFilter(doctypes=["code_signature"]))
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -219,7 +219,7 @@ async def test_combined_filter(tmp_path, sample_events):
         "filtered",
         EventFilter(plugins=["java_plugin"], doctypes=["code_signature"]),
     )
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -238,7 +238,7 @@ async def test_no_matching_events_skips_observer(tmp_path, sample_events):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs = _FilteredObserver("filtered", EventFilter(plugins=["nonexistent_plugin"]))
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -256,7 +256,7 @@ async def test_mixed_filtered_and_unfiltered(tmp_path, sample_events):
     proc = _EventEmittingProcessor("emitter", sample_events)
     obs_all = _FireHoseObserver("firehose")
     obs_filtered = _FilteredObserver("filtered", EventFilter(plugins=["travel_plugin"]))
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs_all)
     registry.register(obs_filtered)
 

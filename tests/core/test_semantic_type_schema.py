@@ -18,7 +18,9 @@ def test_ac001_documents_table_has_semantic_type_column(tmp_path):
     # When the documents table schema is inspected
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.execute("PRAGMA table_info(documents)")
-        columns = {row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()}
+        columns = {
+            row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()
+        }
 
     # Then a semantic_type column exists with type TEXT and default value ''
     assert "semantic_type" in columns
@@ -39,7 +41,9 @@ def test_ac002_documents_table_has_media_type_column(tmp_path):
     # When the documents table schema is inspected
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.execute("PRAGMA table_info(documents)")
-        columns = {row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()}
+        columns = {
+            row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()
+        }
 
     # Then a media_type column exists with type TEXT and default value ''
     assert "media_type" in columns
@@ -149,7 +153,9 @@ def test_ac004_migration_applies_to_existing_data(tmp_path):
     adapter.close()
 
 
-def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_columns(tmp_path):
+def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_columns(
+    tmp_path,
+):
     """AC-005: registered_plugins table gains semantic_types and supported_media_types columns."""
     db_path = tmp_path / "test.db"
 
@@ -160,7 +166,9 @@ def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_c
     # When the registered_plugins table schema is inspected
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.execute("PRAGMA table_info(registered_plugins)")
-        columns = {row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()}
+        columns = {
+            row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()
+        }
 
     # Then semantic_types column exists with type JSON and no default (NULL)
     assert "semantic_types" in columns
@@ -240,7 +248,9 @@ def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
         rows = cursor.fetchall()
 
     assert len(rows) == 1
-    plugin_name, plugin_type, module_path, semantic_types, supported_media_types = rows[0]
+    plugin_name, plugin_type, module_path, semantic_types, supported_media_types = rows[
+        0
+    ]
     assert plugin_name == "my_plugin"
     assert plugin_type == "tool_provider"
     assert module_path == "my.module.Plugin"

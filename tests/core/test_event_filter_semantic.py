@@ -91,7 +91,7 @@ async def test_filter_by_semantic_type(tmp_path):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", events)
     obs = _FilteredObserver("filtered", ef)
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -148,7 +148,7 @@ async def test_combined_plugin_and_semantic_type_filter(tmp_path):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", events)
     obs = _FilteredObserver("filtered", ef)
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -187,7 +187,7 @@ async def test_none_semantic_types_matches_all(tmp_path):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", events)
     obs = _FilteredObserver("filtered", ef)
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)
@@ -227,7 +227,7 @@ async def test_empty_semantic_types_matches_no_events(tmp_path):
     registry = PluginRegistry()
     proc = _EventEmittingProcessor("emitter", events)
     obs = _FilteredObserver("filtered", ef)
-    registry.register(proc)
+    registry.register(proc, semantic_types=["*"])
     registry.register(obs)
 
     pipeline = IngestionPipeline(registry)

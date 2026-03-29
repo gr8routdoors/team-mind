@@ -105,8 +105,8 @@ async def test_phase1_collects_events(tmp_path):
     AC-001: Phase 1 Collects Events
     """
     registry = PluginRegistry()
-    registry.register(_ProcessorA())
-    registry.register(_ProcessorB())
+    registry.register(_ProcessorA(), semantic_types=["*"])
+    registry.register(_ProcessorB(), semantic_types=["*"])
     pipeline = IngestionPipeline(registry)
 
     f = tmp_path / "test.md"
@@ -126,7 +126,7 @@ async def test_phase2_broadcasts_to_observers(tmp_path):
     AC-002: Phase 2 Broadcasts to Observers
     """
     registry = PluginRegistry()
-    registry.register(_ProcessorA())
+    registry.register(_ProcessorA(), semantic_types=["*"])
     observer = _TrackingObserver()
     registry.register(observer)
     pipeline = IngestionPipeline(registry)
@@ -151,7 +151,7 @@ async def test_observers_run_after_processors_complete(tmp_path):
     timing_obs = _TimingObserver(slow)
 
     registry = PluginRegistry()
-    registry.register(slow)
+    registry.register(slow, semantic_types=["*"])
     registry.register(timing_obs)
     pipeline = IngestionPipeline(registry)
 
@@ -171,7 +171,7 @@ async def test_no_events_still_calls_observers(tmp_path):
     AC-004: No Events Means No Observer Phase
     """
     registry = PluginRegistry()
-    registry.register(_EmptyProcessor())
+    registry.register(_EmptyProcessor(), semantic_types=["*"])
     observer = _TrackingObserver()
     registry.register(observer)
     pipeline = IngestionPipeline(registry)
@@ -193,7 +193,7 @@ async def test_pipeline_returns_events(tmp_path):
     AC-005: Pipeline Returns Events
     """
     registry = PluginRegistry()
-    registry.register(_ProcessorA())
+    registry.register(_ProcessorA(), semantic_types=["*"])
     pipeline = IngestionPipeline(registry)
 
     f = tmp_path / "test.md"
@@ -214,8 +214,10 @@ async def test_multiple_processors_emit_events(tmp_path):
     AC-006: Multiple Processors Emit Events
     """
     registry = PluginRegistry()
-    registry.register(_ProcessorA())  # emits 2 events
-    registry.register(_ProcessorB())  # emits 3... wait, 1 event with 3 doc_ids
+    registry.register(_ProcessorA(), semantic_types=["*"])  # emits 2 events
+    registry.register(
+        _ProcessorB(), semantic_types=["*"]
+    )  # emits 3... wait, 1 event with 3 doc_ids
     pipeline = IngestionPipeline(registry)
 
     f = tmp_path / "test.md"

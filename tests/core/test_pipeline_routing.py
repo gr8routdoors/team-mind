@@ -334,3 +334,36 @@ async def test_no_matching_processors_returns_empty_events(tmp_path):
     # And no events are produced
     assert bundle.events == []
     assert len(proc.received_bundles) == 0
+
+
+# ---------------------------------------------------------------------------
+# semantic_types=None behaves as empty list (wildcard-only)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_none_semantic_types_routes_to_wildcard_only(tmp_path):
+    """
+    When semantic_types=None (not provided), behaves like [] — wildcard only.
+    No blind broadcast to all registered processors.
+    """
+    # Given a specific processor and a wildcard processor
+    proc_specific = _TrackingProcessor("proc_arch")
+    proc_wildcard = _TrackingProcessor("proc_wildcard")
+
+    registry = PluginRegistry()
+    registry.register(proc_specific, semantic_types=["architecture_docs"])
+    registry.register(proc_wildcard, semantic_types=["*"])
+
+    pipeline = IngestionPipeline(registry)
+
+    f = tmp_path / "doc.md"
+    f.write_text("content")
+
+    # When semantic_types is not provided (None)
+    bundle = await pipeline.ingest([f.as_uri()])
+
+    # Then only the wildcard processor receives the bundle
+    assert bundle is not None
+    assert len(proc_wildcard.received_bundles) == 1
+    assert len(proc_specific.received_bundles) == 0
