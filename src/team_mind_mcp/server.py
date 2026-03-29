@@ -59,6 +59,16 @@ class IngestProcessor(ABC):
         return "0.0.0"
 
     @property
+    def supported_media_types(self) -> list[str] | None:
+        """Media types this processor accepts. Override to restrict.
+
+        Returns:
+            A list of MIME type strings (e.g. ``["text/markdown", "text/plain"]``),
+            or ``None`` to accept all URIs (default, backward-compatible).
+        """
+        return None
+
+    @property
     def doctypes(self) -> List[DoctypeSpec]:
         """Declare document types this plugin produces. Override to declare."""
         return []
@@ -77,6 +87,7 @@ class EventFilter:
 
     plugins: list[str] | None = None
     doctypes: list[str] | None = None
+    semantic_types: list[str] | None = None
 
 
 class IngestObserver(ABC):
