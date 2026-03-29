@@ -437,9 +437,14 @@ The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantSt
 - Add tests for metadata filters and optional vector query.
 - *Stories:* STORY-008
 
-### Task 9: Documentation
-- Update system overview with sharding model.
+### Task 9: Documentation and Diagrams
+- Update system overview with sharding model and TenantStorageManager.
+- Add mermaid diagrams to system overview and/or design docs:
+  - Tenant sharding file layout (system.sqlite + per-tenant data.sqlite).
+  - Scatter-gather query flow (single-tenant vs cross-tenant).
+  - TenantStorageManager component relationships (manager → adapters → databases).
 - Update plugin developer guide (plugins don't know about tenants).
+- Update repo README: development status for SPEC-010, update architecture diagram to show multi-tenancy layer.
 - Update ADR-002 with cross-references.
 - Update roadmap with SPEC-010 status.
 - *Stories:* STORY-009

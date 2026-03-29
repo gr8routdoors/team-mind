@@ -102,11 +102,15 @@ stories:
     verified_by: []
 
   STORY-009:
-    name: Update Documentation
+    name: Update Documentation and Diagrams
     description: >
-      Update system overview with sharding model and metadata search.
-      Update plugin developer guide: plugins don't know about tenants,
-      tenant routing is pipeline/manager concern. Update ADR-002 with
+      Update system overview with sharding model, metadata search, and
+      TenantStorageManager. Add mermaid diagrams: tenant sharding file
+      layout, scatter-gather query flow, TenantStorageManager component
+      relationships. Update plugin developer guide: plugins don't know
+      about tenants, tenant routing is pipeline/manager concern. Update
+      repo README: development status for SPEC-010, update architecture
+      diagram to show multi-tenancy layer. Update ADR-002 with
       cross-references to ADR-008 and ADR-010. Update roadmap with
       SPEC-010 status. Ensure structural-vs-metadata field guidance
       is documented.

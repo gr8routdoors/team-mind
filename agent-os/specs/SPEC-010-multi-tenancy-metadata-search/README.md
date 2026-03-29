@@ -63,4 +63,4 @@ See `stories.yml` for current status.
 | STORY-006 | Cross-Tenant Scatter-Gather | pending |
 | STORY-007 | MCP Tools and CLI | pending |
 | STORY-008 | Update Existing Tests | pending |
-| STORY-009 | Update Documentation | pending |
+| STORY-009 | Update Documentation and Diagrams | pending |

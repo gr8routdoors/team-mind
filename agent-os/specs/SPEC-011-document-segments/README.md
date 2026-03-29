@@ -60,4 +60,4 @@ See `stories.yml` for current status.
 | STORY-006 | Aggregate Parent Scoring | pending |
 | STORY-007 | Delete Operations (Cascade + delete_by_id) | pending |
 | STORY-008 | MarkdownPlugin Segment Migration | pending |
-| STORY-009 | Update Documentation and Fix Stale References | pending |
+| STORY-009 | Update Documentation, Diagrams, and Fix Stale References | pending |

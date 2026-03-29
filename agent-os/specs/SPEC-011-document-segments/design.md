@@ -410,9 +410,13 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 - Update existing MarkdownPlugin tests.
 - *Stories:* STORY-008
 
-### Task 9: Documentation
+### Task 9: Documentation, Diagrams, and Stale Reference Fixes
 - Update plugin developer guide (segments section + stale reference fixes).
-- Update system overview (segments, development status).
+- Add mermaid diagrams to system overview and/or design docs:
+  - Parent-child document hierarchy (parent → segments, standalone).
+  - Ingestion flow with segments (save_parent → save_payload with parent_id).
+  - Segment navigation flow (get_document_with_segments).
+- Update system overview (segments model, development status).
 - Update README (development status).
 - Add cross-references to ADR-002, ADR-003.
 - *Stories:* STORY-009

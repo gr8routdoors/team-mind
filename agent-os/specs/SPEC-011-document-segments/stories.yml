@@ -95,14 +95,18 @@ stories:
     verified_by: []
 
   STORY-009:
-    name: Update Documentation and Fix Stale References
+    name: Update Documentation, Diagrams, and Fix Stale References
     description: >
       Update plugin developer guide: add "Working with Segments" section with
       examples, update "Chunks are a plugin concept" section, fix stale
       doctype/DoctypeSpec references to record_type/RecordTypeSpec throughout
       code examples, add ADR-008/009 and SPEC-010/011 to reference table.
-      Update system overview: add segment model, update development status for
-      SPEC-006 through SPEC-011. Update README.md: update development status
+      Add mermaid diagrams to system overview and/or design docs: parent-child
+      document hierarchy, ingestion flow with segments (save_parent then
+      save_payload with parent_id), segment navigation flow
+      (get_document_with_segments). Update system overview: add segment model
+      to architecture description, update development status for SPEC-006
+      through SPEC-011. Update README.md: update development status
       (SPEC-006/007/008/009 complete, add SPEC-010/011). Update ADR-002:
       add cross-reference to ADR-009, note segments formalize chunking. Update
       ADR-003: add cross-reference to ADR-009, note segments formalize
