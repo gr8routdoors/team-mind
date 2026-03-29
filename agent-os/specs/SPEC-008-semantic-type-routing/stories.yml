@@ -43,8 +43,8 @@ stories:
       registered for that semantic type. Filter URIs within the bundle by
       each processor's supported_media_types. When no semantic_type, fall
       back to broadcast-to-all (backward compatible).
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-006:
     name: EventFilter Semantic Type Support
