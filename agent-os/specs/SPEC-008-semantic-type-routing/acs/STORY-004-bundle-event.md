@@ -1,4 +1,4 @@
-# STORY-004: Semantic Type on IngestionBundle and IngestionEvent — Acceptance Criteria
+# STORY-004: Semantic Types on IngestionBundle and IngestionEvent — Acceptance Criteria
 
 ---
 
@@ -6,34 +6,34 @@
 
 | AC | Title | Coverage |
 |----|-------|----------|
-| AC-001 | IngestionBundle Has semantic_type Field | Happy path |
-| AC-002 | IngestionEvent Has semantic_type Field | Happy path |
-| AC-003 | Semantic Type Propagates from Bundle to Event | Integration |
-| AC-004 | Default semantic_type Is None on Bundle and Empty on Event | Edge case |
+| AC-001 | IngestionBundle Has semantic_types Field | Happy path |
+| AC-002 | IngestionEvent Has semantic_types Field | Happy path |
+| AC-003 | Semantic Types Propagate from Bundle to Event | Integration |
+| AC-004 | Default semantic_types Is Empty List on Both | Edge case |
 
 ---
 
-### AC-001: IngestionBundle Has semantic_type Field
+### AC-001: IngestionBundle Has semantic_types Field
 
-**Given** an `IngestionBundle` constructed with `semantic_type="architecture_docs"`
-**When** `semantic_type` is accessed
-**Then** it returns `"architecture_docs"`
+**Given** an `IngestionBundle` constructed with `semantic_types=["architecture_docs", "meeting_notes"]`
+**When** `semantic_types` is accessed
+**Then** it returns `["architecture_docs", "meeting_notes"]`
 
-### AC-002: IngestionEvent Has semantic_type Field
+### AC-002: IngestionEvent Has semantic_types Field
 
-**Given** an `IngestionEvent` constructed with `semantic_type="architecture_docs"`
-**When** `semantic_type` is accessed
-**Then** it returns `"architecture_docs"`
+**Given** an `IngestionEvent` constructed with `semantic_types=["architecture_docs"]`
+**When** `semantic_types` is accessed
+**Then** it returns `["architecture_docs"]`
 
-### AC-003: Semantic Type Propagates from Bundle to Event
+### AC-003: Semantic Types Propagate from Bundle to Event
 
-**Given** an `IngestionBundle` with `semantic_type="meeting_notes"`
+**Given** an `IngestionBundle` with `semantic_types=["meeting_notes", "design_specs"]`
 **When** a processor creates an `IngestionEvent` from this bundle
-**Then** the event's `semantic_type` is `"meeting_notes"`
+**Then** the event's `semantic_types` is `["meeting_notes", "design_specs"]`
 
-### AC-004: Default semantic_type Is None on Bundle and Empty on Event
+### AC-004: Default semantic_types Is Empty List on Both
 
-**Given** an `IngestionBundle` created without specifying `semantic_type`
-**When** `semantic_type` is accessed on the bundle
-**Then** it returns `None`
-**And** given an `IngestionEvent` created without specifying `semantic_type`, it defaults to `""`
+**Given** an `IngestionBundle` created without specifying `semantic_types`
+**When** `semantic_types` is accessed on the bundle
+**Then** it returns `[]`
+**And** given an `IngestionEvent` created without specifying `semantic_types`, it also returns `[]`
