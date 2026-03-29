@@ -3,7 +3,7 @@ name = "team-mind-mcp"
 version = "0.1.0"
 description = "Team Mind Core Engine MCP Server"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.0.0",
     "sqlite-vec>=0.1.1",
