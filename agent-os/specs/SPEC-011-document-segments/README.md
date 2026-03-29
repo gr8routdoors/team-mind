@@ -14,6 +14,8 @@ Introduces a formal parent-child relationship on the `documents` table via a `pa
 - `get_document_with_segments()` storage method for parent/sibling navigation.
 - Aggregate parent scoring computed at query time (AVG of children's usage_score).
 - Cascade delete: `delete_by_uri` on a parent also deletes child segments.
+- `delete_by_id()` for surgical single-document deletion (cascades automatically for parents).
+- URI convention for segments (parent URI + segment-specific suffix).
 - MarkdownPlugin updated to create parent documents per source file, with paragraph chunks as segments.
 - Update plugin developer guide with segment patterns and examples.
 - Update system overview, README, and relevant ADRs with cross-references.
@@ -56,6 +58,6 @@ See `stories.yml` for current status.
 | STORY-004 | Parent ID in Search Results | pending |
 | STORY-005 | Get Document with Segments | pending |
 | STORY-006 | Aggregate Parent Scoring | pending |
-| STORY-007 | Cascade Delete for Parent Documents | pending |
+| STORY-007 | Delete Operations (Cascade + delete_by_id) | pending |
 | STORY-008 | MarkdownPlugin Segment Migration | pending |
 | STORY-009 | Update Documentation and Fix Stale References | pending |

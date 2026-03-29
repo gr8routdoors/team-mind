@@ -16,10 +16,11 @@ stories:
     name: Save Parent Storage Method
     description: >
       Implement save_parent() on StorageAdapter. Creates a document row with
-      the provided URI, plugin, record_type, tenant_id, metadata, and other
-      fields. Does NOT insert into vec_documents (no vector). Does NOT insert
-      into doc_weights (no weight — score is derived from children). Returns
-      the document ID for child segments to reference.
+      the provided URI, plugin, record_type, metadata, and other fields.
+      No tenant_id parameter — StorageAdapter operates on a single per-tenant
+      database (per ADR-010). Does NOT insert into vec_documents (no vector).
+      Does NOT insert into doc_weights (no weight — score is derived from
+      children). Returns the document ID for child segments to reference.
     status: pending
     verified_by: []
 
@@ -67,14 +68,17 @@ stories:
     verified_by: []
 
   STORY-007:
-    name: Cascade Delete for Parent Documents
+    name: Delete Operations (Cascade + delete_by_id)
     description: >
       Update delete_by_uri to cascade delete children when a parent document
       is deleted. For each matching document, check for children via parent_id.
       Collect all child IDs and delete their weights, vectors, and document
       rows alongside the parent. Return total count of all deleted documents
-      (parent + children). Segments deleted individually do not affect parent
-      or siblings.
+      (parent + children). Implement delete_by_id(doc_id) for surgical
+      single-document deletion: if the document is a parent, cascade deletes
+      all children; if a segment, deletes only that segment (parent and
+      siblings unaffected); if standalone, deletes just that document.
+      No cascade flag — parents always cascade, segments are always surgical.
     status: pending
     verified_by: []
 
@@ -116,6 +120,7 @@ verification:
     - get_document_with_segments navigates parent/segment/standalone cases correctly.
     - get_parent_aggregate_score returns AVG of non-tombstoned children's scores.
     - delete_by_uri cascades to children when deleting a parent.
+    - delete_by_id cascades for parents, is surgical for segments.
     - MarkdownPlugin creates parent per source file and segments per paragraph.
     - Existing standalone documents (parent_id=NULL) continue to work identically.
     - Documentation is updated with segment patterns and stale references fixed.

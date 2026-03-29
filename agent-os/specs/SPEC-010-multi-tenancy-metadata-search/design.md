@@ -2,124 +2,193 @@
 
 ## Overview
 
-Adds required `tenant_id` to all documents and metadata search filters to the query path. All changes are breaking (no backward compatibility required). The `semantic_search` tool becomes the single composable query surface for vector similarity, metadata filtering, tenant scoping, and weight ranking.
+Introduces required multi-tenancy via per-tenant SQLite database sharding and metadata search filters on the query path. Each tenant gets its own database file; a global `system.sqlite` holds the plugin registry and tenant directory. The `semantic_search` tool becomes the single composable query surface for vector similarity, metadata filtering, tenant scoping, and weight ranking. Cross-tenant queries use scatter-gather across shards.
+
+## Design Amendments (vs Original Spec)
+
+| Amendment | Original | Revised |
+|-----------|----------|---------|
+| Tenant isolation mechanism | `tenant_id` column on `documents` | Per-tenant SQLite file sharding (ADR-010) |
+| `tenant_id` on StorageAdapter methods | Required parameter on `save_payload`, `delete_by_uri`, `lookup_existing_docs` | Removed — `TenantStorageManager` routes to the correct database |
+| `tenant_ids` on `retrieve_by_vector_similarity` | WHERE clause filter | Removed — cross-tenant uses scatter-gather |
+| Composite identity key | `(uri, plugin, record_type, tenant_id)` | `(uri, plugin, record_type)` — tenant is the database |
+| KNN over-fetch for tenant filters | Dynamic multiplier adjustment | Not needed — KNN operates within shard |
+| `registered_plugins` table | Per-database | Global in `system.sqlite` |
+| `IngestionPipeline.ingest()` | `tenant_id` as WHERE clause | `tenant_id` routes to shard via `TenantStorageManager` |
 
 ## Components
 
 | Component | Type | Change |
 |-----------|------|--------|
-| documents table | Storage | **Extended** — `tenant_id TEXT NOT NULL` column, updated indexes. |
-| StorageAdapter.save_payload | Storage | **Extended** — Required `tenant_id` parameter. |
-| StorageAdapter.delete_by_uri | Storage | **Extended** — Scoped by `tenant_id`. |
-| StorageAdapter.lookup_existing_docs | Storage | **Extended** — Scoped by `tenant_id`. |
-| StorageAdapter.retrieve_by_vector_similarity | Storage | **Extended** — `tenant_ids` filter, `metadata_filters`, optional vector. |
-| IngestionBundle | Data Model | **Extended** — `tenant_id: str` field (default `"default"`). |
-| IngestionEvent | Data Model | **Extended** — `tenant_id: str` field. |
-| IngestionPipeline | Event Loop | **Extended** — Propagates `tenant_id` to processors and events. |
-| MarkdownPlugin | Plugin | **Updated** — Passes `tenant_id` to `save_payload`. |
+| TenantStorageManager | Storage | **New** — Manages per-tenant databases, scatter-gather, tenant lifecycle. |
+| system.sqlite | Storage | **New** — Global database for `registered_plugins` and `tenants` tables. |
+| Per-tenant data.sqlite | Storage | **New** — Per-tenant `documents`, `vec_documents`, `doc_weights`. |
+| StorageAdapter | Storage | **Unchanged** — Operates on a single database. No `tenant_id` parameters. |
+| StorageAdapter.retrieve_by_vector_similarity | Storage | **Extended** — `metadata_filters` parameter, optional `target_vector`. |
+| IngestionBundle | Data Model | **Extended** — `tenant_id: str` field (default `"default"`) for routing. |
+| IngestionEvent | Data Model | **Extended** — `tenant_id: str` field for observer awareness. |
+| IngestionPipeline.ingest | Event Loop | **Extended** — `tenant_id: str = "default"` parameter, routes to shard. |
+| MarkdownPlugin | Plugin | **Unchanged** — Writes to whichever StorageAdapter the pipeline provides. |
 | IngestionPlugin | Plugin | **Updated** — `tenant_id` parameter on `ingest_documents` tool. |
 | semantic_search tool | Plugin (Markdown) | **Extended** — `tenant_ids` and `metadata_filters` parameters, optional `query`. |
+| FeedbackPlugin | Plugin | **Updated** — `tenant_id` parameter on `provide_feedback` tool. |
 | CLI | Entry Point | **Extended** — `--tenant-id` flag on ingest subcommand. |
 
 ## Data Model
 
-### Schema changes
+### File layout
+
+```
+~/.team-mind/
+  system.sqlite                     # Global: registered_plugins, tenants
+  tenants/
+    default/data.sqlite             # Default tenant
+    user-123/data.sqlite            # Per-tenant data
+    user-456/data.sqlite
+```
+
+### system.sqlite schema
 
 ```sql
--- Add required tenant_id to documents
-ALTER TABLE documents ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default';
+-- Plugin registry (moved from per-database to global)
+CREATE TABLE registered_plugins (
+    plugin_name TEXT PRIMARY KEY,
+    plugin_type TEXT NOT NULL,
+    module_path TEXT NOT NULL,
+    config JSON,
+    event_filter JSON,
+    semantic_types JSON,
+    supported_media_types JSON,
+    enabled INTEGER DEFAULT 1,
+    registered_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
--- Replace old composite index with tenant-aware version
-DROP INDEX IF EXISTS idx_documents_uri_plugin_record_type;
-CREATE INDEX idx_documents_uri_plugin_record_type_tenant
-    ON documents(uri, plugin, record_type, tenant_id);
-
--- Tenant query index
-CREATE INDEX idx_documents_tenant_id ON documents(tenant_id);
+-- Tenant directory
+CREATE TABLE tenants (
+    tenant_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    metadata JSON
+);
 ```
 
-### Updated composite identity
+### Per-tenant data.sqlite schema
 
-The uniqueness/idempotency key changes from `(uri, plugin, record_type)` to `(uri, plugin, record_type, tenant_id)`. This means:
-- The same URI can exist in different tenants without collision.
-- `lookup_existing_docs` and `delete_by_uri` both require `tenant_id`.
-- A document's tenant is immutable after creation (like its URI).
+The existing `documents`, `vec_documents`, and `doc_weights` tables — **without** a `tenant_id` column. The database file IS the tenant scope. Composite identity key: `(uri, plugin, record_type)`.
 
-### StorageAdapter.save_payload extension
+```sql
+CREATE TABLE documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uri TEXT NOT NULL,
+    plugin TEXT NOT NULL DEFAULT '',
+    record_type TEXT NOT NULL DEFAULT '',
+    metadata JSON,
+    content_hash TEXT,
+    plugin_version TEXT DEFAULT '0.0.0',
+    semantic_type TEXT NOT NULL DEFAULT '',
+    media_type TEXT NOT NULL DEFAULT ''
+);
+
+-- Indexes (same as current, no tenant_id)
+CREATE INDEX idx_documents_plugin ON documents(plugin);
+CREATE INDEX idx_documents_record_type ON documents(record_type);
+CREATE INDEX idx_documents_plugin_record_type ON documents(plugin, record_type);
+CREATE INDEX idx_documents_uri_plugin_record_type ON documents(uri, plugin, record_type);
+CREATE INDEX idx_documents_semantic_type ON documents(semantic_type);
+
+CREATE VIRTUAL TABLE vec_documents USING vec0(
+    id INTEGER PRIMARY KEY,
+    embedding float[768]
+);
+
+CREATE TABLE doc_weights (
+    doc_id INTEGER PRIMARY KEY REFERENCES documents(id),
+    usage_score REAL DEFAULT 0.0,
+    signal_count INTEGER DEFAULT 0,
+    last_accessed TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    tombstoned INTEGER DEFAULT 0,
+    decay_half_life_days REAL
+);
+
+CREATE INDEX idx_doc_weights_tombstoned ON doc_weights(tombstoned);
+```
+
+### TenantStorageManager
 
 ```python
-def save_payload(
-    self,
-    uri: str,
-    metadata: dict,
-    vector: list[float],
-    plugin: str,
-    record_type: str,
-    tenant_id: str,                          # NEW — required, no default
-    decay_half_life_days: float | None = None,
-    content_hash: str | None = None,
-    plugin_version: str = "0.0.0",
-    semantic_type: str = "",
-    media_type: str = "",
-    initial_score: float = 0.0,
-) -> int:
+class TenantStorageManager:
+    """Manages per-tenant SQLite databases and cross-tenant queries."""
+
+    def __init__(self, base_path: str):
+        self.base_path = base_path           # e.g., ~/.team-mind/
+        self._adapters: dict[str, StorageAdapter] = {}
+        self._system_conn: sqlite3.Connection | None = None
+
+    def initialize(self) -> None:
+        """Initialize system.sqlite and ensure default tenant exists."""
+
+    def get_adapter(self, tenant_id: str) -> StorageAdapter:
+        """Get or lazily create a StorageAdapter for a tenant.
+
+        Opens the tenant's data.sqlite, initializes tables if new.
+        Raises ValueError if tenant is not registered in system.sqlite.
+        """
+
+    def create_tenant(self, tenant_id: str, metadata: dict | None = None) -> None:
+        """Register a new tenant in system.sqlite. Creates tenant directory
+        and data.sqlite on first access (lazy)."""
+
+    def list_tenants(self) -> list[dict]:
+        """List all registered tenants from system.sqlite."""
+
+    def query_across_tenants(
+        self,
+        tenant_ids: list[str],
+        query_fn: Callable[[StorageAdapter], list[dict]],
+        limit: int,
+        sort_key: str = "final_rank",
+        sort_ascending: bool = True,
+    ) -> list[dict]:
+        """Scatter-gather: run query_fn on each tenant shard, merge results.
+
+        Runs each shard query sequentially (MVP). Results from all shards
+        are collected, sorted by sort_key, and trimmed to limit.
+        """
+
+    # --- Plugin registry (delegates to system.sqlite) ---
+
+    def save_plugin_record(self, ...) -> None:
+        """Save plugin record to system.sqlite."""
+
+    def get_enabled_plugin_records(self) -> list[dict]:
+        """Get enabled plugins from system.sqlite."""
+
+    def disable_plugin_record(self, plugin_name: str) -> bool:
+        """Disable a plugin in system.sqlite."""
+
+    def delete_plugin_record(self, plugin_name: str) -> bool:
+        """Delete a plugin from system.sqlite."""
+
+    def close(self) -> None:
+        """Close all tenant adapters and system connection."""
 ```
 
-`tenant_id` is required at the storage layer with no default. The MCP tool layer provides the `"default"` ergonomic default.
+**Connection management:**
+- Tenant databases are opened lazily on first `get_adapter` call.
+- LRU eviction policy closes idle connections (configurable max, default 64).
+- Default tenant auto-created on `initialize()`.
 
-### StorageAdapter.delete_by_uri extension
+### StorageAdapter changes
 
-```python
-def delete_by_uri(
-    self,
-    uri: str,
-    plugin: str,
-    record_type: str,
-    tenant_id: str,                          # NEW — required
-) -> int:
-```
+`StorageAdapter` is **unchanged** in its method signatures — no `tenant_id` parameter anywhere. It continues to operate on a single database file.
 
-### StorageAdapter.lookup_existing_docs extension
-
-```python
-def lookup_existing_docs(
-    self,
-    uri: str,
-    plugin: str,
-    record_type: str,
-    tenant_id: str,                          # NEW — required
-) -> list[dict]:
-```
-
-### IngestionBundle extension
-
-```python
-@dataclass
-class IngestionBundle:
-    uris: List[str]
-    events: List[IngestionEvent] = field(default_factory=list)
-    contexts: Dict[str, IngestionContext] = field(default_factory=dict)
-    semantic_types: list[str] = field(default_factory=list)
-    reliability_hint: float | None = None
-    tenant_id: str = "default"               # NEW
-```
-
-### IngestionEvent extension
-
-```python
-@dataclass
-class IngestionEvent:
-    plugin: str
-    record_type: str
-    uris: list[str] = field(default_factory=list)
-    doc_ids: list[int] = field(default_factory=list)
-    semantic_types: list[str] = field(default_factory=list)
-    tenant_id: str = "default"               # NEW
-```
+The only change: `StorageAdapter.initialize()` no longer creates the `registered_plugins` table. Plugin registry is managed by `TenantStorageManager` on `system.sqlite`.
 
 ## Query Model
 
-### retrieve_by_vector_similarity extension
+### retrieve_by_vector_similarity — metadata filters and optional vector
+
+`StorageAdapter.retrieve_by_vector_similarity` gains metadata filters and optional vector. No tenant parameters — it operates within one shard.
 
 ```python
 def retrieve_by_vector_similarity(
@@ -128,44 +197,20 @@ def retrieve_by_vector_similarity(
     limit: int = 5,
     plugins: list[str] | None = None,
     record_types: list[str] | None = None,
-    tenant_ids: list[str] | None = None,        # NEW
     metadata_filters: dict[str, str] | None = None,  # NEW
 ) -> list[dict]:
 ```
 
-**Behavior changes:**
+**Metadata filtering:** Each entry in `metadata_filters` becomes a WHERE clause:
+```sql
+AND json_extract(d.metadata, '$.interest_category') = ?
+AND json_extract(d.metadata, '$.league') = ?
+```
 
-1. **Tenant filtering:** When `tenant_ids` is provided, only documents in those tenants are returned. When `None`, all tenants are searched.
-
-2. **Metadata filtering:** Each entry in `metadata_filters` becomes a WHERE clause:
-   ```sql
-   AND json_extract(d.metadata, '$.interest_category') = ?
-   AND json_extract(d.metadata, '$.league') = ?
-   ```
-
-3. **Optional vector:** When `target_vector` is `None`, skip the KNN step entirely. Query documents directly from the `documents` table with metadata/tenant/plugin/record_type filters, ranked by composite weight score (usage_score adjusted by decay). This enables pure structured retrieval.
-
-4. **Over-fetch adjustment:** When metadata filters or tenant filters are present alongside a vector query, the over-fetch multiplier increases to account for additional post-KNN filtering. Suggested: `KNN_OVERFETCH_MULTIPLIER = 4` baseline, `+2` per active filter dimension (tenant, metadata).
-
-### Query composition matrix
-
-| Vector | Tenant | Metadata | Behavior |
-|--------|--------|----------|----------|
-| yes | omitted | omitted | Current behavior — KNN across all documents. |
-| yes | set | omitted | KNN filtered to specific tenants. |
-| yes | omitted | set | KNN filtered by metadata fields. |
-| yes | set | set | KNN filtered by tenant and metadata. |
-| no | set | omitted | All documents in tenant(s), ranked by weight. |
-| no | omitted | set | All documents matching metadata, ranked by weight. |
-| no | set | set | Documents matching tenant + metadata, ranked by weight. |
-| no | omitted | omitted | All non-tombstoned documents, ranked by weight. |
-
-### Non-vector query path
-
-When `target_vector` is `None`, the query bypasses `vec_documents` entirely:
+**Optional vector:** When `target_vector` is `None`, skip the KNN step entirely. Query documents directly from the `documents` table, ranked by composite weight score:
 
 ```sql
-SELECT d.id, d.uri, d.plugin, d.record_type, d.metadata, d.tenant_id,
+SELECT d.id, d.uri, d.plugin, d.record_type, d.metadata,
        COALESCE(w.usage_score, 0.0) AS usage_score,
        (COALESCE(w.usage_score, 0.0)
         * CASE
@@ -180,18 +225,27 @@ SELECT d.id, d.uri, d.plugin, d.record_type, d.metadata, d.tenant_id,
 FROM documents d
 LEFT JOIN doc_weights w ON d.id = w.doc_id
 WHERE COALESCE(w.tombstoned, 0) = 0
-  AND d.tenant_id IN (?, ?)                              -- tenant filter
-  AND json_extract(d.metadata, '$.interest_category') = ? -- metadata filter
+  AND json_extract(d.metadata, '$.interest_category') = ?
 ORDER BY weight_rank DESC
 LIMIT ?
 ```
 
-Results are ranked by weight (highest first) rather than vector distance (lowest first), since there's no distance metric to minimize.
+**KNN over-fetch:** The existing `KNN_OVERFETCH_MULTIPLIER = 4` constant handles metadata filtering at per-tenant data scale. No dynamic adjustment needed — within a shard, metadata selectivity is manageable.
 
-### semantic_search MCP tool extension
+### Query composition matrix
+
+| Vector | Metadata | Behavior |
+|--------|----------|----------|
+| yes | omitted | Current behavior — KNN within shard. |
+| yes | set | KNN within shard + metadata post-filter. |
+| no | set | Pure metadata query within shard, ranked by weight. |
+| no | omitted | All non-tombstoned documents in shard, ranked by weight. |
+
+Tenant scoping is orthogonal — the caller chooses which shard(s) to query via `TenantStorageManager`.
+
+### semantic_search MCP tool
 
 ```python
-# Tool schema additions:
 {
     "name": "semantic_search",
     "inputSchema": {
@@ -211,32 +265,60 @@ Results are ranked by weight (highest first) rather than vector distance (lowest
             "metadata_filters": {
                 "type": "object",
                 "additionalProperties": {"type": "string"},
-                "description": "Equality filters on metadata fields. Keys are field names, values are expected values."
+                "description": "Equality filters on metadata fields."
             }
         },
-        "required": []  # query is no longer required
+        "required": []
     }
 }
 ```
 
-### ingest_documents MCP tool extension
+When `tenant_ids` is provided, MarkdownPlugin runs the query via `TenantStorageManager.query_across_tenants`. When omitted, queries all tenants. Results include `tenant_id` injected by the manager.
+
+### ingest_documents MCP tool
 
 ```python
-# Tool schema additions:
 {
     "name": "ingest_documents",
     "inputSchema": {
         "properties": {
-            # ... existing properties ...
+            "uris": {"type": "array", "items": {"type": "string"}},
+            "semantic_types": {"type": "array", "items": {"type": "string"}},
+            "reliability_hint": {"type": "number"},
             "tenant_id": {
                 "type": "string",
                 "default": "default",
                 "description": "Tenant ID for data isolation. Defaults to 'default'."
             }
-        }
+        },
+        "required": ["uris"]
     }
 }
 ```
+
+### provide_feedback MCP tool
+
+```python
+{
+    "name": "provide_feedback",
+    "inputSchema": {
+        "properties": {
+            "doc_id": {"type": "integer"},
+            "signal": {"type": "integer"},
+            "reason": {"type": "string"},
+            "tombstone": {"type": "boolean"},
+            "tenant_id": {
+                "type": "string",
+                "default": "default",
+                "description": "Tenant that owns the document."
+            }
+        },
+        "required": ["doc_id", "signal", "tenant_id"]
+    }
+}
+```
+
+`tenant_id` is required on `provide_feedback` because `doc_id` is only unique within a shard.
 
 ### CLI extension
 
@@ -246,19 +328,34 @@ team-mind ingest --tenant-id user-123 --semantic-type travel_preferences /path/t
 
 `--tenant-id` defaults to `"default"` when not specified.
 
+### IngestionPipeline.ingest
+
+```python
+async def ingest(
+    self,
+    uris: List[str],
+    semantic_types: list[str] | None = None,
+    reliability_hint: float | None = None,
+    tenant_id: str = "default",
+) -> IngestionBundle | None:
+```
+
+The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantStorageManager`, then passes that adapter to processors. Processors write to whatever adapter they receive — they don't know about tenants.
+
 ## Pipeline Flow
 
 ### Ingestion with tenant_id
 
 ```
 1. Caller: ingest(uris, semantic_types=["travel_prefs"], tenant_id="user-123")
-2. IngestionBundle created with tenant_id="user-123"
-3. Pipeline routes to processors by semantic type (unchanged)
-4. For each URI, _build_contexts() calls:
-   lookup_existing_docs(uri, plugin, record_type, tenant_id="user-123")
-5. Processor calls save_payload(..., tenant_id="user-123")
-6. IngestionEvent emitted with tenant_id="user-123"
-7. Observers receive event, can filter/react by tenant
+2. Pipeline gets adapter: tenant_manager.get_adapter("user-123")
+3. IngestionBundle created with tenant_id="user-123"
+4. Pipeline routes to processors by semantic type (unchanged)
+5. For each URI, _build_contexts() uses the tenant's adapter:
+   adapter.lookup_existing_docs(uri, plugin, record_type)  # no tenant_id param
+6. Processor calls adapter.save_payload(...)                 # no tenant_id param
+7. IngestionEvent emitted with tenant_id="user-123"
+8. Observers receive event, can filter/react by tenant
 ```
 
 ### Query with tenant + metadata filters
@@ -269,77 +366,80 @@ team-mind ingest --tenant-id user-123 --semantic-type travel_preferences /path/t
        tenant_ids=["user-123", "user-456"],
        metadata_filters={"activity_type": "outdoor"}
    )
-2. MarkdownPlugin embeds query text → target_vector
-3. Calls retrieve_by_vector_similarity(
-       target_vector=...,
-       tenant_ids=["user-123", "user-456"],
+2. MarkdownPlugin receives query, tenant_ids, metadata_filters
+3. For each tenant_id, gets adapter from TenantStorageManager
+4. Runs retrieve_by_vector_similarity on each shard:
+   adapter.retrieve_by_vector_similarity(
+       target_vector=embed("hiking trails"),
+       limit=5,
        metadata_filters={"activity_type": "outdoor"}
    )
-4. KNN fetches candidates (over-fetched to account for filters)
-5. Post-filter: tenant_id IN list, json_extract matches
-6. Composite scoring: distance - (usage_score * weight * decay)
-7. Return top-k results with tenant_id in each result dict
+5. Each shard returns top-5 results (pure KNN + metadata post-filter)
+6. Results merged across shards, re-sorted by final_rank, trimmed to limit=5
+7. tenant_id injected into each result dict by TenantStorageManager
+8. Return top-5 global results
 ```
 
 ## Execution Plan
 
-### Task 1: Schema and Storage Layer
-- Add `tenant_id` column to `documents` table.
-- Update indexes (drop old composite, create tenant-aware composite + tenant index).
-- Update `save_payload` with required `tenant_id`.
-- Update `delete_by_uri` with required `tenant_id`.
-- Update `lookup_existing_docs` with required `tenant_id`.
-- Handle database migration for existing databases.
+### Task 1: system.sqlite and TenantStorageManager
+- Create `TenantStorageManager` class.
+- Initialize `system.sqlite` with `registered_plugins` and `tenants` tables.
+- Implement `create_tenant`, `list_tenants`, `get_adapter`.
+- Lazy connection management with LRU eviction.
+- Auto-create default tenant on initialization.
+- Migrate plugin registry methods from `StorageAdapter` to `TenantStorageManager`.
 - *Stories:* STORY-001
 
-### Task 2: Tenant-Scoped Idempotency
-- Update `_build_contexts` in `IngestionPipeline` to pass `tenant_id`.
-- Verify idempotent ingestion works correctly with tenant scoping.
-- Same URI + different tenant = separate documents.
-- Same URI + same tenant = idempotent update.
+### Task 2: Per-Tenant Database Lifecycle
+- `get_adapter` creates tenant directory and `data.sqlite` on first access.
+- `StorageAdapter.initialize()` no longer creates `registered_plugins` table.
+- Per-tenant schema identical to current minus `registered_plugins`.
 - *Stories:* STORY-002
 
-### Task 3: Ingestion Pipeline Threading
-- Add `tenant_id` to `IngestionBundle`.
-- Add `tenant_id` to `IngestionEvent`.
-- Pipeline propagates `tenant_id` from bundle to processors to events.
-- MarkdownPlugin passes `tenant_id` through to `save_payload`.
+### Task 3: Ingestion Pipeline Routing
+- Add `tenant_id` to `IngestionBundle` and `IngestionEvent`.
+- `IngestionPipeline.ingest()` gains `tenant_id: str = "default"` parameter.
+- Pipeline resolves tenant to `StorageAdapter` via `TenantStorageManager`.
+- Processors receive the tenant-specific adapter — no changes to processor interface.
 - *Stories:* STORY-003
 
-### Task 4: Tenant-Filtered Vector Search
-- Add `tenant_ids` parameter to `retrieve_by_vector_similarity`.
-- Add `d.tenant_id IN (...)` WHERE clause when `tenant_ids` is provided.
-- Adjust over-fetch multiplier when tenant filter is active.
-- Include `tenant_id` in result dicts.
-- *Stories:* STORY-004
-
-### Task 5: Metadata Search Filters
+### Task 4: Metadata Search Filters
 - Add `metadata_filters` parameter to `retrieve_by_vector_similarity`.
 - Generate `json_extract(d.metadata, '$.key') = ?` clauses for each filter.
-- Adjust over-fetch multiplier when metadata filters are active.
-- *Stories:* STORY-005
+- Over-fetch multiplier unchanged (4x constant adequate at shard scale).
+- *Stories:* STORY-004
 
-### Task 6: Optional Vector Query
+### Task 5: Optional Vector Query (Weight-Ranked Retrieval)
 - Make `target_vector` optional in `retrieve_by_vector_similarity`.
 - When `None`, query `documents` table directly (no `vec_documents` join).
-- Rank by composite weight score (usage_score * decay) descending.
+- Rank by composite weight score descending.
+- *Stories:* STORY-005
+
+### Task 6: Cross-Tenant Scatter-Gather
+- Implement `TenantStorageManager.query_across_tenants`.
+- Sequential shard queries (MVP).
+- Merge results, re-sort by composite score, trim to limit.
+- Inject `tenant_id` into result dicts.
 - *Stories:* STORY-006
 
 ### Task 7: MCP Tools and CLI
-- Update `semantic_search` tool with `tenant_ids` and `metadata_filters` params, make `query` optional.
-- Update `ingest_documents` tool with `tenant_id` param (default `"default"`).
-- Update CLI with `--tenant-id` flag.
+- Update `semantic_search` tool: add `tenant_ids` and `metadata_filters`, make `query` optional. Route through `TenantStorageManager`.
+- Update `ingest_documents` tool: add `tenant_id` (default `"default"`).
+- Update `provide_feedback` tool: add required `tenant_id`.
+- Update CLI: add `--tenant-id` flag.
 - *Stories:* STORY-007
 
 ### Task 8: Update Existing Tests
-- All existing tests must pass with `tenant_id` threaded through.
-- Update test helpers/fixtures to include `tenant_id`.
-- Add focused tests for tenant isolation (same URI, different tenants).
+- Update tests to use `TenantStorageManager` where needed.
+- Add tests for tenant isolation (same URI in different shards).
+- Add tests for scatter-gather across tenants.
+- Add tests for metadata filters and optional vector query.
 - *Stories:* STORY-008
 
 ### Task 9: Documentation
-- Update system overview with multi-tenancy model.
-- Update plugin developer guide with `tenant_id` requirements.
+- Update system overview with sharding model.
+- Update plugin developer guide (plugins don't know about tenants).
 - Update ADR-002 with cross-references.
 - Update roadmap with SPEC-010 status.
 - *Stories:* STORY-009
