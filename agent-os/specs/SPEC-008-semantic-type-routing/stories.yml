@@ -25,8 +25,8 @@ stories:
       Add semantic_types and supported_media_types columns to registered_plugins
       table. LifecyclePlugin accepts these on register_plugin. Semantic types
       can be updated without reinstalling the plugin.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-004:
     name: Semantic Type on IngestionBundle and IngestionEvent
