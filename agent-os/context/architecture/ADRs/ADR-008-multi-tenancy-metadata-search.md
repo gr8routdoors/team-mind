@@ -1,9 +1,9 @@
 # ADR-008: Required Multi-Tenancy and Metadata Search
 
-**Status:** Accepted
+**Status:** Accepted (amended by [ADR-010: Tenant Sharding](ADR-010-tenant-sharding.md) — tenancy implemented via file-level sharding, not a column)
 **Date:** 2026-03-29
 **Spec:** SPEC-010 (Multi-Tenancy & Metadata Search)
-**See also:** [ADR-003: Relevance Weighting](ADR-003-relevance-weighting.md), [ADR-007: Semantic Type Routing](ADR-007-semantic-type-routing.md)
+**See also:** [ADR-003: Relevance Weighting](ADR-003-relevance-weighting.md), [ADR-007: Semantic Type Routing](ADR-007-semantic-type-routing.md), [ADR-010: Tenant Sharding](ADR-010-tenant-sharding.md)
 
 ## Context
 
@@ -147,6 +147,33 @@ CREATE INDEX idx_documents_tenant_id ON documents(tenant_id);
 The micro-document pattern (one ratable fact per row) works today but may create scaling pressure. A future evolution could introduce a formal `segments` table — documents as logical containers with independently weighted segments inside them. This would formalize the parent-child relationship that already exists implicitly (MarkdownPlugin creates multiple rows per source file).
 
 **We defer this to a future ADR.** The micro-document pattern is sufficient for current use cases, and metadata search makes reconstituting logical groupings viable. If two or more plugins independently need sub-document weighting, that signals the pattern is real and worth formalizing. Early indicators from the travel plugin and markdown chunking suggest this is likely — but we want to design it deliberately rather than prematurely.
+
+## Design Amendment: Tenant Sharding (ADR-010)
+
+During design review of the implementation approach, analysis of KNN behavior at scale revealed that a `tenant_id` column with post-filter WHERE clauses is provably incorrect for multi-tenant vector search. sqlite-vec performs KNN globally before applying WHERE clauses, so at 1K+ tenants the vast majority of KNN candidates are discarded and too few results are returned.
+
+**ADR-010** replaces the column-based approach with **file-level sharding**: each tenant gets its own SQLite database. KNN operates within a tenant's shard by construction — no post-filtering needed.
+
+The following decisions from ADR-008 are **amended**:
+
+| Original Decision | Amended To | Rationale |
+|---|---|---|
+| `tenant_id TEXT NOT NULL` column on `documents` | **Removed.** The database file IS the tenant scope. | No column needed when data is physically separated. |
+| Composite key `(uri, plugin, record_type, tenant_id)` | **Reverts to `(uri, plugin, record_type)`.** | Tenant scoping is file-level, not key-level. |
+| `tenant_id` on `save_payload`, `delete_by_uri`, `lookup_existing_docs` | **Removed from StorageAdapter signatures.** `TenantStorageManager` routes to the correct database. | StorageAdapter operates on one database and doesn't know about tenants. |
+| `tenant_ids` filter on `retrieve_by_vector_similarity` | **Removed.** Cross-tenant queries use scatter-gather across databases. | KNN within a shard is always correct; cross-shard is merge-and-sort. |
+| KNN over-fetch multiplier adjustment for tenant filters | **No longer needed.** Existing 4x constant is adequate at per-tenant data scale. | The extreme selectivity problem doesn't exist within a shard. |
+
+The following decisions from ADR-008 are **unchanged**:
+
+- Required tenancy with default tenant `"default"` — still true, just structural rather than a column.
+- `IngestionBundle` and `IngestionEvent` carry `tenant_id` — for pipeline routing and observer awareness.
+- `semantic_search` accepts `tenant_ids` parameter — scatter-gather is transparent to callers.
+- `ingest_documents` accepts `tenant_id` parameter — routes to the correct shard.
+- Metadata search via `json_extract` — unchanged, operates within a shard.
+- Structural fields vs. metadata fields boundary — unchanged.
+
+See [ADR-010](ADR-010-tenant-sharding.md) for full rationale.
 
 ## Alternatives Considered
 

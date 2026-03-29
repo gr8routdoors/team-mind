@@ -3,113 +3,137 @@
 
 stories:
   STORY-001:
-    name: Tenant ID Schema and Storage
+    name: system.sqlite and TenantStorageManager
     description: >
-      Add tenant_id TEXT NOT NULL column to documents table with DEFAULT 'default'.
-      Update indexes: drop idx_documents_uri_plugin_record_type, create
-      idx_documents_uri_plugin_record_type_tenant and idx_documents_tenant_id.
-      Update save_payload with required tenant_id parameter (no default at storage layer).
-      Update delete_by_uri and lookup_existing_docs to require and scope by tenant_id.
-      Handle migration for existing databases (add column with default).
+      Create TenantStorageManager class. Initialize system.sqlite with
+      registered_plugins and tenants tables. Implement create_tenant,
+      list_tenants, get_adapter (lazy connection management with LRU eviction).
+      Auto-create default tenant on initialization. Migrate plugin registry
+      methods (save_plugin_record, get_enabled_plugin_records,
+      disable_plugin_record, delete_plugin_record) from StorageAdapter to
+      TenantStorageManager operating on system.sqlite.
     status: pending
     verified_by: []
 
   STORY-002:
-    name: Tenant-Scoped Idempotency
+    name: Per-Tenant Database Lifecycle
     description: >
-      Update IngestionPipeline._build_contexts to pass tenant_id to
-      lookup_existing_docs. Verify that same URI + different tenant creates
-      separate documents (no collision). Verify that same URI + same tenant
-      triggers idempotent update logic (content hash comparison, plugin version check).
+      get_adapter creates tenant directory and data.sqlite on first access
+      (lazy initialization). StorageAdapter.initialize() no longer creates
+      registered_plugins table. Per-tenant schema: documents, vec_documents,
+      doc_weights tables — identical to current minus registered_plugins,
+      no tenant_id column. Verify get_adapter raises ValueError for
+      unregistered tenants.
     status: pending
     verified_by: []
 
   STORY-003:
-    name: Tenant ID in Ingestion Pipeline
+    name: Ingestion Pipeline Routing
     description: >
-      Add tenant_id field to IngestionBundle (default "default"). Add tenant_id
-      field to IngestionEvent (default "default"). Pipeline propagates tenant_id
-      from bundle through to processors and emitted events. MarkdownPlugin passes
-      tenant_id to save_payload. EventFilter unchanged — tenant filtering on
-      observers is future work.
+      Add tenant_id field to IngestionBundle (default "default"). Add
+      tenant_id field to IngestionEvent (default "default").
+      IngestionPipeline.ingest() gains tenant_id parameter (default "default").
+      Pipeline resolves tenant to StorageAdapter via
+      TenantStorageManager.get_adapter(tenant_id). Processors receive the
+      tenant-specific adapter — no changes to processor interface.
+      MarkdownPlugin passes tenant_id unchanged. EventFilter unchanged —
+      tenant filtering on observers is future work.
     status: pending
     verified_by: []
 
   STORY-004:
-    name: Tenant-Filtered Vector Search
+    name: Metadata Search Filters
     description: >
-      Add tenant_ids parameter (list[str] | None) to retrieve_by_vector_similarity.
-      When provided, add WHERE d.tenant_id IN (...) clause. When None, search all
-      tenants. Increase KNN_OVERFETCH_MULTIPLIER when tenant filter is active.
-      Include tenant_id in result dicts.
+      Add metadata_filters parameter (dict[str, str] | None) to
+      retrieve_by_vector_similarity. Each entry becomes a WHERE clause
+      using json_extract(d.metadata, '$.key') = ?. Filters compose with
+      existing plugin/record_type filters. KNN over-fetch multiplier
+      unchanged — 4x constant is adequate at per-tenant shard scale.
     status: pending
     verified_by: []
 
   STORY-005:
-    name: Metadata Search Filters
+    name: Optional Vector Query (Weight-Ranked Retrieval)
     description: >
-      Add metadata_filters parameter (dict[str, str] | None) to
-      retrieve_by_vector_similarity. Each entry becomes a WHERE clause using
-      json_extract(d.metadata, '$.key') = ?. Filters compose with existing
-      plugin/record_type/tenant filters. Increase over-fetch multiplier when
-      metadata filters are active.
+      Make target_vector optional (None allowed) in
+      retrieve_by_vector_similarity. When None, query documents table
+      directly without vec_documents join. Rank results by composite
+      weight score (usage_score * decay) descending. All other filters
+      (metadata, plugin, record_type) still apply. Tombstoned documents
+      still excluded.
     status: pending
     verified_by: []
 
   STORY-006:
-    name: Optional Vector Query (Weight-Ranked Retrieval)
+    name: Cross-Tenant Scatter-Gather
     description: >
-      Make target_vector optional (None allowed) in retrieve_by_vector_similarity.
-      When None, query documents table directly without vec_documents join.
-      Rank results by composite weight score (usage_score * decay) descending.
-      All other filters (tenant, metadata, plugin, record_type) still apply.
-      Tombstoned documents still excluded.
+      Implement TenantStorageManager.query_across_tenants. Sequential
+      shard queries (MVP). Run query_fn on each tenant's StorageAdapter,
+      collect results, merge, re-sort by sort_key (default final_rank),
+      trim to limit. Inject tenant_id into each result dict. When
+      tenant_ids is omitted, query all registered tenants.
     status: pending
     verified_by: []
 
   STORY-007:
-    name: MCP Tool and CLI Extensions
+    name: MCP Tools and CLI
     description: >
-      Update semantic_search tool: add tenant_ids (list[str], optional) and
-      metadata_filters (dict, optional) parameters. Make query parameter optional.
-      Update ingest_documents tool: add tenant_id parameter (default "default").
-      Update CLI ingest subcommand: add --tenant-id flag (default "default").
+      Update semantic_search tool: add tenant_ids (list[str], optional)
+      and metadata_filters (dict, optional) parameters. Make query
+      parameter optional. Route through TenantStorageManager (single
+      tenant = get_adapter, multi/all = query_across_tenants).
+      Update ingest_documents tool: add tenant_id parameter (default
+      "default"). Update provide_feedback tool: add required tenant_id
+      parameter (doc_id is only unique within a shard). Update CLI
+      ingest subcommand: add --tenant-id flag (default "default").
     status: pending
     verified_by: []
 
   STORY-008:
     name: Update Existing Tests
     description: >
-      Update all existing tests to pass tenant_id through storage and pipeline calls.
-      Update test helpers and fixtures. Add focused tests for tenant isolation:
-      same URI in different tenants creates separate documents, search respects
-      tenant_ids filter, delete_by_uri scoped to tenant. Add tests for metadata
-      filters and optional vector query.
+      Update all existing tests to use TenantStorageManager where needed.
+      Update test helpers and fixtures. Add tests for tenant isolation:
+      same URI in different tenant shards creates separate documents,
+      search within a shard is isolated, cross-tenant scatter-gather
+      merges correctly. Add tests for metadata filters and optional
+      vector query. Add tests for system.sqlite plugin registry.
     status: pending
     verified_by: []
 
   STORY-009:
-    name: Update Documentation
+    name: Update Documentation and Diagrams
     description: >
-      Update system overview with multi-tenancy model and metadata search.
-      Update plugin developer guide with tenant_id requirements and metadata
-      filter guidance. Update ADR-002 with cross-references to ADR-008.
-      Update roadmap with SPEC-010 status. Ensure structural-vs-metadata
-      field guidance is documented.
+      Update system overview with sharding model, metadata search, and
+      TenantStorageManager. Add mermaid diagrams: tenant sharding file
+      layout, scatter-gather query flow, TenantStorageManager component
+      relationships. Update plugin developer guide: plugins don't know
+      about tenants, tenant routing is pipeline/manager concern. Update
+      repo README: development status for SPEC-010, update architecture
+      diagram to show multi-tenancy layer. Update ADR-002 with
+      cross-references to ADR-008 and ADR-010. Update roadmap with
+      SPEC-010 status. Ensure structural-vs-metadata field guidance
+      is documented.
     status: pending
     verified_by: []
 
 verification:
   criteria:
     - All pytest tests pass for every story (no regressions).
-    - tenant_id is required on save_payload, delete_by_uri, lookup_existing_docs.
-    - Same URI + different tenant_id creates separate documents.
-    - Same URI + same tenant_id triggers idempotent update.
-    - retrieve_by_vector_similarity filters by tenant_ids when provided.
+    - TenantStorageManager initializes system.sqlite with registered_plugins and tenants tables.
+    - Default tenant auto-created on initialization.
+    - get_adapter returns a StorageAdapter for a registered tenant.
+    - get_adapter lazily creates tenant directory and data.sqlite on first access.
+    - get_adapter raises ValueError for unregistered tenants.
+    - Plugin registry methods operate on system.sqlite (not per-tenant databases).
+    - Same URI in different tenant shards creates separate documents.
+    - IngestionPipeline.ingest() routes to correct shard via tenant_id.
     - retrieve_by_vector_similarity filters by metadata_filters when provided.
     - retrieve_by_vector_similarity works without target_vector (weight-ranked).
+    - query_across_tenants merges results from multiple shards correctly.
     - semantic_search MCP tool accepts tenant_ids, metadata_filters, optional query.
     - ingest_documents MCP tool accepts tenant_id (defaults to "default").
+    - provide_feedback MCP tool requires tenant_id.
     - IngestionBundle and IngestionEvent carry tenant_id.
     - Tombstoned documents excluded in all query paths.
   completed: false

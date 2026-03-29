@@ -4,6 +4,15 @@
 
 Adds a `parent_id` column to the `documents` table, enabling formal parent-child relationships. Parent documents are metadata containers with no vector or weight. Segments are searchable, ratable children. MarkdownPlugin is updated to use this pattern. Documentation is updated across the project.
 
+## Design Amendments (vs Original Spec)
+
+| Amendment | Original | Revised |
+|-----------|----------|---------|
+| `tenant_id` on StorageAdapter methods | Required parameter on `save_parent`, `save_payload`, `delete_by_uri` | Removed — `TenantStorageManager` routes to the correct database (per ADR-010) |
+| Idempotency key | `(uri, plugin, record_type, tenant_id)` | `(uri, plugin, record_type)` — tenant is the database |
+| `delete_by_id` | Not present | **New** — Surgical single-document delete, cascades automatically for parents |
+| `delete_by_uri` cascade | Explicit cascade flag considered | Always cascades for parents — no flag needed |
+
 ## Components
 
 | Component | Type | Change |
@@ -15,6 +24,7 @@ Adds a `parent_id` column to the `documents` table, enabling formal parent-child
 | StorageAdapter.get_document_with_segments | Storage | **New** — Navigate parent/sibling relationships. |
 | StorageAdapter.get_parent_aggregate_score | Storage | **New** — Computed AVG of children's scores. |
 | StorageAdapter.delete_by_uri | Storage | **Extended** — Cascade delete children when deleting parent. |
+| StorageAdapter.delete_by_id | Storage | **New** — Delete a single document by ID, cascade if parent. |
 | MarkdownPlugin | Plugin | **Updated** — Creates parent per source file, segments per paragraph. |
 | Plugin Developer Guide | Docs | **Updated** — Segment patterns, examples, fix stale references. |
 | System Overview | Docs | **Updated** — Segment model, development status. |
@@ -49,7 +59,6 @@ def save_parent(
     uri: str,
     plugin: str,
     record_type: str,
-    tenant_id: str,
     metadata: dict | None = None,
     content_hash: str | None = None,
     plugin_version: str = "0.0.0",
@@ -61,6 +70,8 @@ def save_parent(
     Returns the document ID for child segments to reference via parent_id.
     """
 ```
+
+No `tenant_id` parameter — `StorageAdapter` operates on a single per-tenant database (per ADR-010). Tenant routing is handled by `TenantStorageManager`.
 
 Implementation:
 - INSERT into `documents` with all provided fields and `parent_id = NULL`.
@@ -78,7 +89,6 @@ def save_payload(
     vector: list[float],
     plugin: str,
     record_type: str,
-    tenant_id: str,
     parent_id: int | None = None,          # NEW — optional link to parent
     decay_half_life_days: float | None = None,
     content_hash: str | None = None,
@@ -121,6 +131,8 @@ Results gain `parent_id`:
 
 Parent documents (no vector) will never appear in KNN results. Only segments and standalone documents appear.
 
+Note: `tenant_id` is not in the result dict from `StorageAdapter` — it operates within one shard. `TenantStorageManager.query_across_tenants` injects `tenant_id` into results during scatter-gather (see SPEC-010).
+
 ### StorageAdapter.get_document_with_segments
 
 ```python
@@ -140,7 +152,6 @@ def get_document_with_segments(self, doc_id: int) -> dict:
             "parent": {
                 "id": 42,
                 "uri": "user://user-123/sports-preferences",
-                "tenant_id": "user-123",
                 "plugin": "travel_plugin",
                 "record_type": "interest_profile",
                 "metadata": {"profile_type": "sports"},
@@ -209,9 +220,10 @@ def delete_by_uri(
     uri: str,
     plugin: str,
     record_type: str,
-    tenant_id: str,
 ) -> int:
 ```
+
+No `tenant_id` parameter — `StorageAdapter` operates on a single per-tenant database (per ADR-010).
 
 Updated behavior:
 1. Find matching documents (unchanged query).
@@ -221,6 +233,44 @@ Updated behavior:
 5. Return total count of deleted documents (parent + children).
 
 This ensures wipe-and-replace ingestion patterns (like MarkdownPlugin's) cleanly remove the entire parent-child tree before re-ingestion.
+
+### StorageAdapter.delete_by_id — surgical single-document delete
+
+```python
+def delete_by_id(self, doc_id: int) -> int:
+    """Delete a single document by ID.
+
+    If the document is a parent (has children), cascades: deletes all
+    children's weights, vectors, and document rows, then deletes the parent.
+
+    If the document is a segment (has parent_id), deletes only that segment.
+    The parent and sibling segments are unaffected.
+
+    If the document is standalone (no parent, no children), deletes it.
+
+    Returns the total count of deleted documents.
+    """
+```
+
+Implementation:
+1. Fetch the document row for `doc_id`.
+2. Check if it has children: `SELECT id FROM documents WHERE parent_id = ?`.
+3. If children exist (parent): collect all child IDs, delete their weights, vectors, and rows, then delete the parent's row.
+4. If no children: delete just this document's weight, vector, and row.
+5. Return total count.
+
+**No cascade flag.** A parent always cascades — there's no scenario where you'd delete a parent and leave orphaned children. A segment is always surgical — deleting one child doesn't affect siblings or the parent.
+
+## URI Convention for Segments
+
+Parent and segment URIs follow a convention that makes relationships discoverable without relying solely on `parent_id`:
+
+- **Parent URI:** The logical resource identifier (e.g., `file:///path/to/doc.md`, `user://user-123/sports-preferences`).
+- **Segment URI:** The parent URI with a segment-specific suffix (e.g., `file:///path/to/doc.md#chunk-0`, `user://user-123/sports/nfl-bears`).
+
+This is a **convention, not a constraint**. The framework does not enforce URI structure — `parent_id` is the authoritative relationship. But following this convention makes URIs human-readable and enables URI-based queries to find related documents when `parent_id` is not available (e.g., in logs or debugging).
+
+Plugins choose their own suffix scheme. MarkdownPlugin uses `#chunk-N` (zero-indexed). The travel plugin uses hierarchical path segments. The only rule: segment URIs should be derivable from or related to their parent's URI.
 
 ## MarkdownPlugin Migration
 
@@ -247,7 +297,6 @@ parent_id = storage.save_parent(
     uri=uri,
     plugin=self.name,
     record_type="markdown_source",      # New record type for parent
-    tenant_id=bundle.tenant_id,
     metadata={"source_uri": uri, "chunk_count": len(chunks)},
     content_hash=current_hash,
     plugin_version=self.version,
@@ -256,14 +305,13 @@ parent_id = storage.save_parent(
 )
 
 # Create segment per paragraph chunk
-for chunk in chunks:
+for i, chunk in enumerate(chunks):
     storage.save_payload(
-        uri=uri,
+        uri=f"{uri}#chunk-{i}",         # URI convention: parent URI + segment suffix
         metadata={"chunk": chunk, "plugin": self.name},
         vector=embed(chunk),
         plugin=self.name,
         record_type="markdown_chunk",
-        tenant_id=bundle.tenant_id,
         parent_id=parent_id,            # Link to parent
         content_hash=current_hash,
         plugin_version=self.version,
@@ -282,7 +330,7 @@ for chunk in chunks:
 
 ### Pipeline context building
 
-`_build_contexts` in `IngestionPipeline` is unchanged. The idempotency key is still `(uri, plugin, record_type, tenant_id)`. Parent documents and their segments can have different record types (e.g., `markdown_source` vs. `markdown_chunk`), so they get separate contexts.
+`_build_contexts` in `IngestionPipeline` is unchanged. The idempotency key is still `(uri, plugin, record_type)` — tenant scoping is structural (per-tenant database file, per ADR-010). Parent documents and their segments can have different record types (e.g., `markdown_source` vs. `markdown_chunk`), so they get separate contexts.
 
 ### IngestionEvent
 
@@ -348,10 +396,11 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 - Returns count, min, max alongside aggregate.
 - *Stories:* STORY-006
 
-### Task 7: Cascade Delete
-- Update `delete_by_uri` to cascade delete children.
+### Task 7: Delete Operations
+- Update `delete_by_uri` to cascade delete children when a parent is matched.
+- Implement `delete_by_id` for surgical single-document deletion with automatic parent cascade.
 - Find children via `parent_id` lookup.
-- Delete weights, vectors, document rows for parent + children.
+- Delete weights, vectors, document rows for parent + children (when applicable).
 - *Stories:* STORY-007
 
 ### Task 8: MarkdownPlugin Migration
@@ -361,9 +410,13 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 - Update existing MarkdownPlugin tests.
 - *Stories:* STORY-008
 
-### Task 9: Documentation
+### Task 9: Documentation, Diagrams, and Stale Reference Fixes
 - Update plugin developer guide (segments section + stale reference fixes).
-- Update system overview (segments, development status).
+- Add mermaid diagrams to system overview and/or design docs:
+  - Parent-child document hierarchy (parent → segments, standalone).
+  - Ingestion flow with segments (save_parent → save_payload with parent_id).
+  - Segment navigation flow (get_document_with_segments).
+- Update system overview (segments model, development status).
 - Update README (development status).
 - Add cross-references to ADR-002, ADR-003.
 - *Stories:* STORY-009
