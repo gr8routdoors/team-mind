@@ -123,8 +123,9 @@ class PluginRegistry:
         self._ingest_observers: List[IngestObserver] = []
         self._doctype_catalog: List[DoctypeSpec] = []
         self._doctypes_by_plugin: Dict[str, List[DoctypeSpec]] = {}
+        self._processor_semantic_types: Dict[str, list[str] | None] = {}
 
-    def register(self, plugin: Any) -> None:
+    def register(self, plugin: Any, semantic_types: list[str] | None = None) -> None:
         """Register a new plugin (Tools, Processors, Observers, or any combination)."""
         if isinstance(plugin, ToolProvider):
             self._tool_providers[plugin.name] = plugin
@@ -137,6 +138,7 @@ class PluginRegistry:
 
         if isinstance(plugin, IngestProcessor):
             self._ingest_processors.append(plugin)
+            self._processor_semantic_types[plugin.name] = semantic_types
 
         if isinstance(plugin, IngestObserver):
             self._ingest_observers.append(plugin)
@@ -172,6 +174,7 @@ class PluginRegistry:
             dt for dt in self._doctype_catalog if dt.plugin != plugin_name
         ]
         self._doctypes_by_plugin.pop(plugin_name, None)
+        self._processor_semantic_types.pop(plugin_name, None)
 
         return removed_tools
 
@@ -189,6 +192,27 @@ class PluginRegistry:
     def get_ingest_processors(self) -> List[IngestProcessor]:
         """Return the ordered list of ingestion processors."""
         return self._ingest_processors
+
+    def get_processors_for_semantic_types(
+        self, semantic_types: list[str]
+    ) -> List[IngestProcessor]:
+        """Return processors matching any of the given semantic types, plus wildcard processors.
+
+        - Processors with registered semantic_types=None are available but not enabled (skip them).
+        - Processors with ["*"] receive all bundles regardless of specified semantic types.
+        - Processors with specific types receive bundles that include any matching type.
+        - When semantic_types=[] is passed (no types specified), only wildcard ["*"] processors receive.
+        """
+        result = []
+        for proc in self._ingest_processors:
+            registered = self._processor_semantic_types.get(proc.name)
+            if registered is None:
+                continue  # available but not enabled
+            if "*" in registered:
+                result.append(proc)
+            elif semantic_types and any(st in registered for st in semantic_types):
+                result.append(proc)
+        return result
 
     def get_ingest_observers(self) -> List[IngestObserver]:
         """Return the ordered list of ingestion observers."""

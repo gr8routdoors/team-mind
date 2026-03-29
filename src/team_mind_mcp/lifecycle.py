@@ -116,6 +116,16 @@ class LifecyclePlugin(ToolProvider):
                             "type": "object",
                             "description": "Optional event subscription filter with 'plugins' and/or 'doctypes' lists.",
                         },
+                        "semantic_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Semantic types this plugin handles. Use [\"*\"] for wildcard (process all content).",
+                        },
+                        "supported_media_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Override the media types this plugin accepts (optional; plugin declares via property).",
+                        },
                     },
                     "required": ["module_path"],
                 },
@@ -154,6 +164,8 @@ class LifecyclePlugin(ToolProvider):
         module_path = arguments.get("module_path")
         config = arguments.get("config")
         event_filter = arguments.get("event_filter")
+        semantic_types = arguments.get("semantic_types")
+        supported_media_types = arguments.get("supported_media_types")
 
         if not module_path:
             raise ValueError("module_path is required")
@@ -173,7 +185,7 @@ class LifecyclePlugin(ToolProvider):
         PluginLoader.apply_event_filter(plugin, event_filter)
 
         # Register
-        self.registry.register(plugin)
+        self.registry.register(plugin, semantic_types=semantic_types)
 
         # Persist
         plugin_type = PluginLoader.get_plugin_type(plugin)
@@ -183,6 +195,8 @@ class LifecyclePlugin(ToolProvider):
             module_path=module_path,
             config=config,
             event_filter_json=event_filter,
+            semantic_types=semantic_types,
+            supported_media_types=supported_media_types,
         )
 
         tools_registered = []
@@ -194,6 +208,7 @@ class LifecyclePlugin(ToolProvider):
             "plugin_name": plugin.name,
             "plugin_type": plugin_type,
             "tools_registered": tools_registered,
+            "semantic_types": semantic_types,
         }
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -284,7 +299,7 @@ def load_persisted_plugins(
                 config=record.get("config"),
             )
             PluginLoader.apply_event_filter(plugin, record.get("event_filter"))
-            registry.register(plugin)
+            registry.register(plugin, semantic_types=record.get("semantic_types"))
             loaded += 1
             logger.info(f"Loaded persisted plugin: {record['plugin_name']}")
         except Exception as e:

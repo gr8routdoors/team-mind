@@ -160,6 +160,8 @@ class StorageAdapter:
         module_path: str,
         config: dict | None = None,
         event_filter_json: dict | None = None,
+        semantic_types: list[str] | None = None,
+        supported_media_types: list[str] | None = None,
     ) -> None:
         """Persist a dynamically registered plugin."""
         if self._conn is None:
@@ -167,14 +169,19 @@ class StorageAdapter:
         with self._conn:
             self._conn.execute(
                 "INSERT OR REPLACE INTO registered_plugins "
-                "(plugin_name, plugin_type, module_path, config, event_filter) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(plugin_name, plugin_type, module_path, config, event_filter, "
+                "semantic_types, supported_media_types) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     plugin_name,
                     plugin_type,
                     module_path,
                     json.dumps(config) if config else None,
                     json.dumps(event_filter_json) if event_filter_json else None,
+                    json.dumps(semantic_types) if semantic_types is not None else None,
+                    json.dumps(supported_media_types)
+                    if supported_media_types is not None
+                    else None,
                 ),
             )
 
@@ -183,7 +190,8 @@ class StorageAdapter:
         if self._conn is None:
             raise RuntimeError("Database not initialized")
         cursor = self._conn.execute(
-            "SELECT plugin_name, plugin_type, module_path, config, event_filter "
+            "SELECT plugin_name, plugin_type, module_path, config, event_filter, "
+            "semantic_types, supported_media_types "
             "FROM registered_plugins WHERE enabled = 1"
         )
         return [
@@ -193,6 +201,8 @@ class StorageAdapter:
                 "module_path": row[2],
                 "config": json.loads(row[3]) if row[3] else None,
                 "event_filter": json.loads(row[4]) if row[4] else None,
+                "semantic_types": json.loads(row[5]) if row[5] else None,
+                "supported_media_types": json.loads(row[6]) if row[6] else None,
             }
             for row in cursor.fetchall()
         ]
