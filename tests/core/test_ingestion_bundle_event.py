@@ -1,5 +1,5 @@
 """Tests for semantic_types field on IngestionBundle and IngestionEvent (STORY-004)."""
-import pytest
+
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 
 
