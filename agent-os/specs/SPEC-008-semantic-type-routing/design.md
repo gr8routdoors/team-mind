@@ -90,12 +90,32 @@ class EventFilter:
 4. Collect events, broadcast to observers (with semantic_type filter support)
 ```
 
-### When semantic_type is NOT specified (backward compat)
+### When semantic_type is NOT specified
 
 ```
 1. Caller: ingest(uris)  # no semantic_type
-2. Pipeline broadcasts to ALL processors (existing behavior)
-3. Each processor self-filters as before
+2. Pipeline only routes to processors with semantic_types=["*"] (wildcard)
+3. If no wildcard processors, no processing occurs
+4. This is intentional: no semantic type = no routing target
+```
+
+Note: This is a breaking change from the previous broadcast-to-all behavior.
+Plugins must be explicitly associated with semantic types (or wildcard `*`) to
+receive bundles. See ADR-007 "Available vs Enabled" for rationale.
+
+### Plugin activation model
+
+```
+Available (registered, no semantic types) → does NOT process content
+Enabled (registered, has semantic types)  → processes matching content
+Wildcard (semantic_types=["*"])           → processes all content (explicit opt-in)
+```
+
+`PluginRegistry.register()` accepts optional `semantic_types`:
+```python
+registry.register(plugin, semantic_types=["architecture_docs"])  # enabled for this type
+registry.register(plugin)  # available only, no processing until configured
+registry.register(plugin, semantic_types=["*"])  # processes everything
 ```
 
 ### Media type detection
