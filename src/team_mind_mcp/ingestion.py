@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import List, Any, Dict
 from urllib.parse import urlparse
 
+from team_mind_mcp.media_types import filter_uris_by_media_type
+
 
 @dataclass
 class IngestionEvent:
@@ -124,7 +126,9 @@ class IngestionPipeline:
 
         return contexts
 
-    async def ingest(self, uris: List[str]) -> IngestionBundle | None:
+    async def ingest(
+        self, uris: List[str], semantic_types: list[str] | None = None
+    ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
         Returns the bundle with collected events, or None if no valid URIs."""
         resolved_uris = ResourceResolver.resolve(uris)
@@ -132,23 +136,38 @@ class IngestionPipeline:
         if not resolved_uris:
             return None  # No-Op
 
-        bundle = IngestionBundle(uris=resolved_uris)
+        bundle = IngestionBundle(uris=resolved_uris, semantic_types=semantic_types or [])
 
-        # Phase 1: Build contexts and broadcast to all processors
-        processors = self.registry.get_ingest_processors()
+        # Phase 1: Build contexts and broadcast to matching processors
+        # When semantic_types is explicitly provided, use semantic routing.
+        # When None (not specified), fall back to all registered processors for
+        # backward compatibility with callers that don't use semantic types.
+        if semantic_types is not None:
+            processors = self.registry.get_processors_for_semantic_types(semantic_types)
+        else:
+            processors = self.registry.get_ingest_processors()
         processor_tasks = []
 
         for processor in processors:
+            filtered_uris = filter_uris_by_media_type(
+                resolved_uris, processor.supported_media_types
+            )
+            if not filtered_uris:
+                continue
             doctype_names = [dt.name for dt in processor.doctypes]
             contexts = self._build_contexts(
-                resolved_uris,
+                filtered_uris,
                 processor.name,
                 processor.version,
                 doctype_names,
             )
-            # Attach contexts to bundle for this processor
-            bundle.contexts = contexts
-            processor_tasks.append(processor.process_bundle(bundle))
+            # Create a per-processor bundle view with filtered URIs and contexts
+            proc_bundle = IngestionBundle(
+                uris=filtered_uris,
+                contexts=contexts,
+                semantic_types=bundle.semantic_types,
+            )
+            processor_tasks.append(processor.process_bundle(proc_bundle))
 
         all_events: List[IngestionEvent] = []
         if processor_tasks:
