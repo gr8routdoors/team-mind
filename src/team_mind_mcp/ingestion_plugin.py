@@ -32,6 +32,10 @@ class IngestionPlugin(ToolProvider):
                             "items": {"type": "string"},
                             "description": "Semantic types for routing this ingest to matching processors.",
                         },
+                        "reliability_hint": {
+                            "type": "number",
+                            "description": "Optional reliability hint (0.0–1.0) for the ingested content.",
+                        },
                     },
                     "required": ["uris"],
                 },
@@ -47,9 +51,14 @@ class IngestionPlugin(ToolProvider):
             raise ValueError("At least one URI is required for ingest_documents")
 
         semantic_types = arguments.get("semantic_types")
+        reliability_hint = arguments.get("reliability_hint")
 
         try:
-            bundle = await self.pipeline.ingest(uris, semantic_types=semantic_types)
+            bundle = await self.pipeline.ingest(
+                uris,
+                semantic_types=semantic_types,
+                reliability_hint=reliability_hint,
+            )
             if bundle:
                 return [
                     TextContent(

@@ -253,6 +253,7 @@ class StorageAdapter:
         plugin_version: str = "0.0.0",
         semantic_type: str = "",
         media_type: str = "",
+        initial_score: float = 0.0,
     ) -> int:
         """Saves a document, its embedding vector, and initializes its weight row."""
         if self._conn is None:
@@ -283,8 +284,8 @@ class StorageAdapter:
 
             # Auto-create weight row
             self._conn.execute(
-                "INSERT INTO doc_weights (doc_id, decay_half_life_days) VALUES (?, ?)",
-                (doc_id, decay_half_life_days),
+                "INSERT INTO doc_weights (doc_id, usage_score, decay_half_life_days) VALUES (?, ?, ?)",
+                (doc_id, initial_score, decay_half_life_days),
             )
 
             return doc_id

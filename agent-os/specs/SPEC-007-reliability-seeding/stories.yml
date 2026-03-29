@@ -8,7 +8,7 @@ stories:
       Add optional reliability_hint (float, 0.0-1.0) to IngestionBundle.
       The hint travels with the bundle from the ingestion caller to all
       processors. None means no hint provided.
-    status: pending
+    status: complete
     verified_by: null
 
   STORY-002:
@@ -17,7 +17,7 @@ stories:
       Add optional default_reliability (float, 0.0-1.0) to RecordTypeSpec.
       Plugins declare a baseline reliability for their record types.
       None means no default (equivalent to 0.0).
-    status: pending
+    status: complete
     verified_by: null
 
   STORY-003:
@@ -26,7 +26,7 @@ stories:
       Add optional initial_score parameter to save_payload. When provided,
       seeds usage_score in doc_weights to this value instead of 0.0.
       The signal_count remains 0 so future feedback averages correctly.
-    status: pending
+    status: complete
     verified_by: null
 
   STORY-004:
@@ -35,7 +35,7 @@ stories:
       Update IngestionPipeline.ingest() to accept reliability_hint and
       attach it to the bundle. Update ingest_documents MCP tool to accept
       reliability_hint parameter. Update CLI ingest to accept --reliability flag.
-    status: pending
+    status: complete
     verified_by: null
 
   STORY-005:
@@ -44,7 +44,7 @@ stories:
       Update MarkdownPlugin to read bundle.reliability_hint and its own
       default_reliability, then pass the resolved value as initial_score
       to save_payload. Plugin uses hint if provided, falls back to default.
-    status: pending
+    status: complete
     verified_by: null
 
   STORY-006:
@@ -53,7 +53,7 @@ stories:
       Update plugin developer guide with reliability seeding (three layers,
       examples). Update roadmap to replace Librarian with reliability seeding
       and background conflict detection. Update system overview.
-    status: pending
+    status: complete
     verified_by: null
 
 verification:
@@ -64,5 +64,5 @@ verification:
     - Ingest hint propagates from caller through pipeline to plugin to storage.
     - Plugin can override hint with its own reliability decision.
     - Default reliability works when no hint is provided.
-  completed: false
-  completed_date: null
+  completed: true
+  completed_date: 2026-03-29

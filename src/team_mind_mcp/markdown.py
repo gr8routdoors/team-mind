@@ -102,7 +102,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit, plugins=plugins_filter, record_types=record_types_filter
+            vector,
+            limit=limit,
+            plugins=plugins_filter,
+            record_types=record_types_filter,
         )
 
         # Format the SQLite results into an MCP TextContent response
@@ -114,6 +117,13 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         processed_uris: list[str] = []
         doc_ids: list[int] = []
         semantic_type = ",".join(bundle.semantic_types)
+
+        # Resolve reliability: hint wins over plugin default, default wins over zero
+        initial_score = (
+            bundle.reliability_hint
+            if bundle.reliability_hint is not None
+            else (self.record_types[0].default_reliability or 0.0)
+        )
 
         for uri in bundle.uris:
             # Fetch content (supporting file:// locally for MVP)
@@ -164,6 +174,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     plugin_version=self.version,
                     semantic_type=semantic_type,
                     media_type=media_type,
+                    initial_score=initial_score,
                 )
                 doc_ids.append(doc_id)
 

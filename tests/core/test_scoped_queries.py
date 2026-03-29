@@ -141,7 +141,9 @@ def test_combined_plugin_and_record_type_filter(populated_storage):
     )
 
     # Then only documents matching BOTH filters are returned
-    assert all(r["plugin"] == "plugin_x" and r["record_type"] == "type_a" for r in results)
+    assert all(
+        r["plugin"] == "plugin_x" and r["record_type"] == "type_a" for r in results
+    )
     assert len(results) == 2  # xa1, xa2
 
 

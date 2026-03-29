@@ -388,6 +388,86 @@ class AuditPlugin(IngestObserver):
 
 Semantic type filtering uses ANY-match semantics: an event passes if any of its `semantic_types` values appears in the filter's `semantic_types` list.
 
+## Reliability Seeding
+
+When a document is first saved, its `usage_score` in `doc_weights` is seeded to a caller-supplied or plugin-declared quality value. This is the **three-layer reliability model** introduced in SPEC-007.
+
+### The Three Layers (highest priority wins)
+
+| Layer | Source | How |
+|-------|--------|-----|
+| **1. Ingest hint** | Ingestion caller | `reliability_hint` parameter on `ingest_documents` MCP tool or `ingest --reliability` CLI flag |
+| **2. Plugin default** | `RecordTypeSpec.default_reliability` | Declared on the record type at plugin definition time |
+| **3. Platform default** | `0.0` | Used when neither of the above is provided |
+
+The plugin is responsible for resolving these layers in `process_bundle` and passing the result as `initial_score` to `save_payload`.
+
+### How to implement it in your plugin
+
+```python
+from team_mind_mcp.server import IngestProcessor, RecordTypeSpec
+from team_mind_mcp.ingestion import IngestionBundle
+
+class MyPlugin(IngestProcessor):
+    @property
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [
+            RecordTypeSpec(
+                name="my_record_type",
+                description="A record produced by my plugin.",
+                schema={"content": {"type": "string"}},
+                default_reliability=0.7,  # Layer 2: plugin-declared default
+            )
+        ]
+
+    async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
+        # Resolve reliability: Layer 1 (hint) > Layer 2 (default) > Layer 3 (0.0)
+        hint = bundle.reliability_hint          # float | None from the caller
+        default = 0.7                           # your RecordTypeSpec.default_reliability
+        initial_score = hint if hint is not None else (default if default is not None else 0.0)
+
+        for uri in bundle.uris:
+            content = self._fetch_and_process(uri)
+            vector = self._generate_embedding(content)
+
+            # Pass initial_score to seed usage_score in doc_weights
+            doc_id = self.storage.save_payload(
+                uri=uri,
+                metadata={"content": content},
+                vector=vector,
+                plugin=self.name,
+                record_type="my_record_type",
+                initial_score=initial_score,   # Layer resolution result
+            )
+```
+
+### What `initial_score` does
+
+`initial_score` seeds `usage_score` in the `doc_weights` table when the document is first created. The `signal_count` remains `0`, so the first real feedback signal will average in normally. Documents with a higher initial score rank higher in search results immediately after ingestion — before any feedback arrives.
+
+- `initial_score=0.0` (default) — no bias; ranking is purely by vector distance.
+- `initial_score=0.8` — document gets a moderate quality head start in rankings.
+- `initial_score=1.0` — maximum initial boost.
+
+### Caller-side usage
+
+**Via MCP tool:**
+```json
+{
+  "tool": "ingest_documents",
+  "arguments": {
+    "uris": ["file:///path/to/doc.md"],
+    "semantic_types": ["architecture_docs"],
+    "reliability_hint": 0.9
+  }
+}
+```
+
+**Via CLI:**
+```bash
+uv run team-mind ingest --reliability 0.9 /path/to/doc.md
+```
+
 ## Integration Options Summary
 
 Team Mind plugins support a wide array of integration patterns:
@@ -402,7 +482,8 @@ Team Mind plugins support a wide array of integration patterns:
 | **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype/semantic_type) |
 | **Storage mode** | Pointer (URI reference) or embedded (`local_payload` in metadata) |
 | **Idempotent ingestion** | Content hashing, plugin versioning, `IngestionContext` per URI |
-| **Relevance weighting** | Decay policy per doctype, feedback signals, tombstoning |
+| **Relevance weighting** | Decay policy per record type, feedback signals, tombstoning |
+| **Reliability seeding** | Three-layer initial score (ingest hint > plugin default > 0.0) via `initial_score` on `save_payload` |
 | **Document updates** | In-place (`update_payload`) or wipe-and-replace (`delete_by_uri`) |
 
 ## Relevance Weighting (Platform-Managed)
@@ -621,4 +702,5 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [ADR-005: Plugin Lifecycle](ADRs/ADR-005-plugin-lifecycle.md) | Dynamic registration, event subscriptions, persistent state |
 | [SPEC-006: Plugin Lifecycle](../../specs/SPEC-006-plugin-lifecycle/design.md) | EventFilter, persistence table, MCP tools, startup recovery |
 | [ADR-007: Three-Type Model & Semantic Routing](ADRs/ADR-007-semantic-type-routing.md) | Three-type model, semantic type routing, available vs enabled, record type rename |
+| [SPEC-007: Reliability Seeding](../../specs/SPEC-007-reliability-seeding/design.md) | Three-layer reliability model, initial_score seeding, ingest hint propagation |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |

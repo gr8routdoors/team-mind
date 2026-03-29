@@ -60,10 +60,10 @@ specs:
   SPEC-007:
     name: Reliability Seeding
     slug: reliability-seeding
-    status: in_design
+    status: complete
     created: 2026-03-27
     stories: 6
-    stories_complete: 0
+    stories_complete: 6
 
   SPEC-008:
     name: Semantic Type Routing (Phase A)

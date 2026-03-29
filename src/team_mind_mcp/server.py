@@ -17,6 +17,7 @@ class RecordTypeSpec:
     schema: dict = field(default_factory=dict)
     plugin: str = ""
     decay_half_life_days: float | None = None
+    default_reliability: float | None = None
 
 
 class ToolProvider(ABC):
