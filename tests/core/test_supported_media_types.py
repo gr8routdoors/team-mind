@@ -295,3 +295,14 @@ def test_filter_uris_empty_input() -> None:
 
     # Then the result is also empty
     assert result == []
+
+
+def test_filter_uris_returns_new_list_when_supported_is_none():
+    """Returned list is a copy, not the same reference."""
+    # Given
+    uris = ["file:///a.md", "file:///b.txt"]
+    # When
+    result = filter_uris_by_media_type(uris, supported=None)
+    # Then
+    assert result == uris
+    assert result is not uris

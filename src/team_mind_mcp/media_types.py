@@ -58,5 +58,5 @@ def filter_uris_by_media_type(
         original order.  If *supported* is ``None``, returns *uris* unchanged.
     """
     if supported is None:
-        return uris
+        return list(uris)
     return [uri for uri in uris if get_media_type(uri) in supported]
