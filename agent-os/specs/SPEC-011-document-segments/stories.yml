@@ -1,0 +1,122 @@
+# Stories for SPEC-011
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Parent ID Schema and Index
+    description: >
+      Add parent_id INTEGER REFERENCES documents(id) column to the documents
+      table. Add idx_documents_parent_id index. Handle migration for existing
+      databases (add nullable column). parent_id defaults to NULL (standalone
+      document — backward compatible with all existing data).
+    status: pending
+    verified_by: []
+
+  STORY-002:
+    name: Save Parent Storage Method
+    description: >
+      Implement save_parent() on StorageAdapter. Creates a document row with
+      the provided URI, plugin, record_type, tenant_id, metadata, and other
+      fields. Does NOT insert into vec_documents (no vector). Does NOT insert
+      into doc_weights (no weight — score is derived from children). Returns
+      the document ID for child segments to reference.
+    status: pending
+    verified_by: []
+
+  STORY-003:
+    name: Parent ID on Save Payload
+    description: >
+      Add optional parent_id parameter (int | None, default None) to
+      save_payload(). When provided, validate that the referenced parent
+      document exists (raise ValueError if not). Store parent_id on the
+      inserted document row. When None, behavior is identical to today.
+    status: pending
+    verified_by: []
+
+  STORY-004:
+    name: Parent ID in Search Results
+    description: >
+      Add d.parent_id to the SELECT clause in retrieve_by_vector_similarity.
+      Include parent_id in result dicts (None for standalone/parent documents,
+      int for segments). Parent documents with no vector will never appear in
+      KNN results — only segments and standalone documents appear.
+    status: pending
+    verified_by: []
+
+  STORY-005:
+    name: Get Document with Segments
+    description: >
+      Implement get_document_with_segments(doc_id) on StorageAdapter. If doc_id
+      is a parent, return parent metadata + all non-tombstoned child segments
+      with scores. If doc_id is a segment, look up its parent_id and return
+      parent metadata + all sibling segments. If doc_id is standalone (no parent,
+      no children), return just the document with empty segments list. Include
+      aggregate_score (AVG of children) and segment_count on the parent.
+    status: pending
+    verified_by: []
+
+  STORY-006:
+    name: Aggregate Parent Scoring
+    description: >
+      Implement get_parent_aggregate_score(parent_id) on StorageAdapter.
+      Compute AVG(usage_score) across non-tombstoned children joined with
+      doc_weights. Return aggregate_score, segment_count, min_score, max_score.
+      Return aggregate_score=None and segment_count=0 if parent has no
+      non-tombstoned children.
+    status: pending
+    verified_by: []
+
+  STORY-007:
+    name: Cascade Delete for Parent Documents
+    description: >
+      Update delete_by_uri to cascade delete children when a parent document
+      is deleted. For each matching document, check for children via parent_id.
+      Collect all child IDs and delete their weights, vectors, and document
+      rows alongside the parent. Return total count of all deleted documents
+      (parent + children). Segments deleted individually do not affect parent
+      or siblings.
+    status: pending
+    verified_by: []
+
+  STORY-008:
+    name: MarkdownPlugin Segment Migration
+    description: >
+      Update MarkdownPlugin to use parent-child segments. Add markdown_source
+      RecordTypeSpec for parent documents. Update process_bundle to create a
+      parent document per source file (via save_parent), then create paragraph
+      chunks as segments (via save_payload with parent_id). Cascade delete in
+      delete_by_uri handles wipe-and-replace cleanup. Update all existing
+      MarkdownPlugin tests to account for parent documents.
+    status: pending
+    verified_by: []
+
+  STORY-009:
+    name: Update Documentation and Fix Stale References
+    description: >
+      Update plugin developer guide: add "Working with Segments" section with
+      examples, update "Chunks are a plugin concept" section, fix stale
+      doctype/DoctypeSpec references to record_type/RecordTypeSpec throughout
+      code examples, add ADR-008/009 and SPEC-010/011 to reference table.
+      Update system overview: add segment model, update development status for
+      SPEC-006 through SPEC-011. Update README.md: update development status
+      (SPEC-006/007/008/009 complete, add SPEC-010/011). Update ADR-002:
+      add cross-reference to ADR-009, note segments formalize chunking. Update
+      ADR-003: add cross-reference to ADR-009, note segments formalize
+      "unit of weighting is the row" with explicit hierarchy.
+    status: pending
+    verified_by: []
+
+verification:
+  criteria:
+    - All pytest tests pass for every story (no regressions).
+    - parent_id column exists on documents table, nullable, defaults to NULL.
+    - save_parent creates a document row with no vector and no weight.
+    - save_payload accepts optional parent_id and validates parent exists.
+    - retrieve_by_vector_similarity returns parent_id in result dicts.
+    - get_document_with_segments navigates parent/segment/standalone cases correctly.
+    - get_parent_aggregate_score returns AVG of non-tombstoned children's scores.
+    - delete_by_uri cascades to children when deleting a parent.
+    - MarkdownPlugin creates parent per source file and segments per paragraph.
+    - Existing standalone documents (parent_id=NULL) continue to work identically.
+    - Documentation is updated with segment patterns and stale references fixed.
+  completed: false

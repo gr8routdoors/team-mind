@@ -1,0 +1,115 @@
+# Stories for SPEC-010
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Tenant ID Schema and Storage
+    description: >
+      Add tenant_id TEXT NOT NULL column to documents table with DEFAULT 'default'.
+      Update indexes: drop idx_documents_uri_plugin_record_type, create
+      idx_documents_uri_plugin_record_type_tenant and idx_documents_tenant_id.
+      Update save_payload with required tenant_id parameter (no default at storage layer).
+      Update delete_by_uri and lookup_existing_docs to require and scope by tenant_id.
+      Handle migration for existing databases (add column with default).
+    status: pending
+    verified_by: []
+
+  STORY-002:
+    name: Tenant-Scoped Idempotency
+    description: >
+      Update IngestionPipeline._build_contexts to pass tenant_id to
+      lookup_existing_docs. Verify that same URI + different tenant creates
+      separate documents (no collision). Verify that same URI + same tenant
+      triggers idempotent update logic (content hash comparison, plugin version check).
+    status: pending
+    verified_by: []
+
+  STORY-003:
+    name: Tenant ID in Ingestion Pipeline
+    description: >
+      Add tenant_id field to IngestionBundle (default "default"). Add tenant_id
+      field to IngestionEvent (default "default"). Pipeline propagates tenant_id
+      from bundle through to processors and emitted events. MarkdownPlugin passes
+      tenant_id to save_payload. EventFilter unchanged — tenant filtering on
+      observers is future work.
+    status: pending
+    verified_by: []
+
+  STORY-004:
+    name: Tenant-Filtered Vector Search
+    description: >
+      Add tenant_ids parameter (list[str] | None) to retrieve_by_vector_similarity.
+      When provided, add WHERE d.tenant_id IN (...) clause. When None, search all
+      tenants. Increase KNN_OVERFETCH_MULTIPLIER when tenant filter is active.
+      Include tenant_id in result dicts.
+    status: pending
+    verified_by: []
+
+  STORY-005:
+    name: Metadata Search Filters
+    description: >
+      Add metadata_filters parameter (dict[str, str] | None) to
+      retrieve_by_vector_similarity. Each entry becomes a WHERE clause using
+      json_extract(d.metadata, '$.key') = ?. Filters compose with existing
+      plugin/record_type/tenant filters. Increase over-fetch multiplier when
+      metadata filters are active.
+    status: pending
+    verified_by: []
+
+  STORY-006:
+    name: Optional Vector Query (Weight-Ranked Retrieval)
+    description: >
+      Make target_vector optional (None allowed) in retrieve_by_vector_similarity.
+      When None, query documents table directly without vec_documents join.
+      Rank results by composite weight score (usage_score * decay) descending.
+      All other filters (tenant, metadata, plugin, record_type) still apply.
+      Tombstoned documents still excluded.
+    status: pending
+    verified_by: []
+
+  STORY-007:
+    name: MCP Tool and CLI Extensions
+    description: >
+      Update semantic_search tool: add tenant_ids (list[str], optional) and
+      metadata_filters (dict, optional) parameters. Make query parameter optional.
+      Update ingest_documents tool: add tenant_id parameter (default "default").
+      Update CLI ingest subcommand: add --tenant-id flag (default "default").
+    status: pending
+    verified_by: []
+
+  STORY-008:
+    name: Update Existing Tests
+    description: >
+      Update all existing tests to pass tenant_id through storage and pipeline calls.
+      Update test helpers and fixtures. Add focused tests for tenant isolation:
+      same URI in different tenants creates separate documents, search respects
+      tenant_ids filter, delete_by_uri scoped to tenant. Add tests for metadata
+      filters and optional vector query.
+    status: pending
+    verified_by: []
+
+  STORY-009:
+    name: Update Documentation
+    description: >
+      Update system overview with multi-tenancy model and metadata search.
+      Update plugin developer guide with tenant_id requirements and metadata
+      filter guidance. Update ADR-002 with cross-references to ADR-008.
+      Update roadmap with SPEC-010 status. Ensure structural-vs-metadata
+      field guidance is documented.
+    status: pending
+    verified_by: []
+
+verification:
+  criteria:
+    - All pytest tests pass for every story (no regressions).
+    - tenant_id is required on save_payload, delete_by_uri, lookup_existing_docs.
+    - Same URI + different tenant_id creates separate documents.
+    - Same URI + same tenant_id triggers idempotent update.
+    - retrieve_by_vector_similarity filters by tenant_ids when provided.
+    - retrieve_by_vector_similarity filters by metadata_filters when provided.
+    - retrieve_by_vector_similarity works without target_vector (weight-ranked).
+    - semantic_search MCP tool accepts tenant_ids, metadata_filters, optional query.
+    - ingest_documents MCP tool accepts tenant_id (defaults to "default").
+    - IngestionBundle and IngestionEvent carry tenant_id.
+    - Tombstoned documents excluded in all query paths.
+  completed: false
