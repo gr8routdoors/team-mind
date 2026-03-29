@@ -141,7 +141,11 @@ async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
     if not final_uris:
         return 1
 
-    bundle = await pipeline.ingest(final_uris, semantic_types=args.semantic_types)
+    bundle = await pipeline.ingest(
+        final_uris,
+        semantic_types=args.semantic_types,
+        reliability_hint=getattr(args, "reliability_hint", None),
+    )
     if bundle:
         print(
             f"Successfully broadcasted {len(bundle.uris)} items to plugins.",
@@ -189,6 +193,13 @@ def main() -> int:
         action="append",
         metavar="TYPE",
         help="Semantic type(s) for this ingest. Repeatable.",
+    )
+    ingest_parser.add_argument(
+        "--reliability",
+        dest="reliability_hint",
+        type=float,
+        default=None,
+        help="Reliability hint (0.0–1.0) for the ingested content.",
     )
 
     # Temporary fallback for testing/backwards compatibility if no args provided
