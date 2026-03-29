@@ -25,10 +25,10 @@ Introduces required multi-tenancy via per-tenant SQLite database sharding and me
 | Per-tenant data.sqlite | Storage | **New** — Per-tenant `documents`, `vec_documents`, `doc_weights`. |
 | StorageAdapter | Storage | **Unchanged** — Operates on a single database. No `tenant_id` parameters. |
 | StorageAdapter.retrieve_by_vector_similarity | Storage | **Extended** — `metadata_filters` parameter, optional `target_vector`. |
-| IngestionBundle | Data Model | **Extended** — `tenant_id: str` field (default `"default"`) for routing. |
+| IngestionBundle | Data Model | **Extended** — `tenant_id: str` field (default `"default"`) for routing. `storage: StorageAdapter` field injected by pipeline. |
 | IngestionEvent | Data Model | **Extended** — `tenant_id: str` field for observer awareness. |
 | IngestionPipeline.ingest | Event Loop | **Extended** — `tenant_id: str = "default"` parameter, routes to shard. |
-| MarkdownPlugin | Plugin | **Unchanged** — Writes to whichever StorageAdapter the pipeline provides. |
+| MarkdownPlugin | Plugin | **Unchanged** — Uses `bundle.storage` instead of `self.storage`. No constructor changes. |
 | IngestionPlugin | Plugin | **Updated** — `tenant_id` parameter on `ingest_documents` tool. |
 | semantic_search tool | Plugin (Markdown) | **Extended** — `tenant_ids` and `metadata_filters` parameters, optional `query`. |
 | FeedbackPlugin | Plugin | **Updated** — `tenant_id` parameter on `provide_feedback` tool. |
@@ -143,16 +143,30 @@ class TenantStorageManager:
 
     def query_across_tenants(
         self,
-        tenant_ids: list[str],
+        tenant_ids: list[str] | None,
         query_fn: Callable[[StorageAdapter], list[dict]],
         limit: int,
         sort_key: str = "final_rank",
-        sort_ascending: bool = True,
+        sort_descending: bool = False,
     ) -> list[dict]:
         """Scatter-gather: run query_fn on each tenant shard, merge results.
 
         Runs each shard query sequentially (MVP). Results from all shards
-        are collected, sorted by sort_key, and trimmed to limit.
+        are collected, tenant_id injected into each result dict, sorted by
+        sort_key, and trimmed to limit.
+
+        When tenant_ids is None, queries all registered tenants.
+
+        sort_descending:
+          - False (default): ascending sort — correct for distance-based
+            scores (final_rank) where lower is better.
+          - True: descending sort — correct for weight-based scores
+            (weight_rank) where higher is better.
+
+        Callers (e.g., semantic_search) set sort_descending based on
+        whether a vector query was used:
+          - Vector query:     sort_key="final_rank", sort_descending=False
+          - Non-vector query: sort_key="weight_rank", sort_descending=True
         """
 
     # --- Plugin registry (delegates to system.sqlite) ---
@@ -177,6 +191,66 @@ class TenantStorageManager:
 - Tenant databases are opened lazily on first `get_adapter` call.
 - LRU eviction policy closes idle connections (configurable max, default 64).
 - Default tenant auto-created on `initialize()`.
+
+### How processors get the tenant-specific adapter
+
+Processors (e.g., MarkdownPlugin) currently hold `self.storage: StorageAdapter` set at init time. With tenant sharding, a single plugin instance needs to write to different shards per-bundle.
+
+**Mechanism: `IngestionBundle` carries the adapter.**
+
+```python
+@dataclass
+class IngestionBundle:
+    uris: list[str]
+    semantic_types: list[str]
+    tenant_id: str = "default"
+    storage: StorageAdapter | None = None  # Injected by pipeline
+    # ... existing fields ...
+```
+
+The pipeline injects the tenant-specific adapter into the bundle before passing it to processors:
+
+```python
+# In IngestionPipeline.ingest():
+adapter = self.tenant_manager.get_adapter(tenant_id)
+bundle.storage = adapter
+
+# Processor uses bundle.storage for all storage operations:
+class MarkdownPlugin(IngestProcessor):
+    def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
+        storage = bundle.storage  # Tenant-specific adapter
+        storage.save_payload(uri=..., metadata=..., vector=..., ...)
+```
+
+**Why bundle, not constructor:**
+- A single plugin instance is registered once but processes bundles for many tenants.
+- Changing constructors would require re-instantiating plugins per tenant or injecting TenantStorageManager into every plugin.
+- The bundle is the natural per-invocation context — it already carries URIs, semantic_types, and tenant_id.
+- **No changes to the processor interface or constructor.** Processors just read `bundle.storage` instead of `self.storage`.
+
+**Migration:** Existing processors that use `self.storage` need a one-line change to use `bundle.storage`. Since there's no backward compatibility concern, this is mechanical.
+
+### Tenant auto-creation on ingestion
+
+`TenantStorageManager.get_adapter(tenant_id)` raises `ValueError` for unregistered tenants when called directly — this is correct for raw programmatic use where an unknown tenant likely indicates a bug.
+
+However, the **ingestion pipeline auto-creates unknown tenants** to support zero-friction use:
+
+```python
+# In IngestionPipeline.ingest():
+try:
+    adapter = self.tenant_manager.get_adapter(tenant_id)
+except ValueError:
+    self.tenant_manager.create_tenant(tenant_id)
+    adapter = self.tenant_manager.get_adapter(tenant_id)
+```
+
+**The rule:**
+- `get_adapter()` alone: strict — raises for unknown tenants. Callers must explicitly create tenants first.
+- `IngestionPipeline.ingest()`: auto-creates — passing `tenant_id="user-123"` just works. The pipeline handles registration transparently.
+- `semantic_search` with unknown tenant_id: returns empty results (shard doesn't exist). No error — querying a nonexistent tenant is not an error condition.
+
+This means a caller can do `ingest(uris, tenant_id="user-123")` without pre-registering "user-123". The pipeline creates the tenant entry in `system.sqlite` and initializes the shard on first use.
 
 ### StorageAdapter changes
 
@@ -273,7 +347,7 @@ Tenant scoping is orthogonal — the caller chooses which shard(s) to query via 
 }
 ```
 
-When `tenant_ids` is provided, MarkdownPlugin runs the query via `TenantStorageManager.query_across_tenants`. When omitted, queries all tenants. Results include `tenant_id` injected by the manager.
+`semantic_search` **always** routes through `TenantStorageManager.query_across_tenants` — even for a single tenant. This ensures consistent result format: every result dict includes `tenant_id`, regardless of how many tenants were queried. When `tenant_ids` is omitted, queries all registered tenants.
 
 ### ingest_documents MCP tool
 
@@ -340,7 +414,7 @@ async def ingest(
 ) -> IngestionBundle | None:
 ```
 
-The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantStorageManager`, then passes that adapter to processors. Processors write to whatever adapter they receive — they don't know about tenants.
+The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantStorageManager` (auto-creating the tenant if unregistered), injects it into `bundle.storage`, then passes the bundle to processors. Processors use `bundle.storage` — they don't know about tenants.
 
 ## Pipeline Flow
 
@@ -348,14 +422,17 @@ The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantSt
 
 ```
 1. Caller: ingest(uris, semantic_types=["travel_prefs"], tenant_id="user-123")
-2. Pipeline gets adapter: tenant_manager.get_adapter("user-123")
-3. IngestionBundle created with tenant_id="user-123"
-4. Pipeline routes to processors by semantic type (unchanged)
-5. For each URI, _build_contexts() uses the tenant's adapter:
-   adapter.lookup_existing_docs(uri, plugin, record_type)  # no tenant_id param
-6. Processor calls adapter.save_payload(...)                 # no tenant_id param
-7. IngestionEvent emitted with tenant_id="user-123"
-8. Observers receive event, can filter/react by tenant
+2. Pipeline auto-creates tenant if unregistered:
+   tenant_manager.create_tenant("user-123")  # idempotent if exists
+3. Pipeline gets adapter: tenant_manager.get_adapter("user-123")
+4. IngestionBundle created with tenant_id="user-123", storage=adapter
+5. Pipeline routes to processors by semantic type (unchanged)
+6. For each URI, _build_contexts() uses bundle.storage:
+   bundle.storage.lookup_existing_docs(uri, plugin, record_type)
+7. Processor uses bundle.storage for writes:
+   bundle.storage.save_payload(uri=..., metadata=..., vector=...)
+8. IngestionEvent emitted with tenant_id="user-123"
+9. Observers receive event, can filter/react by tenant
 ```
 
 ### Query with tenant + metadata filters
@@ -366,18 +443,27 @@ The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantSt
        tenant_ids=["user-123", "user-456"],
        metadata_filters={"activity_type": "outdoor"}
    )
-2. MarkdownPlugin receives query, tenant_ids, metadata_filters
-3. For each tenant_id, gets adapter from TenantStorageManager
-4. Runs retrieve_by_vector_similarity on each shard:
-   adapter.retrieve_by_vector_similarity(
-       target_vector=embed("hiking trails"),
-       limit=5,
-       metadata_filters={"activity_type": "outdoor"}
-   )
-5. Each shard returns top-5 results (pure KNN + metadata post-filter)
-6. Results merged across shards, re-sorted by final_rank, trimmed to limit=5
-7. tenant_id injected into each result dict by TenantStorageManager
-8. Return top-5 global results
+2. semantic_search ALWAYS routes through query_across_tenants
+   (even for single tenant — ensures consistent result format)
+3. query_across_tenants iterates shards for ["user-123", "user-456"]:
+   For each shard, runs:
+     adapter.retrieve_by_vector_similarity(
+         target_vector=embed("hiking trails"),
+         limit=5,
+         metadata_filters={"activity_type": "outdoor"}
+     )
+4. Each shard returns top-5 results (KNN + metadata post-filter)
+5. query_across_tenants injects tenant_id into each result dict
+6. Results merged, re-sorted by final_rank (ascending), trimmed to limit=5
+7. Return top-5 global results
+
+Note on sort direction:
+  - Vector queries:     sort_key="final_rank", sort_descending=False
+    (lower final_rank = closer match = better)
+  - Non-vector queries: sort_key="weight_rank", sort_descending=True
+    (higher weight = more relevant = better)
+  semantic_search sets the correct sort direction based on whether
+  a query string was provided.
 ```
 
 ## Execution Plan
@@ -398,10 +484,11 @@ The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantSt
 - *Stories:* STORY-002
 
 ### Task 3: Ingestion Pipeline Routing
-- Add `tenant_id` to `IngestionBundle` and `IngestionEvent`.
+- Add `tenant_id` and `storage` fields to `IngestionBundle`. Add `tenant_id` to `IngestionEvent`.
 - `IngestionPipeline.ingest()` gains `tenant_id: str = "default"` parameter.
-- Pipeline resolves tenant to `StorageAdapter` via `TenantStorageManager`.
-- Processors receive the tenant-specific adapter — no changes to processor interface.
+- Pipeline auto-creates unregistered tenants on ingestion (try/create/retry pattern).
+- Pipeline injects tenant-specific `StorageAdapter` into `bundle.storage`.
+- Processors use `bundle.storage` instead of `self.storage` — no constructor changes.
 - *Stories:* STORY-003
 
 ### Task 4: Metadata Search Filters
@@ -419,12 +506,13 @@ The pipeline uses `tenant_id` to get the correct `StorageAdapter` from `TenantSt
 ### Task 6: Cross-Tenant Scatter-Gather
 - Implement `TenantStorageManager.query_across_tenants`.
 - Sequential shard queries (MVP).
-- Merge results, re-sort by composite score, trim to limit.
-- Inject `tenant_id` into result dicts.
+- Inject `tenant_id` into each result dict.
+- Merge results, re-sort by `sort_key` with correct direction (`sort_descending`), trim to limit.
+- `tenant_ids=None` queries all registered tenants.
 - *Stories:* STORY-006
 
 ### Task 7: MCP Tools and CLI
-- Update `semantic_search` tool: add `tenant_ids` and `metadata_filters`, make `query` optional. Route through `TenantStorageManager`.
+- Update `semantic_search` tool: add `tenant_ids` and `metadata_filters`, make `query` optional. **Always** route through `query_across_tenants` (even for single tenant) for consistent result format. Set `sort_descending` based on whether vector query was used.
 - Update `ingest_documents` tool: add `tenant_id` (default `"default"`).
 - Update `provide_feedback` tool: add required `tenant_id`.
 - Update CLI: add `--tenant-id` flag.
