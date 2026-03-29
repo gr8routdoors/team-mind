@@ -136,38 +136,52 @@ class IngestionPipeline:
         if not resolved_uris:
             return None  # No-Op
 
-        bundle = IngestionBundle(uris=resolved_uris, semantic_types=semantic_types or [])
+        bundle = IngestionBundle(
+            uris=resolved_uris, semantic_types=semantic_types or []
+        )
 
         # Phase 1: Build contexts and broadcast to matching processors
-        # When semantic_types is explicitly provided, use semantic routing.
-        # When None (not specified), fall back to all registered processors for
-        # backward compatibility with callers that don't use semantic types.
-        if semantic_types is not None:
-            processors = self.registry.get_processors_for_semantic_types(semantic_types)
-        else:
-            processors = self.registry.get_ingest_processors()
+        # When semantic_types is explicitly provided, use semantic routing with
+        # per-processor bundle copies and media type filtering.
+        # When None (not specified), fall back to all registered processors and
+        # the original shared bundle for backward compatibility.
         processor_tasks = []
 
-        for processor in processors:
-            filtered_uris = filter_uris_by_media_type(
-                resolved_uris, processor.supported_media_types
-            )
-            if not filtered_uris:
-                continue
-            doctype_names = [dt.name for dt in processor.doctypes]
-            contexts = self._build_contexts(
-                filtered_uris,
-                processor.name,
-                processor.version,
-                doctype_names,
-            )
-            # Create a per-processor bundle view with filtered URIs and contexts
-            proc_bundle = IngestionBundle(
-                uris=filtered_uris,
-                contexts=contexts,
-                semantic_types=bundle.semantic_types,
-            )
-            processor_tasks.append(processor.process_bundle(proc_bundle))
+        if semantic_types is not None:
+            processors = self.registry.get_processors_for_semantic_types(semantic_types)
+            for processor in processors:
+                filtered_uris = filter_uris_by_media_type(
+                    resolved_uris, processor.supported_media_types
+                )
+                if not filtered_uris:
+                    continue
+                doctype_names = [dt.name for dt in processor.doctypes]
+                contexts = self._build_contexts(
+                    filtered_uris,
+                    processor.name,
+                    processor.version,
+                    doctype_names,
+                )
+                # Create a per-processor bundle view with filtered URIs and contexts
+                proc_bundle = IngestionBundle(
+                    uris=filtered_uris,
+                    contexts=contexts,
+                    semantic_types=bundle.semantic_types,
+                )
+                processor_tasks.append(processor.process_bundle(proc_bundle))
+        else:
+            processors = self.registry.get_ingest_processors()
+            for processor in processors:
+                doctype_names = [dt.name for dt in processor.doctypes]
+                contexts = self._build_contexts(
+                    resolved_uris,
+                    processor.name,
+                    processor.version,
+                    doctype_names,
+                )
+                # Attach contexts to bundle for this processor (backward compat)
+                bundle.contexts = contexts
+                processor_tasks.append(processor.process_bundle(bundle))
 
         all_events: List[IngestionEvent] = []
         if processor_tasks:
