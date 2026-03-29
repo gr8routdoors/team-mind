@@ -237,7 +237,7 @@ Introduce a formal segments table to solve the micro-document pattern alongside 
 ### Negative
 
 - **Every caller must specify tenant_id.** Even single-tenant deployments pass `"default"` (though the MCP tool layer defaults this). This is a trade-off for API clarity.
-- **KNN over-fetch increases.** More filters (metadata + tenant) mean more candidates are discarded post-KNN. The over-fetch multiplier must increase to compensate, using more memory during queries.
+- ~~**KNN over-fetch increases.** More filters (metadata + tenant) mean more candidates are discarded post-KNN. The over-fetch multiplier must increase to compensate, using more memory during queries.~~ *Superseded by ADR-010: KNN operates within a per-tenant shard, so the existing 4x over-fetch constant is adequate. Tenant filtering is structural (file-level), not post-filter.*
 - **json_extract performance.** Without generated column indexes, metadata filtering scans JSON blobs. Acceptable for current scale; may need optimization at higher volumes.
 - **Micro-document row explosion.** Applications that store fine-grained facts will generate more rows. Tenant-based sharding mitigates this, but cross-tenant aggregation queries will be slower.
 

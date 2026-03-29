@@ -30,14 +30,16 @@ stories:
   STORY-003:
     name: Ingestion Pipeline Routing
     description: >
-      Add tenant_id field to IngestionBundle (default "default"). Add
+      Add tenant_id and storage fields to IngestionBundle (tenant_id
+      defaults to "default", storage is injected by pipeline). Add
       tenant_id field to IngestionEvent (default "default").
       IngestionPipeline.ingest() gains tenant_id parameter (default "default").
-      Pipeline resolves tenant to StorageAdapter via
-      TenantStorageManager.get_adapter(tenant_id). Processors receive the
-      tenant-specific adapter — no changes to processor interface.
-      MarkdownPlugin passes tenant_id unchanged. EventFilter unchanged —
-      tenant filtering on observers is future work.
+      Pipeline auto-creates unregistered tenants on ingestion (try/create/retry).
+      Pipeline injects tenant-specific StorageAdapter into bundle.storage.
+      Processors use bundle.storage instead of self.storage — no constructor
+      changes. MarkdownPlugin migration is a one-line change (self.storage →
+      bundle.storage). EventFilter unchanged — tenant filtering on observers
+      is future work.
     status: pending
     verified_by: []
 
@@ -69,9 +71,11 @@ stories:
     description: >
       Implement TenantStorageManager.query_across_tenants. Sequential
       shard queries (MVP). Run query_fn on each tenant's StorageAdapter,
-      collect results, merge, re-sort by sort_key (default final_rank),
-      trim to limit. Inject tenant_id into each result dict. When
-      tenant_ids is omitted, query all registered tenants.
+      collect results, inject tenant_id into each result dict, merge,
+      re-sort by sort_key with caller-specified direction (sort_descending
+      flag — False for distance-based final_rank, True for weight-based
+      weight_rank), trim to limit. When tenant_ids is None, query all
+      registered tenants.
     status: pending
     verified_by: []
 
@@ -80,8 +84,10 @@ stories:
     description: >
       Update semantic_search tool: add tenant_ids (list[str], optional)
       and metadata_filters (dict, optional) parameters. Make query
-      parameter optional. Route through TenantStorageManager (single
-      tenant = get_adapter, multi/all = query_across_tenants).
+      parameter optional. ALWAYS route through query_across_tenants (even
+      for single tenant) for consistent result format — every result dict
+      includes tenant_id. Set sort_descending based on whether vector
+      query was used (False for vector, True for non-vector).
       Update ingest_documents tool: add tenant_id parameter (default
       "default"). Update provide_feedback tool: add required tenant_id
       parameter (doc_id is only unique within a shard). Update CLI
@@ -124,16 +130,22 @@ verification:
     - Default tenant auto-created on initialization.
     - get_adapter returns a StorageAdapter for a registered tenant.
     - get_adapter lazily creates tenant directory and data.sqlite on first access.
-    - get_adapter raises ValueError for unregistered tenants.
+    - get_adapter raises ValueError for unregistered tenants (when called directly).
+    - IngestionPipeline.ingest() auto-creates unregistered tenants transparently.
     - Plugin registry methods operate on system.sqlite (not per-tenant databases).
     - Same URI in different tenant shards creates separate documents.
     - IngestionPipeline.ingest() routes to correct shard via tenant_id.
+    - IngestionBundle carries tenant_id and storage (tenant-specific adapter).
+    - Processors use bundle.storage, not self.storage.
+    - IngestionEvent carries tenant_id.
     - retrieve_by_vector_similarity filters by metadata_filters when provided.
     - retrieve_by_vector_similarity works without target_vector (weight-ranked).
     - query_across_tenants merges results from multiple shards correctly.
+    - query_across_tenants injects tenant_id into every result dict.
+    - semantic_search always routes through query_across_tenants (consistent result format).
+    - semantic_search sets sort_descending correctly (False for vector, True for non-vector).
     - semantic_search MCP tool accepts tenant_ids, metadata_filters, optional query.
     - ingest_documents MCP tool accepts tenant_id (defaults to "default").
     - provide_feedback MCP tool requires tenant_id.
-    - IngestionBundle and IngestionEvent carry tenant_id.
     - Tombstoned documents excluded in all query paths.
   completed: false
