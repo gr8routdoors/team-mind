@@ -42,7 +42,9 @@ class StorageAdapter:
                     doctype TEXT NOT NULL DEFAULT '',
                     metadata JSON,
                     content_hash TEXT,
-                    plugin_version TEXT DEFAULT '0.0.0'
+                    plugin_version TEXT DEFAULT '0.0.0',
+                    semantic_type TEXT NOT NULL DEFAULT '',
+                    media_type TEXT NOT NULL DEFAULT ''
                 )
             """)
 
@@ -63,6 +65,14 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN plugin_version TEXT DEFAULT '0.0.0'"
                 )
+            if "semantic_type" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN semantic_type TEXT NOT NULL DEFAULT ''"
+                )
+            if "media_type" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN media_type TEXT NOT NULL DEFAULT ''"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -79,6 +89,10 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_uri_plugin_doctype
                 ON documents(uri, plugin, doctype)
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_semantic_type
+                ON documents(semantic_type)
             """)
             self._conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
@@ -124,6 +138,18 @@ class StorageAdapter:
                     registered_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )
             """)
+
+            # Migrate existing registered_plugins: add semantic_types and supported_media_types if missing
+            cursor = self._conn.execute("PRAGMA table_info(registered_plugins)")
+            plugin_columns = {row[1] for row in cursor.fetchall()}
+            if "semantic_types" not in plugin_columns:
+                self._conn.execute(
+                    "ALTER TABLE registered_plugins ADD COLUMN semantic_types JSON"
+                )
+            if "supported_media_types" not in plugin_columns:
+                self._conn.execute(
+                    "ALTER TABLE registered_plugins ADD COLUMN supported_media_types JSON"
+                )
 
     # --- Plugin persistence CRUD ---
 
