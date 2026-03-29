@@ -92,6 +92,7 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
   - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
   - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext) — **COMPLETE**
   - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence) — *In design*
+  - SPEC-008: Semantic type routing — three-type model (semantic/media/record type), registration-time routing, available vs enabled activation model — *In progress*
 
 ---
 
