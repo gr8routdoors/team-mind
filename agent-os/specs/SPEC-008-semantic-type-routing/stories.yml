@@ -60,8 +60,8 @@ stories:
     description: >
       Update ingest_documents MCP tool to accept optional semantic_type
       parameter. Update CLI ingest subcommand to accept --semantic-type flag.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-008:
     name: MarkdownPlugin Media Type and Semantic Type Awareness
