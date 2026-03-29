@@ -277,26 +277,73 @@ results = storage.retrieve_by_vector_similarity(vector, limit=10)
 
 All filter parameters accept **lists**, so you can query multiple plugins and doctypes in a single call.
 
+## Understanding the Three-Type Model
+
+SPEC-008 (ADR-007) introduces three distinct type concepts. If you're building a processor, you need to understand all three:
+
+| Type | What it answers | Set by | Example |
+|------|----------------|--------|---------|
+| **Semantic type** | "What does this data *mean*?" | Ingestion caller | `architecture_docs`, `payment_service` |
+| **Media type** | "How is this data *encoded*?" | Plugin (auto-detected) | `text/markdown`, `text/x-java` |
+| **Record type** | "What did the plugin *produce*?" | Plugin, at write time | `markdown_chunk`, `code_signature` |
+
+Previously called `doctype`, record type is the plugin-scoped output concept. Semantic type and media type are new columns on `documents` added in SPEC-008.
+
+## Available vs Enabled: Activation Model
+
+Registered plugins exist in one of three states:
+
+| State | Registered? | Has semantic types? | Processes content? |
+|-------|------------|--------------------|--------------------|
+| **Available** | Yes | No | No — idle |
+| **Enabled** | Yes | Yes (specific types or `*`) | Yes, for matching types |
+
+**Key rule: no semantic types = no processing.** A registered plugin with no semantic type associations is available but idle. This is intentional — newly installed plugins don't automatically process all content. An admin must explicitly enable processing for specific semantic types.
+
+`["*"]` is a wildcard that opts the plugin into processing all semantic types (respecting media type filtering). It must be explicitly configured — it is not the default.
+
+## Declaring Your Media Type Capabilities
+
+Processors declare which media types they can handle:
+
+```python
+class MyPlugin(IngestProcessor):
+    @property
+    def supported_media_types(self) -> list[str]:
+        return ["text/markdown", "text/plain"]
+```
+
+Even in wildcard mode, your plugin only receives URIs matching these media types. Media type is auto-detected from file extension or can be explicitly hinted by the ingestion caller.
+
 ## Registering Your Plugin
 
 There are two ways to register plugins:
 
 ### Compile-time registration (core plugins)
 
-Core plugins are registered in `cli.py` at server startup:
+Core plugins are registered in `cli.py` at server startup. You can optionally provide `semantic_types` to enable the plugin immediately:
 
 ```python
-my_plugin = MyPlugin(storage)
-gateway.registry.register(my_plugin)
+# Available but idle (no semantic types):
+gateway.registry.register(markdown_plugin)
+
+# Available and enabled for specific semantic types:
+gateway.registry.register(markdown_plugin, semantic_types=["architecture_docs", "meeting_transcripts"])
 ```
 
 ### Runtime registration (dynamic plugins)
 
 Plugins can be registered at runtime via the `register_plugin` MCP tool — no server restart needed:
 
-```json
-// AI agent or admin calls:
-register_plugin(module_path="my_plugins.travel.TravelPlugin", config={...})
+```python
+# Register and enable for specific semantic types:
+register_plugin(
+    module_path="my_plugins.travel.TravelPlugin",
+    semantic_types=["travel_profile", "booking_data"]
+)
+
+# Register as available-only (no ingestion routing yet):
+register_plugin(module_path="my_plugins.travel.TravelPlugin")
 ```
 
 Dynamically registered plugins:
@@ -307,12 +354,12 @@ Dynamically registered plugins:
 ### What happens on registration:
 - Your tools are added to the MCP tool catalog (visible to AI clients).
 - Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
-- If you implement `IngestProcessor`, you start receiving bundles during ingestion.
+- If you implement `IngestProcessor` **and** have semantic types configured, you receive bundles for those types during ingestion.
 - If you implement `IngestObserver`, you start receiving events after ingestion completes.
 
 ### Event subscriptions for observers
 
-By default, observers receive **all** ingestion events (fire hose). To subscribe to specific events only, override the `event_filter` property:
+By default, observers receive **all** ingestion events (fire hose). To subscribe to specific events only, override the `event_filter` property. SPEC-008 adds `semantic_types` filtering so observers can react to domain-level events:
 
 ```python
 from team_mind_mcp.server import IngestObserver, EventFilter
@@ -320,14 +367,13 @@ from team_mind_mcp.server import IngestObserver, EventFilter
 class AuditPlugin(IngestObserver):
     @property
     def event_filter(self) -> EventFilter | None:
-        # Only care about Java code changes
+        # Only care about architecture docs, regardless of which plugin processed them
         return EventFilter(
-            plugins=["java_plugin"],
-            doctypes=["code_signature"]
+            semantic_types=["architecture_docs"]
         )
 
     async def on_ingest_complete(self, events):
-        # Only receives java_plugin:code_signature events
+        # Receives events where any semantic_type matches "architecture_docs"
         for event in events:
             await self._run_audit(event.uris)
 ```
@@ -335,9 +381,12 @@ class AuditPlugin(IngestObserver):
 | Pattern | event_filter returns | What the observer receives |
 |---------|---------------------|--------------------------|
 | Fire hose | `None` (default) | Every event from every processor |
+| Semantic type filter | `EventFilter(semantic_types=["architecture_docs"])` | Events where any semantic type matches |
 | Plugin filter | `EventFilter(plugins=["java_plugin"])` | Only events from that plugin |
 | Doctype filter | `EventFilter(doctypes=["code_signature"])` | Only events with that doctype |
-| Combined | `EventFilter(plugins=[...], doctypes=[...])` | Events matching both |
+| Combined | `EventFilter(plugins=[...], doctypes=[...], semantic_types=[...])` | Events matching all specified filters |
+
+Semantic type filtering uses ANY-match semantics: an event passes if any of its `semantic_types` values appears in the filter's `semantic_types` list.
 
 ## Integration Options Summary
 
@@ -347,7 +396,10 @@ Team Mind plugins support a wide array of integration patterns:
 |-----------|---------|
 | **Interfaces** | `ToolProvider`, `IngestProcessor`, `IngestObserver` — any combination |
 | **Registration** | Compile-time (hardcoded in cli.py) or runtime (via `register_plugin` MCP tool) |
-| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype) |
+| **Activation** | Available (no semantic types = idle) or enabled (specific types or `["*"]` wildcard) |
+| **Routing** | Semantic type routing — processors receive only URIs for their registered semantic types |
+| **Media type filtering** | Declare `supported_media_types`; only matching URIs are routed to your plugin |
+| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype/semantic_type) |
 | **Storage mode** | Pointer (URI reference) or embedded (`local_payload` in metadata) |
 | **Idempotent ingestion** | Content hashing, plugin versioning, `IngestionContext` per URI |
 | **Relevance weighting** | Decay policy per doctype, feedback signals, tombstoning |
@@ -568,4 +620,5 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [SPEC-005: Idempotent Ingestion](../../specs/SPEC-005-idempotent-ingestion/design.md) | Schema changes, pipeline integration, MarkdownPlugin optimization |
 | [ADR-005: Plugin Lifecycle](ADRs/ADR-005-plugin-lifecycle.md) | Dynamic registration, event subscriptions, persistent state |
 | [SPEC-006: Plugin Lifecycle](../../specs/SPEC-006-plugin-lifecycle/design.md) | EventFilter, persistence table, MCP tools, startup recovery |
+| [ADR-007: Three-Type Model & Semantic Routing](ADRs/ADR-007-semantic-type-routing.md) | Three-type model, semantic type routing, available vs enabled, record type rename |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy |
