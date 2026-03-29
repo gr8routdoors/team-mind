@@ -13,6 +13,7 @@ class IngestionEvent:
     doctype: str
     uris: list[str] = field(default_factory=list)
     doc_ids: list[int] = field(default_factory=list)
+    semantic_types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -37,6 +38,7 @@ class IngestionBundle:
     uris: List[str]
     events: List[IngestionEvent] = field(default_factory=list)
     contexts: Dict[str, IngestionContext] = field(default_factory=dict)
+    semantic_types: list[str] = field(default_factory=list)
 
 
 class ResourceResolver:
@@ -170,6 +172,10 @@ class IngestionPipeline:
                     for e in all_events
                     if (ef.plugins is None or e.plugin in ef.plugins)
                     and (ef.doctypes is None or e.doctype in ef.doctypes)
+                    and (
+                        ef.semantic_types is None
+                        or any(st in ef.semantic_types for st in e.semantic_types)
+                    )
                 ]
                 if not filtered:
                     continue  # Skip observer entirely if nothing matches
