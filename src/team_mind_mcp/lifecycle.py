@@ -119,7 +119,7 @@ class LifecyclePlugin(ToolProvider):
                         "semantic_types": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Semantic types this plugin handles. Use [\"*\"] for wildcard (process all content).",
+                            "description": 'Semantic types this plugin handles. Use ["*"] for wildcard (process all content).',
                         },
                         "supported_media_types": {
                             "type": "array",
