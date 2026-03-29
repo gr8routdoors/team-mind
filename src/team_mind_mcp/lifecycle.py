@@ -9,7 +9,7 @@ from team_mind_mcp.server import (
     PluginRegistry,
     EventFilter,
 )
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class PluginLoader:
     @staticmethod
     def load(
         module_path: str,
-        storage: StorageAdapter | None = None,
+        storage: TenantStorageManager | None = None,
         config: dict | None = None,
     ):
         """Load a plugin class from a dotted module path.
@@ -88,7 +88,7 @@ class PluginLoader:
 class LifecyclePlugin(ToolProvider):
     """MCP tools for dynamic plugin registration and management."""
 
-    def __init__(self, registry: PluginRegistry, storage: StorageAdapter):
+    def __init__(self, registry: PluginRegistry, storage: TenantStorageManager):
         self.registry = registry
         self.storage = storage
 
@@ -280,7 +280,7 @@ class LifecyclePlugin(ToolProvider):
 
 
 def load_persisted_plugins(
-    storage: StorageAdapter,
+    storage: TenantStorageManager,
     registry: PluginRegistry,
 ) -> int:
     """Load enabled plugins from the persistence table on startup.

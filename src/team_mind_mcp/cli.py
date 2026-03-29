@@ -5,6 +5,7 @@ import anyio
 from pathlib import Path
 
 from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 from team_mind_mcp.server import MCPGateway
 from team_mind_mcp.markdown import MarkdownPlugin
 from team_mind_mcp.retrieval import DocumentRetrievalPlugin
@@ -59,6 +60,10 @@ async def run_server(db_path: Path) -> int:
     storage = StorageAdapter(str(db_path))
     storage.initialize()
 
+    # Initialize TenantStorageManager for plugin registry (SPEC-010 STORY-001)
+    tenant_manager = TenantStorageManager(str(db_path.parent))
+    tenant_manager.initialize()
+
     # Initialize Gateway and Registry
     gateway = MCPGateway()
 
@@ -70,7 +75,7 @@ async def run_server(db_path: Path) -> int:
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
     feedback_plugin = FeedbackPlugin(storage)
-    lifecycle_plugin = LifecyclePlugin(gateway.registry, storage)
+    lifecycle_plugin = LifecyclePlugin(gateway.registry, tenant_manager)
 
     markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
     gateway.registry.register(markdown_plugin, semantic_types=markdown_semantic_types)
@@ -81,7 +86,7 @@ async def run_server(db_path: Path) -> int:
     gateway.registry.register(lifecycle_plugin)
 
     # Load dynamically registered plugins from persistence table
-    load_persisted_plugins(storage, gateway.registry)
+    load_persisted_plugins(tenant_manager, gateway.registry)
 
     # Import the stdio server here to prevent overhead on simple CLI commands
     from mcp.server.stdio import stdio_server

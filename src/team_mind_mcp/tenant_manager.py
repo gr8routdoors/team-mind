@@ -138,7 +138,11 @@ class TenantStorageManager:
         db_path = os.path.join(tenant_dir, "data.sqlite")
 
         adapter = StorageAdapter(db_path)
-        adapter.initialize()
+        try:
+            adapter.initialize()
+        except Exception:
+            adapter.close()
+            raise
 
         self._adapters[tenant_id] = adapter
         return adapter
