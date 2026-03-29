@@ -41,6 +41,7 @@ class IngestionBundle:
     events: List[IngestionEvent] = field(default_factory=list)
     contexts: Dict[str, IngestionContext] = field(default_factory=dict)
     semantic_types: list[str] = field(default_factory=list)
+    reliability_hint: float | None = None
 
 
 class ResourceResolver:
