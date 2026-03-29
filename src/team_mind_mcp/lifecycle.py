@@ -67,6 +67,7 @@ class PluginLoader:
         ef = EventFilter(
             plugins=event_filter_json.get("plugins"),
             doctypes=event_filter_json.get("doctypes"),
+            semantic_types=event_filter_json.get("semantic_types"),
         )
         # Store the filter on the instance for observers that use default property
         plugin._event_filter_override = ef
