@@ -69,7 +69,7 @@ def test_catalog_collects_on_registration():
     registry.register(plugin)
 
     # Then both doctypes appear in the registry's internal catalog
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
     assert len(catalog) == 2
 
     # And each doctype's plugin field is set to the registering plugin's name
@@ -88,7 +88,7 @@ def test_get_all_doctypes():
     registry.register(_PluginC())  # 2 doctypes
 
     # When get_doctype_catalog() is called
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
 
     # Then all five RecordTypeSpec instances are returned
     assert len(catalog) == 5
@@ -105,7 +105,7 @@ def test_get_doctypes_for_plugin():
     registry.register(_PluginB())
 
     # When get_doctypes_for_plugin("plugin_a") is called
-    result = registry.get_doctypes_for_plugin("plugin_a")
+    result = registry.get_record_types_for_plugin("plugin_a")
 
     # Then exactly ["type_x", "type_y"] are returned
     names = [dt.name for dt in result]
@@ -123,7 +123,7 @@ def test_get_plugins_for_doctype():
     registry.register(_PluginC())
 
     # When get_plugins_for_doctype("type_x") is called
-    result = registry.get_plugins_for_doctype("type_x")
+    result = registry.get_plugins_for_record_type("type_x")
 
     # Then both "plugin_a" and "plugin_c" are returned
     assert sorted(result) == ["plugin_a", "plugin_c"]
@@ -141,7 +141,7 @@ def test_plugin_with_no_doctypes():
     registry.register(_BarePlugin())
 
     # Then the catalog is not modified (still 2)
-    assert len(registry.get_doctype_catalog()) == 2
+    assert len(registry.get_record_type_catalog()) == 2
     # And no error is raised (implicit)
 
 
@@ -155,7 +155,7 @@ def test_doctype_specs_include_plugin_name():
     registry.register(_PluginB())
 
     # When the doctype is retrieved from the catalog
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
     dt = catalog[0]
 
     # Then the RecordTypeSpec.plugin field equals "plugin_b"
