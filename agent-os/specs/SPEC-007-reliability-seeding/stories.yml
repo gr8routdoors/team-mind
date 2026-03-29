@@ -12,10 +12,10 @@ stories:
     verified_by: null
 
   STORY-002:
-    name: Default Reliability on DoctypeSpec
+    name: Default Reliability on RecordTypeSpec
     description: >
-      Add optional default_reliability (float, 0.0-1.0) to DoctypeSpec.
-      Plugins declare a baseline reliability for their doctypes.
+      Add optional default_reliability (float, 0.0-1.0) to RecordTypeSpec.
+      Plugins declare a baseline reliability for their record types.
       None means no default (equivalent to 0.0).
     status: pending
     verified_by: null

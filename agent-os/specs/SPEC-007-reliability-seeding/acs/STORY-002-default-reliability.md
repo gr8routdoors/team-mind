@@ -1,4 +1,4 @@
-# STORY-002: Default Reliability on DoctypeSpec — Acceptance Criteria
+# STORY-002: Default Reliability on RecordTypeSpec — Acceptance Criteria
 
 ---
 
@@ -11,16 +11,16 @@
 ---
 
 ### AC-001: Field Defaults to None
-**Given** a `DoctypeSpec` without `default_reliability`
+**Given** a `RecordTypeSpec` without `default_reliability`
 **When** the field is accessed
 **Then** it is `None`
 
 ### AC-002: Plugin Declares Default
-**Given** a `DoctypeSpec(name="code_sig", default_reliability=0.9)`
+**Given** a `RecordTypeSpec(name="code_sig", default_reliability=0.9)`
 **When** the field is accessed
 **Then** it is `0.9`
 
 ### AC-003: Backward Compatible
-**Given** existing plugins that don't specify `default_reliability`
+**Given** existing plugins that don't set `default_reliability` on their record types
 **When** registered
 **Then** no error occurs and `default_reliability` is `None`

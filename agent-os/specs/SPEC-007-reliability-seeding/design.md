@@ -9,7 +9,7 @@ Three-layer reliability seeding ensures documents enter the knowledge base with 
 | Component | Type | Change |
 |-----------|------|--------|
 | IngestionBundle | Data Model | **Extended** — `reliability_hint: float | None` field. |
-| DoctypeSpec | Data Model | **Extended** — `default_reliability: float | None` field. |
+| RecordTypeSpec | Data Model | **Extended** — `default_reliability: float | None` field. |
 | StorageAdapter | Abstraction | **Extended** — `initial_score` parameter on `save_payload`. |
 | IngestionPipeline | Event Loop | **Extended** — `reliability_hint` parameter on `ingest()`. |
 | IngestionPlugin | Plugin | **Extended** — `reliability_hint` parameter on `ingest_documents` MCP tool. |
@@ -28,7 +28,7 @@ Three-layer reliability seeding ensures documents enter the knowledge base with 
 
 3. Plugin receives bundle, reads hint and its own default:
      hint = bundle.reliability_hint          # 0.8 (from caller)
-     default = self.doctypes[0].default_reliability  # 0.6 (from doctype)
+     default = self.record_types[0].default_reliability  # 0.6 (from record_type)
 
 4. Plugin decides final reliability:
      # Strategy A: prefer hint over default
@@ -68,11 +68,11 @@ class IngestionBundle:
     reliability_hint: float | None = None
 ```
 
-### DoctypeSpec
+### RecordTypeSpec
 
 ```python
 @dataclass
-class DoctypeSpec:
+class RecordTypeSpec:
     name: str
     description: str
     schema: dict = field(default_factory=dict)
@@ -85,7 +85,7 @@ class DoctypeSpec:
 
 ```python
 def save_payload(
-    self, uri, metadata, vector, plugin, doctype,
+    self, uri, metadata, vector, plugin, record_type,
     decay_half_life_days=None,
     content_hash=None,
     plugin_version="0.0.0",
@@ -113,9 +113,9 @@ team-mind-mcp ingest [targets] --reliability 0.8
 
 ## Execution Plan
 
-### Task 1: Bundle + DoctypeSpec fields
+### Task 1: Bundle + RecordTypeSpec fields
 - Add `reliability_hint` to IngestionBundle.
-- Add `default_reliability` to DoctypeSpec.
+- Add `default_reliability` to RecordTypeSpec.
 - *Stories:* STORY-001, STORY-002
 
 ### Task 2: save_payload initial_score

@@ -2,13 +2,13 @@
 
 ## Overview
 
-Enables documents to be seeded with an initial reliability score at ingestion time. Three layers contribute: an ingest hint from the caller (always present on the bundle), a plugin default (declared on DoctypeSpec), and a plugin override (decided at process time). The plugin always has the last word, but always has the ingest hint available to inform its decision.
+Enables documents to be seeded with an initial reliability score at ingestion time. Three layers contribute: an ingest hint from the caller (always present on the bundle), a plugin default (declared on RecordTypeSpec), and a plugin override (decided at process time). The plugin always has the last word, but always has the ingest hint available to inform its decision.
 
 ## Scope
 
 **In scope:**
 - `reliability_hint` on `IngestionBundle` — optional float passed by the ingestion caller.
-- `default_reliability` on `DoctypeSpec` — optional float declared by plugins.
+- `default_reliability` on `RecordTypeSpec` — optional float declared by plugins.
 - `initial_score` parameter on `save_payload` — seeds `usage_score` in `doc_weights`.
 - Update `IngestionPipeline.ingest()` to accept and propagate `reliability_hint`.
 - Update `ingest_documents` MCP tool to accept `reliability_hint`.
@@ -43,7 +43,7 @@ See `stories.yml` for current status.
 | ID | Story | Status |
 |----|-------|--------|
 | STORY-001 | Reliability Hint on IngestionBundle | pending |
-| STORY-002 | Default Reliability on DoctypeSpec | pending |
+| STORY-002 | Default Reliability on RecordTypeSpec | pending |
 | STORY-003 | Initial Score on save_payload | pending |
 | STORY-004 | Pipeline and MCP Tool Propagation | pending |
 | STORY-005 | MarkdownPlugin Reliability Integration | pending |
