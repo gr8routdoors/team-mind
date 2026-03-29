@@ -31,7 +31,7 @@ Introduces required multi-tenancy via per-tenant SQLite database sharding and me
 | MarkdownPlugin | Plugin | **Unchanged** — Uses `bundle.storage` instead of `self.storage`. No constructor changes. |
 | IngestionPlugin | Plugin | **Updated** — `tenant_id` parameter on `ingest_documents` tool. |
 | semantic_search tool | Plugin (Markdown) | **Extended** — `tenant_ids` and `metadata_filters` parameters, optional `query`. |
-| FeedbackPlugin | Plugin | **Updated** — `tenant_id` parameter on `provide_feedback` tool. |
+| FeedbackPlugin | Plugin | **Updated** — Constructor takes `TenantStorageManager` instead of `StorageAdapter`. `call_tool` resolves adapter from `tenant_id` in tool arguments via `self.tenant_manager.get_adapter(arguments["tenant_id"])`. `provide_feedback` tool schema gains required `tenant_id`. |
 | CLI | Entry Point | **Extended** — `--tenant-id` flag on ingest subcommand. |
 
 ## Data Model

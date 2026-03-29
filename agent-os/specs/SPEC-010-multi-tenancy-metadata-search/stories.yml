@@ -90,8 +90,12 @@ stories:
       query was used (False for vector, True for non-vector).
       Update ingest_documents tool: add tenant_id parameter (default
       "default"). Update provide_feedback tool: add required tenant_id
-      parameter (doc_id is only unique within a shard). Update CLI
-      ingest subcommand: add --tenant-id flag (default "default").
+      parameter (doc_id is only unique within a shard). FeedbackPlugin
+      constructor changes from StorageAdapter to TenantStorageManager;
+      call_tool resolves adapter via
+      self.tenant_manager.get_adapter(arguments["tenant_id"]). Update
+      cli.py where FeedbackPlugin is initialized. Update CLI ingest
+      subcommand: add --tenant-id flag (default "default").
     status: pending
     verified_by: []
 
