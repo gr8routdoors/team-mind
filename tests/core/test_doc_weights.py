@@ -1,11 +1,11 @@
 """
 SPEC-004 / STORY-002: Doc Weights Table & Ingestion Hook
-SPEC-004 / STORY-004: Decay Policy on DoctypeSpec
+SPEC-004 / STORY-004: Decay Policy on RecordTypeSpec
 """
 
 import sqlite3
 from team_mind_mcp.storage import StorageAdapter
-from team_mind_mcp.server import DoctypeSpec
+from team_mind_mcp.server import RecordTypeSpec
 
 
 def test_weights_table_created_on_initialize(tmp_path):
@@ -43,7 +43,7 @@ def test_weight_row_auto_created_on_save(tmp_path):
         metadata={"test": True},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="test_type",
+        record_type="test_type",
     )
 
     # Then a corresponding row in doc_weights exists
@@ -73,7 +73,7 @@ def test_decay_half_life_copied_on_save(tmp_path):
         metadata={},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="notes",
+        record_type="notes",
         decay_half_life_days=30.0,
     )
 
@@ -100,7 +100,7 @@ def test_no_decay_uses_null(tmp_path):
         metadata={},
         vector=[0.1] * 768,
         plugin="test_plugin",
-        doctype="unknown_type",
+        record_type="unknown_type",
     )
 
     with adapter._conn:
@@ -126,12 +126,12 @@ def test_existing_databases_get_migration(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uri TEXT NOT NULL,
             plugin TEXT NOT NULL DEFAULT '',
-            doctype TEXT NOT NULL DEFAULT '',
+            record_type TEXT NOT NULL DEFAULT '',
             metadata JSON
         )
     """)
     conn.execute(
-        "INSERT INTO documents (uri, plugin, doctype) VALUES ('old', 'p', 'd')"
+        "INSERT INTO documents (uri, plugin, record_type) VALUES ('old', 'p', 'd')"
     )
     conn.commit()
     conn.close()
@@ -157,30 +157,30 @@ def test_existing_databases_get_migration(tmp_path):
 # STORY-004 tests
 
 
-def test_doctype_spec_decay_defaults_none():
+def test_record_type_spec_decay_defaults_none():
     """
     STORY-004 / AC-001: Field Exists and Defaults to None
     """
-    spec = DoctypeSpec(name="test", description="test")
+    spec = RecordTypeSpec(name="test", description="test")
     assert spec.decay_half_life_days is None
 
 
-def test_doctype_spec_decay_declared():
+def test_record_type_spec_decay_declared():
     """
     STORY-004 / AC-002: Plugin Declares Decay
     """
-    spec = DoctypeSpec(
+    spec = RecordTypeSpec(
         name="notes", description="Meeting notes", decay_half_life_days=30
     )
     assert spec.decay_half_life_days == 30
 
 
-def test_doctype_spec_backward_compatible():
+def test_record_type_spec_backward_compatible():
     """
     STORY-004 / AC-003: Backward Compatible
     """
     # Existing plugins that don't specify decay_half_life_days
-    spec = DoctypeSpec(
+    spec = RecordTypeSpec(
         name="chunk",
         description="A text chunk",
         schema={"text": {"type": "string"}},

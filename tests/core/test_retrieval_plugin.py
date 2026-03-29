@@ -25,7 +25,7 @@ async def test_retrieval_fetches_local_db_markdown(tmp_path):
         },
         vector=[0.0] * 768,
         plugin="retrieval_test",
-        doctype="embedded_doc",
+        record_type="embedded_doc",
     )
     plugin = DocumentRetrievalPlugin(storage)
 
@@ -61,7 +61,7 @@ async def test_retrieval_fetches_live_file_content_via_uri_pointer(tmp_path):
         metadata={"author": "test"},  # No local_payload
         vector=[0.0] * 768,
         plugin="retrieval_test",
-        doctype="live_doc",
+        record_type="live_doc",
     )
 
     # When the AI client calls get_full_document

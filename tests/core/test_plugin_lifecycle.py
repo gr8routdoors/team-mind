@@ -421,7 +421,7 @@ def test_event_filters_restored(tmp_path):
         "sample_observer",
         "ingest_observer",
         "team_mind_mcp.test_plugins.SampleObserverPlugin",
-        event_filter_json={"plugins": ["java_plugin"], "doctypes": ["code_sig"]},
+        event_filter_json={"plugins": ["java_plugin"], "record_types": ["code_sig"]},
     )
 
     registry = PluginRegistry()
@@ -432,7 +432,7 @@ def test_event_filters_restored(tmp_path):
     ef = observers[0].event_filter
     assert ef is not None
     assert ef.plugins == ["java_plugin"]
-    assert ef.doctypes == ["code_sig"]
+    assert ef.record_types == ["code_sig"]
     storage.close()
 
 

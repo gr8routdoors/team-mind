@@ -68,9 +68,17 @@ specs:
   SPEC-008:
     name: Semantic Type Routing (Phase A)
     slug: semantic-type-routing
-    status: in_design
+    status: complete
     created: 2026-03-27
     stories: 9
-    stories_complete: 0
+    stories_complete: 9
 
-# Next spec number: 009
+  SPEC-009:
+    name: Record Type Rename (doctype → record_type)
+    slug: record-type-rename
+    status: complete
+    created: 2026-03-29
+    stories: 5
+    stories_complete: 5
+
+# Next spec number: 010

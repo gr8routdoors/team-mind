@@ -49,7 +49,7 @@ SPEC-008 (ADR-007) introduces three distinct type concepts for all data in the s
 | **Media type** | "How is this data *encoded*?" | Plugin / auto-detected | `text/markdown`, `text/x-java` |
 | **Record type** | "What did the plugin *produce*?" | Plugin, at write time | `markdown_chunk`, `code_signature` |
 
-Record type replaces the earlier `doctype` field (rename is Phase B of SPEC-008).
+Record type replaced the earlier `doctype` field (renamed in SPEC-009).
 
 ### Activation Model
 

@@ -8,7 +8,7 @@ from team_mind_mcp.server import (
     IngestObserver,
     IngestProcessor,
     PluginRegistry,
-    DoctypeSpec,
+    RecordTypeSpec,
 )
 from team_mind_mcp.ingestion import IngestionEvent, IngestionPipeline, IngestionBundle
 
@@ -50,8 +50,8 @@ class _EventEmittingProcessor(IngestProcessor):
         return self._name
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
-        return [DoctypeSpec(name="test_type", description="test")]
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [RecordTypeSpec(name="test_type", description="test")]
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         return list(self._events)
@@ -70,19 +70,19 @@ async def test_filter_by_semantic_type(tmp_path):
     events = [
         IngestionEvent(
             plugin="plugin_a",
-            doctype="doc",
+            record_type="doc",
             uris=["u1"],
             semantic_types=["architecture_docs"],
         ),
         IngestionEvent(
             plugin="plugin_b",
-            doctype="doc",
+            record_type="doc",
             uris=["u2"],
             semantic_types=["meeting_notes"],
         ),
         IngestionEvent(
             plugin="plugin_c",
-            doctype="doc",
+            record_type="doc",
             uris=["u3"],
             semantic_types=["architecture_docs"],
         ),
@@ -118,28 +118,28 @@ async def test_combined_plugin_and_semantic_type_filter(tmp_path):
         # matches plugin AND semantic type → PASS
         IngestionEvent(
             plugin="markdown_plugin",
-            doctype="doc",
+            record_type="doc",
             uris=["u1"],
             semantic_types=["architecture_docs"],
         ),
         # matches plugin but NOT semantic type → FAIL
         IngestionEvent(
             plugin="markdown_plugin",
-            doctype="doc",
+            record_type="doc",
             uris=["u2"],
             semantic_types=["meeting_notes"],
         ),
         # matches semantic type but NOT plugin → FAIL
         IngestionEvent(
             plugin="other_plugin",
-            doctype="doc",
+            record_type="doc",
             uris=["u3"],
             semantic_types=["architecture_docs"],
         ),
         # matches neither → FAIL
         IngestionEvent(
             plugin="other_plugin",
-            doctype="doc",
+            record_type="doc",
             uris=["u4"],
             semantic_types=["meeting_notes"],
         ),
@@ -174,13 +174,13 @@ async def test_none_semantic_types_matches_all(tmp_path):
 
     events = [
         IngestionEvent(
-            plugin="plugin_a", doctype="doc", uris=["u1"], semantic_types=["type_a"]
+            plugin="plugin_a", record_type="doc", uris=["u1"], semantic_types=["type_a"]
         ),
         IngestionEvent(
-            plugin="plugin_b", doctype="doc", uris=["u2"], semantic_types=["type_b"]
+            plugin="plugin_b", record_type="doc", uris=["u2"], semantic_types=["type_b"]
         ),
         IngestionEvent(
-            plugin="plugin_c", doctype="doc", uris=["u3"], semantic_types=[]
+            plugin="plugin_c", record_type="doc", uris=["u3"], semantic_types=[]
         ),
     ]
 
@@ -212,13 +212,13 @@ async def test_empty_semantic_types_matches_no_events(tmp_path):
     events = [
         IngestionEvent(
             plugin="plugin_a",
-            doctype="doc",
+            record_type="doc",
             uris=["u1"],
             semantic_types=["architecture_docs"],
         ),
         IngestionEvent(
             plugin="plugin_b",
-            doctype="doc",
+            record_type="doc",
             uris=["u2"],
             semantic_types=["meeting_notes"],
         ),
@@ -250,14 +250,14 @@ def test_semantic_type_filter_any_match():
 
     # Event with one overlapping type → passes
     e1 = IngestionEvent(
-        plugin="p", doctype="d", semantic_types=["architecture_docs", "meeting_notes"]
+        plugin="p", record_type="d", semantic_types=["architecture_docs", "meeting_notes"]
     )
     assert ef.semantic_types is None or any(
         st in ef.semantic_types for st in e1.semantic_types
     )
 
     # Event with no overlap → blocked
-    e2 = IngestionEvent(plugin="p", doctype="d", semantic_types=["meeting_notes"])
+    e2 = IngestionEvent(plugin="p", record_type="d", semantic_types=["meeting_notes"])
     assert not (
         ef.semantic_types is None
         or any(st in ef.semantic_types for st in e2.semantic_types)

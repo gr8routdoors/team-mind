@@ -4,7 +4,7 @@ from team_mind_mcp.server import ToolProvider, PluginRegistry
 
 
 class DoctypeDiscoveryPlugin(ToolProvider):
-    """Exposes the doctype catalog as an MCP tool for AI client discovery."""
+    """Exposes the record type catalog as an MCP tool for AI client discovery."""
 
     def __init__(self, registry: PluginRegistry):
         self.registry = registry
@@ -16,20 +16,20 @@ class DoctypeDiscoveryPlugin(ToolProvider):
     def get_tools(self) -> list[Tool]:
         return [
             Tool(
-                name="list_doctypes",
-                description="Discover available document types and their schemas across all plugins.",
+                name="list_record_types",
+                description="Discover available record types and their schemas across all plugins.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "plugins": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter to doctypes from these plugins only.",
+                            "description": "Filter to record types from these plugins only.",
                         },
-                        "doctypes": {
+                        "record_types": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Filter to these doctype names only.",
+                            "description": "Filter to these record type names only.",
                         },
                     },
                 },
@@ -37,19 +37,19 @@ class DoctypeDiscoveryPlugin(ToolProvider):
         ]
 
     async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
-        if name != "list_doctypes":
+        if name != "list_record_types":
             raise ValueError(f"Unsupported tool: {name}")
 
         plugin_filter = arguments.get("plugins")
-        doctype_filter = arguments.get("doctypes")
+        record_type_filter = arguments.get("record_types")
 
-        catalog = self.registry.get_doctype_catalog()
+        catalog = self.registry.get_record_type_catalog()
 
         # Apply filters
         if plugin_filter is not None:
             catalog = [dt for dt in catalog if dt.plugin in plugin_filter]
-        if doctype_filter is not None:
-            catalog = [dt for dt in catalog if dt.name in doctype_filter]
+        if record_type_filter is not None:
+            catalog = [dt for dt in catalog if dt.name in record_type_filter]
 
         result = [
             {

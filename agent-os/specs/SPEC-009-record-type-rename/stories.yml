@@ -1,0 +1,70 @@
+# Stories for SPEC-009
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Core Types and Interfaces
+    description: >
+      Rename DoctypeSpec → RecordTypeSpec. Rename IngestProcessor.doctypes →
+      record_types property. Rename IngestionEvent.doctype → record_type field.
+      Rename EventFilter.doctypes → record_types field. Update all imports.
+      Update PluginRegistry internal state (_doctype_catalog, _doctypes_by_plugin)
+      and all internal references in register() and unregister().
+    status: complete
+    verified_by: tests_passing
+
+  STORY-002:
+    name: Storage Layer
+    description: >
+      Rename documents.doctype column to record_type using ALTER TABLE RENAME
+      COLUMN (PRAGMA-guarded). Drop old indexes, create new record_type indexes.
+      Update save_payload(), delete_by_uri(), lookup_existing_docs(), and
+      retrieve_by_vector_similarity() parameters (doctype → record_type,
+      doctypes → record_types). Update all SQL query strings.
+    status: complete
+    verified_by: tests_passing
+
+  STORY-003:
+    name: MCP Tools and Lifecycle
+    description: >
+      Rename PluginRegistry public methods: get_doctype_catalog() →
+      get_record_type_catalog(), get_doctypes_for_plugin() →
+      get_record_types_for_plugin(), get_plugins_for_doctype() →
+      get_plugins_for_record_type(). Rename discovery.py MCP tool
+      list_doctypes → list_record_types and its doctypes parameter →
+      record_types. Update lifecycle.py: apply_event_filter() and _list()
+      display dict (doctypes → record_types).
+    status: complete
+    verified_by: tests_passing
+
+  STORY-004:
+    name: MarkdownPlugin
+    description: >
+      Update MarkdownPlugin to import and use RecordTypeSpec (was DoctypeSpec).
+      Rename doctypes property → record_types. Update all doctype= kwargs to
+      record_type= in save_payload(), delete_by_uri(), and process_bundle()
+      calls. Update test_markdown_plugin.py and test_markdown_semantic.py.
+    status: complete
+    verified_by: tests_passing
+
+  STORY-005:
+    name: Documentation and Spec Cleanup
+    description: >
+      Update all documentation to use record_type terminology: plugin developer
+      guides, system overview, ADR-007, ADR-002. Update roadmap and README.
+      Update SPEC-008 README.md (out-of-scope note still references doctype →
+      record_type as Phase B). Update SPEC-009 README status table in index.yml
+      once all stories pass.
+    status: complete
+    verified_by: manual_review
+
+verification:
+  criteria:
+    - All 259+ existing tests pass with no regressions.
+    - No remaining 'doctype' identifiers in src/ (except comments and migration guard).
+    - SQL column is named record_type in fresh and migrated databases.
+    - list_record_types MCP tool name is exposed (not list_doctypes).
+    - EventFilter.record_types filters events correctly.
+    - MarkdownPlugin.record_types returns RecordTypeSpec correctly.
+  completed: true
+  completed_date: 2026-03-29

@@ -80,7 +80,7 @@ When the server is running, connected AI agents have access to the `ingest_docum
 
 ## Building Plugins
 
-Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](agent-os/context/architecture/plugin-developer-guide.md)** — it covers what you own (doctypes, metadata schemas, storage modes, tools), what the platform provides, and includes runnable code examples.
+Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](agent-os/context/architecture/plugin-developer-guide.md)** — it covers what you own (record types, metadata schemas, storage modes, tools), what the platform provides, and includes runnable code examples.
 
 ## Development Status
 

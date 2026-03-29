@@ -16,7 +16,7 @@ def test_score_averages_toward_signal_value(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
 
     for _ in range(20):
         adapter.update_weight(doc_id, signal=5)
@@ -38,7 +38,7 @@ def test_negative_signals_average_correctly(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
 
     for _ in range(20):
         adapter.update_weight(doc_id, signal=-5)
@@ -60,7 +60,7 @@ def test_single_outlier_barely_moves_average(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
 
     for _ in range(100):
         adapter.update_weight(doc_id, signal=5)
@@ -81,7 +81,7 @@ def test_mixed_signals_average(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
 
     # 3 signals of +5, 2 signals of -3 → expected avg = (15 + -6) / 5 = 1.8
     for _ in range(3):
@@ -104,7 +104,7 @@ def test_update_payload_changes_metadata_and_vector(tmp_path):
     adapter.initialize()
 
     doc_id = adapter.save_payload(
-        "uri", {"version": 1}, [0.1] * 768, plugin="p", doctype="t"
+        "uri", {"version": 1}, [0.1] * 768, plugin="p", record_type="t"
     )
 
     # Update
@@ -127,7 +127,7 @@ def test_update_payload_preserves_weight(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
     adapter.update_weight(doc_id, signal=5)
 
     # Update content
@@ -142,8 +142,8 @@ def test_update_payload_preserves_weight(tmp_path):
     adapter.close()
 
 
-def test_update_payload_preserves_uri_plugin_doctype(tmp_path):
-    """update_payload does not change uri, plugin, or doctype."""
+def test_update_payload_preserves_uri_plugin_record_type(tmp_path):
+    """update_payload does not change uri, plugin, or record_type."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
@@ -153,13 +153,13 @@ def test_update_payload_preserves_uri_plugin_doctype(tmp_path):
         {"v": 1},
         [0.1] * 768,
         plugin="my_plugin",
-        doctype="my_type",
+        record_type="my_type",
     )
     adapter.update_payload(doc_id, {"v": 2}, [0.9] * 768)
 
     with adapter._conn:
         row = adapter._conn.execute(
-            "SELECT uri, plugin, doctype FROM documents WHERE id = ?", (doc_id,)
+            "SELECT uri, plugin, record_type FROM documents WHERE id = ?", (doc_id,)
         ).fetchone()
 
     assert row[0] == "file:///original.md"
@@ -190,17 +190,17 @@ def test_delete_by_uri_removes_all_chunks(tmp_path):
 
     # Two chunks from the same URI
     d1 = adapter.save_payload(
-        "file:///doc.md", {"chunk": 1}, [0.1] * 768, plugin="p", doctype="t"
+        "file:///doc.md", {"chunk": 1}, [0.1] * 768, plugin="p", record_type="t"
     )
     d2 = adapter.save_payload(
-        "file:///doc.md", {"chunk": 2}, [0.2] * 768, plugin="p", doctype="t"
+        "file:///doc.md", {"chunk": 2}, [0.2] * 768, plugin="p", record_type="t"
     )
     # Different URI — should NOT be deleted
     d3 = adapter.save_payload(
-        "file:///other.md", {"chunk": 1}, [0.3] * 768, plugin="p", doctype="t"
+        "file:///other.md", {"chunk": 1}, [0.3] * 768, plugin="p", record_type="t"
     )
 
-    count = adapter.delete_by_uri("file:///doc.md", plugin="p", doctype="t")
+    count = adapter.delete_by_uri("file:///doc.md", plugin="p", record_type="t")
 
     assert count == 2
 
@@ -221,11 +221,11 @@ def test_delete_by_uri_cleans_up_weights_and_vectors(tmp_path):
     adapter.initialize()
 
     d1 = adapter.save_payload(
-        "file:///doc.md", {}, [0.1] * 768, plugin="p", doctype="t"
+        "file:///doc.md", {}, [0.1] * 768, plugin="p", record_type="t"
     )
     adapter.update_weight(d1, signal=5)  # Give it a weight
 
-    adapter.delete_by_uri("file:///doc.md", plugin="p", doctype="t")
+    adapter.delete_by_uri("file:///doc.md", plugin="p", record_type="t")
 
     with adapter._conn:
         weight_row = adapter._conn.execute(
@@ -240,21 +240,21 @@ def test_delete_by_uri_cleans_up_weights_and_vectors(tmp_path):
     adapter.close()
 
 
-def test_delete_by_uri_scoped_to_plugin_and_doctype(tmp_path):
-    """delete_by_uri only deletes matching plugin+doctype, not all docs with that URI."""
+def test_delete_by_uri_scoped_to_plugin_and_record_type(tmp_path):
+    """delete_by_uri only deletes matching plugin+record_type, not all docs with that URI."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
     # Same URI, different plugins
     adapter.save_payload(
-        "file:///doc.md", {}, [0.1] * 768, plugin="plugin_a", doctype="type_x"
+        "file:///doc.md", {}, [0.1] * 768, plugin="plugin_a", record_type="type_x"
     )
     d2 = adapter.save_payload(
-        "file:///doc.md", {}, [0.2] * 768, plugin="plugin_b", doctype="type_y"
+        "file:///doc.md", {}, [0.2] * 768, plugin="plugin_b", record_type="type_y"
     )
 
-    count = adapter.delete_by_uri("file:///doc.md", plugin="plugin_a", doctype="type_x")
+    count = adapter.delete_by_uri("file:///doc.md", plugin="plugin_a", record_type="type_x")
 
     assert count == 1
     with adapter._conn:
@@ -270,7 +270,7 @@ def test_delete_by_uri_returns_zero_for_no_match(tmp_path):
     adapter = StorageAdapter(str(db_path))
     adapter.initialize()
 
-    count = adapter.delete_by_uri("file:///nonexistent.md", plugin="p", doctype="t")
+    count = adapter.delete_by_uri("file:///nonexistent.md", plugin="p", record_type="t")
     assert count == 0
     adapter.close()
 
@@ -286,7 +286,7 @@ def test_updated_vector_searchable(tmp_path):
     v_new = [0.0, 1.0] + [0.0] * 766
     v_query = [0.0, 1.0] + [0.0] * 766  # matches v_new
 
-    doc_id = adapter.save_payload("uri", {}, v_original, plugin="p", doctype="t")
+    doc_id = adapter.save_payload("uri", {}, v_original, plugin="p", record_type="t")
 
     # Before update: query for v_new direction
     results_before = adapter.retrieve_by_vector_similarity(v_query, limit=1)

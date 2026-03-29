@@ -2,7 +2,7 @@ import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
-from team_mind_mcp.server import ToolProvider, IngestProcessor, DoctypeSpec
+from team_mind_mcp.server import ToolProvider, IngestProcessor, RecordTypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 from team_mind_mcp.media_types import get_media_type
@@ -41,9 +41,9 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         return ["text/markdown", "text/plain"]
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="markdown_chunk",
                 description="A paragraph-level chunk extracted from a markdown document.",
                 schema={
@@ -77,7 +77,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                             "items": {"type": "string"},
                             "description": "Filter results to these plugins only.",
                         },
-                        "doctypes": {
+                        "record_types": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Filter results to these document types only.",
@@ -98,11 +98,11 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
         limit = arguments.get("limit", 5)
         plugins_filter = arguments.get("plugins")
-        doctypes_filter = arguments.get("doctypes")
+        record_types_filter = arguments.get("record_types")
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit, plugins=plugins_filter, doctypes=doctypes_filter
+            vector, limit=limit, plugins=plugins_filter, record_types=record_types_filter
         )
 
         # Format the SQLite results into an MCP TextContent response
@@ -140,7 +140,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
                 # Content changed or version changed → wipe old chunks and re-ingest
                 self.storage.delete_by_uri(
-                    uri, plugin=self.name, doctype="markdown_chunk"
+                    uri, plugin=self.name, record_type="markdown_chunk"
                 )
             else:
                 current_hash = _content_hash(content)
@@ -159,7 +159,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     metadata,
                     vector,
                     plugin=self.name,
-                    doctype="markdown_chunk",
+                    record_type="markdown_chunk",
                     content_hash=current_hash,
                     plugin_version=self.version,
                     semantic_type=semantic_type,
@@ -171,7 +171,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             return [
                 IngestionEvent(
                     plugin=self.name,
-                    doctype="markdown_chunk",
+                    record_type="markdown_chunk",
                     uris=processed_uris,
                     doc_ids=doc_ids,
                     semantic_types=bundle.semantic_types,

@@ -39,7 +39,7 @@ class StorageAdapter:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     uri TEXT NOT NULL,
                     plugin TEXT NOT NULL DEFAULT '',
-                    doctype TEXT NOT NULL DEFAULT '',
+                    record_type TEXT NOT NULL DEFAULT '',
                     metadata JSON,
                     content_hash TEXT,
                     plugin_version TEXT DEFAULT '0.0.0',
@@ -55,9 +55,21 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN plugin TEXT NOT NULL DEFAULT ''"
                 )
-            if "doctype" not in existing_columns:
+            if "doctype" in existing_columns:
                 self._conn.execute(
-                    "ALTER TABLE documents ADD COLUMN doctype TEXT NOT NULL DEFAULT ''"
+                    "ALTER TABLE documents RENAME COLUMN doctype TO record_type"
+                )
+                self._conn.execute("DROP INDEX IF EXISTS idx_documents_doctype")
+                self._conn.execute("DROP INDEX IF EXISTS idx_documents_plugin_doctype")
+                self._conn.execute(
+                    "DROP INDEX IF EXISTS idx_documents_uri_plugin_doctype"
+                )
+            if (
+                "record_type" not in existing_columns
+                and "doctype" not in existing_columns
+            ):
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN record_type TEXT NOT NULL DEFAULT ''"
                 )
             if "content_hash" not in existing_columns:
                 self._conn.execute("ALTER TABLE documents ADD COLUMN content_hash TEXT")
@@ -79,16 +91,16 @@ class StorageAdapter:
                 ON documents(plugin)
             """)
             self._conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_doctype
-                ON documents(doctype)
+                CREATE INDEX IF NOT EXISTS idx_documents_record_type
+                ON documents(record_type)
             """)
             self._conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_plugin_doctype
-                ON documents(plugin, doctype)
+                CREATE INDEX IF NOT EXISTS idx_documents_plugin_record_type
+                ON documents(plugin, record_type)
             """)
             self._conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_uri_plugin_doctype
-                ON documents(uri, plugin, doctype)
+                CREATE INDEX IF NOT EXISTS idx_documents_uri_plugin_record_type
+                ON documents(uri, plugin, record_type)
             """)
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_semantic_type
@@ -235,7 +247,7 @@ class StorageAdapter:
         metadata: dict,
         vector: list[float],
         plugin: str,
-        doctype: str,
+        record_type: str,
         decay_half_life_days: float | None = None,
         content_hash: str | None = None,
         plugin_version: str = "0.0.0",
@@ -248,12 +260,12 @@ class StorageAdapter:
 
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, doctype, metadata, content_hash, plugin_version, semantic_type, media_type) "
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, plugin_version, semantic_type, media_type) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 (
                     uri,
                     plugin,
-                    doctype,
+                    record_type,
                     json.dumps(metadata),
                     content_hash,
                     plugin_version,
@@ -285,7 +297,7 @@ class StorageAdapter:
     ) -> None:
         """Update an existing document's metadata and vector in place.
 
-        The plugin/doctype/uri are immutable — only content changes.
+        The plugin/record_type/uri are immutable — only content changes.
         Preserves the existing weight row (usage_score, tombstone, etc.).
         """
         if self._conn is None:
@@ -313,9 +325,9 @@ class StorageAdapter:
         self,
         uri: str,
         plugin: str,
-        doctype: str,
+        record_type: str,
     ) -> int:
-        """Delete all documents (and their weights/vectors) for a URI/plugin/doctype combo.
+        """Delete all documents (and their weights/vectors) for a URI/plugin/record_type combo.
 
         Returns the number of documents deleted. Used by plugins to wipe old
         chunks before re-ingesting an updated document.
@@ -326,8 +338,8 @@ class StorageAdapter:
         with self._conn:
             # Find all matching doc IDs
             cursor = self._conn.execute(
-                "SELECT id FROM documents WHERE uri = ? AND plugin = ? AND doctype = ?",
-                (uri, plugin, doctype),
+                "SELECT id FROM documents WHERE uri = ? AND plugin = ? AND record_type = ?",
+                (uri, plugin, record_type),
             )
             doc_ids = [row[0] for row in cursor.fetchall()]
 
@@ -356,9 +368,9 @@ class StorageAdapter:
         self,
         uri: str,
         plugin: str,
-        doctype: str,
+        record_type: str,
     ) -> list[dict]:
-        """Look up existing documents for a URI+plugin+doctype combo.
+        """Look up existing documents for a URI+plugin+record_type combo.
 
         Returns a list of dicts with id, content_hash, and plugin_version
         for each matching row. Used by the pipeline to build IngestionContext.
@@ -368,8 +380,8 @@ class StorageAdapter:
 
         cursor = self._conn.execute(
             "SELECT id, content_hash, plugin_version FROM documents "
-            "WHERE uri = ? AND plugin = ? AND doctype = ?",
-            (uri, plugin, doctype),
+            "WHERE uri = ? AND plugin = ? AND record_type = ?",
+            (uri, plugin, record_type),
         )
         return [
             {
@@ -446,7 +458,7 @@ class StorageAdapter:
         target_vector: list[float],
         limit: int = 5,
         plugins: list[str] | None = None,
-        doctypes: list[str] | None = None,
+        record_types: list[str] | None = None,
     ) -> list[dict]:
         """Retrieves documents by KNN similarity with composite scoring.
 
@@ -460,10 +472,10 @@ class StorageAdapter:
         # Short-circuit: explicit empty list means "match nothing"
         if plugins is not None and len(plugins) == 0:
             return []
-        if doctypes is not None and len(doctypes) == 0:
+        if record_types is not None and len(record_types) == 0:
             return []
 
-        has_filters = plugins is not None or doctypes is not None
+        has_filters = plugins is not None or record_types is not None
         fetch_k = limit * self.KNN_OVERFETCH_MULTIPLIER if has_filters else limit
 
         vec_bytes = struct.pack(f"{len(target_vector)}f", *target_vector)
@@ -477,16 +489,16 @@ class StorageAdapter:
             where_clauses.append(f"d.plugin IN ({placeholders})")
             params.extend(plugins)
 
-        if doctypes is not None:
-            placeholders = ",".join("?" for _ in doctypes)
-            where_clauses.append(f"d.doctype IN ({placeholders})")
-            params.extend(doctypes)
+        if record_types is not None:
+            placeholders = ",".join("?" for _ in record_types)
+            where_clauses.append(f"d.record_type IN ({placeholders})")
+            params.extend(record_types)
 
         extra_where = "AND " + " AND ".join(where_clauses)
 
         wi = self.WEIGHT_INFLUENCE
         query = f"""
-            SELECT d.id, d.uri, d.plugin, d.doctype, d.metadata, v.distance,
+            SELECT d.id, d.uri, d.plugin, d.record_type, d.metadata, v.distance,
                    COALESCE(w.usage_score, 0.0) AS usage_score,
                    COALESCE(w.decay_half_life_days, 0) AS decay_half_life,
                    w.created_at,
@@ -519,7 +531,7 @@ class StorageAdapter:
                     "id": row[0],
                     "uri": row[1],
                     "plugin": row[2],
-                    "doctype": row[3],
+                    "record_type": row[3],
                     "metadata": json.loads(row[4]) if row[4] else {},
                     "score": row[5],
                     "usage_score": row[6],

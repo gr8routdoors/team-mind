@@ -133,17 +133,17 @@ def test_ac004_migration_applies_to_existing_data(tmp_path):
     # Then all existing rows have semantic_type = '' and media_type = ''
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.execute(
-            "SELECT uri, plugin, doctype, plugin_version, semantic_type, media_type FROM documents"
+            "SELECT uri, plugin, record_type, plugin_version, semantic_type, media_type FROM documents"
         )
         rows = cursor.fetchall()
 
     assert len(rows) == 1
-    uri, plugin, doctype, plugin_version, semantic_type, media_type = rows[0]
+    uri, plugin, record_type, plugin_version, semantic_type, media_type = rows[0]
 
     # And no data loss occurs on the existing columns
     assert uri == "file:///existing/doc.md"
     assert plugin == "old_plugin"
-    assert doctype == "old_doctype"
+    assert record_type == "old_doctype"
     assert plugin_version == "1.0.0"
 
     # And new columns default to ''

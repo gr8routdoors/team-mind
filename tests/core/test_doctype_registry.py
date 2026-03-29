@@ -3,7 +3,7 @@ SPEC-002 / STORY-004: Doctype Registry & Catalog
 """
 
 from team_mind_mcp.server import (
-    DoctypeSpec,
+    RecordTypeSpec,
     ToolProvider,
     IngestProcessor,
     PluginRegistry,
@@ -16,10 +16,10 @@ class _PluginA(ToolProvider):
         return "plugin_a"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(name="type_x", description="Type X from A"),
-            DoctypeSpec(name="type_y", description="Type Y from A"),
+            RecordTypeSpec(name="type_x", description="Type X from A"),
+            RecordTypeSpec(name="type_y", description="Type Y from A"),
         ]
 
 
@@ -29,9 +29,9 @@ class _PluginB(IngestProcessor):
         return "plugin_b"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(name="type_z", description="Type Z from B"),
+            RecordTypeSpec(name="type_z", description="Type Z from B"),
         ]
 
 
@@ -43,10 +43,10 @@ class _PluginC(ToolProvider):
         return "plugin_c"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(name="type_x", description="Type X from C"),
-            DoctypeSpec(name="type_w", description="Type W from C"),
+            RecordTypeSpec(name="type_x", description="Type X from C"),
+            RecordTypeSpec(name="type_w", description="Type W from C"),
         ]
 
 
@@ -69,7 +69,7 @@ def test_catalog_collects_on_registration():
     registry.register(plugin)
 
     # Then both doctypes appear in the registry's internal catalog
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
     assert len(catalog) == 2
 
     # And each doctype's plugin field is set to the registering plugin's name
@@ -88,9 +88,9 @@ def test_get_all_doctypes():
     registry.register(_PluginC())  # 2 doctypes
 
     # When get_doctype_catalog() is called
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
 
-    # Then all five DoctypeSpec instances are returned
+    # Then all five RecordTypeSpec instances are returned
     assert len(catalog) == 5
 
 
@@ -105,7 +105,7 @@ def test_get_doctypes_for_plugin():
     registry.register(_PluginB())
 
     # When get_doctypes_for_plugin("plugin_a") is called
-    result = registry.get_doctypes_for_plugin("plugin_a")
+    result = registry.get_record_types_for_plugin("plugin_a")
 
     # Then exactly ["type_x", "type_y"] are returned
     names = [dt.name for dt in result]
@@ -123,7 +123,7 @@ def test_get_plugins_for_doctype():
     registry.register(_PluginC())
 
     # When get_plugins_for_doctype("type_x") is called
-    result = registry.get_plugins_for_doctype("type_x")
+    result = registry.get_plugins_for_record_type("type_x")
 
     # Then both "plugin_a" and "plugin_c" are returned
     assert sorted(result) == ["plugin_a", "plugin_c"]
@@ -141,7 +141,7 @@ def test_plugin_with_no_doctypes():
     registry.register(_BarePlugin())
 
     # Then the catalog is not modified (still 2)
-    assert len(registry.get_doctype_catalog()) == 2
+    assert len(registry.get_record_type_catalog()) == 2
     # And no error is raised (implicit)
 
 
@@ -155,9 +155,9 @@ def test_doctype_specs_include_plugin_name():
     registry.register(_PluginB())
 
     # When the doctype is retrieved from the catalog
-    catalog = registry.get_doctype_catalog()
+    catalog = registry.get_record_type_catalog()
     dt = catalog[0]
 
-    # Then the DoctypeSpec.plugin field equals "plugin_b"
+    # Then the RecordTypeSpec.plugin field equals "plugin_b"
     assert dt.plugin == "plugin_b"
     assert dt.name == "type_z"

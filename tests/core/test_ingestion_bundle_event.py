@@ -28,7 +28,7 @@ def test_event_semantic_types_set_on_construction():
     # Given an IngestionEvent constructed with semantic_types
     event = IngestionEvent(
         plugin="test-plugin",
-        doctype="doc",
+        record_type="doc",
         semantic_types=["architecture_docs"],
     )
     # When semantic_types is accessed
@@ -45,7 +45,7 @@ def _stub_processor_create_event(bundle: IngestionBundle) -> IngestionEvent:
     """Minimal stub processor that creates an event copying semantic_types from bundle."""
     return IngestionEvent(
         plugin="stub-plugin",
-        doctype="doc",
+        record_type="doc",
         uris=bundle.uris,
         semantic_types=list(bundle.semantic_types),
     )
@@ -78,7 +78,7 @@ def test_bundle_semantic_types_defaults_to_empty_list():
 
 def test_event_semantic_types_defaults_to_empty_list():
     # Given an IngestionEvent created without specifying semantic_types
-    event = IngestionEvent(plugin="test-plugin", doctype="doc")
+    event = IngestionEvent(plugin="test-plugin", record_type="doc")
     # When semantic_types is accessed
     # Then it returns []
     assert event.semantic_types == []
@@ -94,7 +94,7 @@ def test_bundle_semantic_types_default_is_independent_across_instances():
 
 def test_event_semantic_types_default_is_independent_across_instances():
     # Verify that the default_factory=list creates independent lists (not shared mutable default)
-    event1 = IngestionEvent(plugin="p", doctype="d")
-    event2 = IngestionEvent(plugin="p", doctype="d")
+    event1 = IngestionEvent(plugin="p", record_type="d")
+    event2 = IngestionEvent(plugin="p", record_type="d")
     event1.semantic_types.append("meeting_notes")
     assert event2.semantic_types == []

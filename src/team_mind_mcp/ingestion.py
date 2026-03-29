@@ -12,7 +12,7 @@ class IngestionEvent:
     """Structured event describing what an IngestProcessor wrote during ingestion."""
 
     plugin: str
-    doctype: str
+    record_type: str
     uris: list[str] = field(default_factory=list)
     doc_ids: list[int] = field(default_factory=list)
     semantic_types: list[str] = field(default_factory=list)
@@ -83,7 +83,7 @@ class IngestionPipeline:
         uris: List[str],
         processor_name: str,
         processor_version: str,
-        processor_doctypes: list[str],
+        processor_record_types: list[str],
     ) -> Dict[str, IngestionContext]:
         """Build IngestionContext per URI by looking up existing docs."""
         contexts: Dict[str, IngestionContext] = {}
@@ -95,13 +95,13 @@ class IngestionPipeline:
             return contexts
 
         for uri in uris:
-            # Check each doctype the processor declares
+            # Check each record type the processor declares
             all_previous_ids = []
             prev_hash = None
             prev_version = None
             is_update = False
 
-            for dt in processor_doctypes:
+            for dt in processor_record_types:
                 existing = self.storage.lookup_existing_docs(uri, processor_name, dt)
                 if existing:
                     is_update = True
@@ -156,12 +156,12 @@ class IngestionPipeline:
             )
             if not filtered_uris:
                 continue
-            doctype_names = [dt.name for dt in processor.doctypes]
+            record_type_names = [dt.name for dt in processor.record_types]
             contexts = self._build_contexts(
                 filtered_uris,
                 processor.name,
                 processor.version,
-                doctype_names,
+                record_type_names,
             )
             # Create a per-processor bundle with filtered URIs — no shared state
             proc_bundle = IngestionBundle(
@@ -192,7 +192,7 @@ class IngestionPipeline:
                     e
                     for e in all_events
                     if (ef.plugins is None or e.plugin in ef.plugins)
-                    and (ef.doctypes is None or e.doctype in ef.doctypes)
+                    and (ef.record_types is None or e.record_type in ef.record_types)
                     and (
                         ef.semantic_types is None
                         or any(st in ef.semantic_types for st in e.semantic_types)

@@ -5,12 +5,12 @@ SPEC-002 / STORY-006: Migrate Existing Plugins to Doctypes
 import json
 import pytest
 from team_mind_mcp.markdown import MarkdownPlugin
-from team_mind_mcp.server import DoctypeSpec
+from team_mind_mcp.server import RecordTypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
 
-def test_markdown_plugin_declares_doctype(tmp_path):
+def test_markdown_plugin_declares_record_type(tmp_path):
     """
     AC-001: MarkdownPlugin Declares Doctype
     """
@@ -22,11 +22,11 @@ def test_markdown_plugin_declares_doctype(tmp_path):
     plugin = MarkdownPlugin(storage)
 
     # When its doctypes property is accessed
-    specs = plugin.doctypes
+    specs = plugin.record_types
 
-    # Then it returns a list containing a DoctypeSpec with name="markdown_chunk"
+    # Then it returns a list containing a RecordTypeSpec with name="markdown_chunk"
     assert len(specs) == 1
-    assert isinstance(specs[0], DoctypeSpec)
+    assert isinstance(specs[0], RecordTypeSpec)
     assert specs[0].name == "markdown_chunk"
 
     # And the spec includes a description and schema describing the chunk metadata
@@ -37,7 +37,7 @@ def test_markdown_plugin_declares_doctype(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_markdown_plugin_passes_plugin_and_doctype_on_save(tmp_path):
+async def test_markdown_plugin_passes_plugin_and_record_type_on_save(tmp_path):
     """
     AC-002: MarkdownPlugin Passes Plugin and Doctype on Save
     """
@@ -54,9 +54,9 @@ async def test_markdown_plugin_passes_plugin_and_doctype_on_save(tmp_path):
     # When it calls storage.save_payload
     await plugin.process_bundle(bundle)
 
-    # Then it passes plugin="markdown_plugin" and doctype="markdown_chunk"
+    # Then it passes plugin="markdown_plugin" and record_type="markdown_chunk"
     with storage._conn:
-        cursor = storage._conn.execute("SELECT plugin, doctype FROM documents")
+        cursor = storage._conn.execute("SELECT plugin, record_type FROM documents")
         rows = cursor.fetchall()
 
     assert len(rows) >= 1
@@ -88,7 +88,7 @@ async def test_semantic_search_accepts_filters(tmp_path):
         {"data": "other"},
         [0.0] * 768,
         plugin="other_plugin",
-        doctype="other_type",
+        record_type="other_type",
     )
 
     # When semantic_search is called with plugin and doctype filters
@@ -97,14 +97,14 @@ async def test_semantic_search_accepts_filters(tmp_path):
         {
             "query": "travel",
             "plugins": ["markdown_plugin"],
-            "doctypes": ["markdown_chunk"],
+            "record_types": ["markdown_chunk"],
         },
     )
     results = json.loads(response[0].text)
 
     # Then results are scoped to the markdown plugin only
     assert all(r["plugin"] == "markdown_plugin" for r in results)
-    assert all(r["doctype"] == "markdown_chunk" for r in results)
+    assert all(r["record_type"] == "markdown_chunk" for r in results)
 
     # Multi-value: search across both plugins
     response_multi = await plugin.call_tool(
@@ -137,12 +137,12 @@ async def test_response_metadata_includes_plugin_and_doctype(tmp_path):
     response = await plugin.call_tool("semantic_search", {"query": "sample"})
     results = json.loads(response[0].text)
 
-    # Then each result includes plugin and doctype
+    # Then each result includes plugin and record_type
     assert len(results) > 0
     for r in results:
         assert "plugin" in r
-        assert "doctype" in r
+        assert "record_type" in r
         assert r["plugin"] == "markdown_plugin"
-        assert r["doctype"] == "markdown_chunk"
+        assert r["record_type"] == "markdown_chunk"
 
     storage.close()

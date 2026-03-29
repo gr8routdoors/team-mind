@@ -66,7 +66,7 @@ class PluginLoader:
             return
         ef = EventFilter(
             plugins=event_filter_json.get("plugins"),
-            doctypes=event_filter_json.get("doctypes"),
+            record_types=event_filter_json.get("record_types"),
             semantic_types=event_filter_json.get("semantic_types"),
         )
         # Store the filter on the instance for observers that use default property
@@ -114,7 +114,7 @@ class LifecyclePlugin(ToolProvider):
                         },
                         "event_filter": {
                             "type": "object",
-                            "description": "Optional event subscription filter with 'plugins' and/or 'doctypes' lists.",
+                            "description": "Optional event subscription filter with 'plugins' and/or 'record_types' lists.",
                         },
                         "semantic_types": {
                             "type": "array",
@@ -266,7 +266,7 @@ class LifecyclePlugin(ToolProvider):
                         "tools": [],
                         "event_filter": {
                             "plugins": ef.plugins,
-                            "doctypes": ef.doctypes,
+                            "record_types": ef.record_types,
                             "semantic_types": ef.semantic_types,
                         }
                         if ef

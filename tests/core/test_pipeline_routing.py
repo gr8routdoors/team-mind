@@ -37,7 +37,7 @@ class _TrackingProcessor(IngestProcessor):
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         self.received_bundles.append(bundle)
-        return [IngestionEvent(plugin=self.name, doctype="doc", uris=bundle.uris)]
+        return [IngestionEvent(plugin=self.name, record_type="doc", uris=bundle.uris)]
 
 
 # ---------------------------------------------------------------------------
