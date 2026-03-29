@@ -7,8 +7,8 @@ stories:
     description: >
       Add semantic_type and media_type columns to documents table. Add index
       on semantic_type. Handle migration for existing databases.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-002:
     name: Supported Media Types on IngestProcessor
@@ -16,8 +16,8 @@ stories:
       Add optional supported_media_types property to IngestProcessor ABC.
       Default None = accept all URIs (backward compatible). When set, only
       URIs matching the declared media types are passed to the processor.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-003:
     name: Semantic Types on Plugin Registration
@@ -33,8 +33,8 @@ stories:
     description: >
       Add semantic_type field to IngestionBundle (from caller) and IngestionEvent
       (from processor). Events carry the semantic type so observers can filter on it.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-005:
     name: Pipeline Semantic Type Routing
@@ -52,8 +52,8 @@ stories:
       Add semantic_types field to EventFilter. Observers can filter by
       semantic type alongside plugins and doctypes. Pipeline Phase 2
       applies semantic type filtering.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
   STORY-007:
     name: MCP Tool and CLI Semantic Type Parameter
