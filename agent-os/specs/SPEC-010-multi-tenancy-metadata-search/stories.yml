@@ -26,8 +26,10 @@ stories:
       doc_weights tables — identical to current minus registered_plugins,
       no tenant_id column. Verify get_adapter raises ValueError for
       unregistered tenants.
-    status: pending
-    verified_by: []
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
 
   STORY-003:
     name: Ingestion Pipeline Routing

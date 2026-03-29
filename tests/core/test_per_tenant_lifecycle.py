@@ -43,17 +43,13 @@ def _get_columns(db_path: str, table: str) -> set[str]:
         return {row[1] for row in cursor.fetchall()}
 
 
-def _get_virtual_tables(db_path: str) -> set[str]:
-    """Return virtual table names in a SQLite database."""
+def _has_vec_documents_table(db_path: str) -> bool:
+    """Return True if vec_documents virtual table exists in the database."""
     with sqlite3.connect(db_path) as conn:
         cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='shadow' OR type='table'"
-        )
-        # For vec0 virtual tables, check sqlite_master directly
-        cursor2 = conn.execute(
             "SELECT name FROM sqlite_master WHERE name='vec_documents'"
         )
-        return {row[0] for row in cursor2.fetchall()}
+        return cursor.fetchone() is not None
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +144,7 @@ def test_per_tenant_db_has_vec_documents_table(tmp_path):
     mgr.get_adapter("default")
     db_path = _tenant_db_path(base, "default")
 
-    virtual_tables = _get_virtual_tables(db_path)
-    assert "vec_documents" in virtual_tables
+    assert _has_vec_documents_table(db_path)
     mgr.close()
 
 
@@ -256,7 +251,7 @@ def test_get_adapter_raises_before_create_tenant(tmp_path):
     mgr = TenantStorageManager(base)
     mgr.initialize()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not registered"):
         mgr.get_adapter("user-999")
     mgr.close()
 
