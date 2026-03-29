@@ -81,8 +81,8 @@ stories:
       activation model), ADR-002 (semantic type references, link to ADR-007),
       roadmap (SPEC-008 status), README (development status). Ensure no
       stale references to broadcast-and-self-filter as current behavior.
-    status: pending
-    verified_by: null
+    status: passing
+    verified_by: [spec-reviewer, code-quality-reviewer]
 
 verification:
   criteria:
@@ -94,5 +94,5 @@ verification:
     - Wildcard semantic_types=["*"] processes all content.
     - Observers can filter by semantic_type.
     - save_payload stores semantic_type and media_type on documents.
-  completed: false
-  completed_date: null
+  completed: true
+  completed_date: "2026-03-29"
