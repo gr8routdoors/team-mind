@@ -126,12 +126,12 @@ def test_existing_databases_get_migration(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uri TEXT NOT NULL,
             plugin TEXT NOT NULL DEFAULT '',
-            doctype TEXT NOT NULL DEFAULT '',
+            record_type TEXT NOT NULL DEFAULT '',
             metadata JSON
         )
     """)
     conn.execute(
-        "INSERT INTO documents (uri, plugin, doctype) VALUES ('old', 'p', 'd')"
+        "INSERT INTO documents (uri, plugin, record_type) VALUES ('old', 'p', 'd')"
     )
     conn.commit()
     conn.close()
@@ -157,7 +157,7 @@ def test_existing_databases_get_migration(tmp_path):
 # STORY-004 tests
 
 
-def test_doctype_spec_decay_defaults_none():
+def test_record_type_spec_decay_defaults_none():
     """
     STORY-004 / AC-001: Field Exists and Defaults to None
     """
@@ -165,7 +165,7 @@ def test_doctype_spec_decay_defaults_none():
     assert spec.decay_half_life_days is None
 
 
-def test_doctype_spec_decay_declared():
+def test_record_type_spec_decay_declared():
     """
     STORY-004 / AC-002: Plugin Declares Decay
     """
@@ -175,7 +175,7 @@ def test_doctype_spec_decay_declared():
     assert spec.decay_half_life_days == 30
 
 
-def test_doctype_spec_backward_compatible():
+def test_record_type_spec_backward_compatible():
     """
     STORY-004 / AC-003: Backward Compatible
     """

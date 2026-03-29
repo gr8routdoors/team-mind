@@ -44,7 +44,7 @@ class _ProcessorWithDoctypes(IngestProcessor):
         ]
 
 
-def test_doctype_spec_fields():
+def test_record_type_spec_fields():
     """
     AC-001: RecordTypeSpec Dataclass Fields
     """
@@ -63,7 +63,7 @@ def test_doctype_spec_fields():
     assert spec.schema["category"]["type"] == "string"
 
 
-def test_plugin_declares_doctypes():
+def test_plugin_declares_record_types():
     """
     AC-002: Plugin Declares Doctypes
     """
@@ -82,7 +82,7 @@ def test_plugin_declares_doctypes():
     assert len(specs[0].description) > 0
 
 
-def test_doctypes_property_defaults_empty():
+def test_record_types_property_defaults_empty():
     """
     AC-003: Doctypes Property Defaults Empty
     """

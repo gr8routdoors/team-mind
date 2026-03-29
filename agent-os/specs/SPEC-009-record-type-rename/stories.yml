@@ -10,8 +10,8 @@ stories:
       Rename EventFilter.doctypes → record_types field. Update all imports.
       Update PluginRegistry internal state (_doctype_catalog, _doctypes_by_plugin)
       and all internal references in register() and unregister().
-    status: pending
-    verified_by: null
+    status: complete
+    verified_by: tests_passing
 
   STORY-002:
     name: Storage Layer
@@ -21,8 +21,8 @@ stories:
       Update save_payload(), delete_by_uri(), lookup_existing_docs(), and
       retrieve_by_vector_similarity() parameters (doctype → record_type,
       doctypes → record_types). Update all SQL query strings.
-    status: pending
-    verified_by: null
+    status: complete
+    verified_by: tests_passing
 
   STORY-003:
     name: MCP Tools and Lifecycle
@@ -34,8 +34,8 @@ stories:
       list_doctypes → list_record_types and its doctypes parameter →
       record_types. Update lifecycle.py: apply_event_filter() and _list()
       display dict (doctypes → record_types).
-    status: pending
-    verified_by: null
+    status: complete
+    verified_by: tests_passing
 
   STORY-004:
     name: MarkdownPlugin

@@ -41,11 +41,6 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         return ["text/markdown", "text/plain"]
 
     @property
-    def doctypes(self) -> list[RecordTypeSpec]:
-        """Backward-compat alias — delegates to record_types."""
-        return self.record_types
-
-    @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
             RecordTypeSpec(
@@ -82,7 +77,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                             "items": {"type": "string"},
                             "description": "Filter results to these plugins only.",
                         },
-                        "doctypes": {
+                        "record_types": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Filter results to these document types only.",
@@ -103,11 +98,11 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
         limit = arguments.get("limit", 5)
         plugins_filter = arguments.get("plugins")
-        doctypes_filter = arguments.get("doctypes")
+        record_types_filter = arguments.get("record_types")
 
         vector = _mock_embed(query)
         results = self.storage.retrieve_by_vector_similarity(
-            vector, limit=limit, plugins=plugins_filter, record_types=doctypes_filter
+            vector, limit=limit, plugins=plugins_filter, record_types=record_types_filter
         )
 
         # Format the SQLite results into an MCP TextContent response

@@ -68,7 +68,7 @@ def test_unfiltered_search_returns_all(populated_storage):
     assert scores == sorted(scores)
 
 
-def test_filter_by_single_doctype(populated_storage):
+def test_filter_by_single_record_type(populated_storage):
     """
     AC-002: Filter by Single Doctype
     """
@@ -83,7 +83,7 @@ def test_filter_by_single_doctype(populated_storage):
     assert len(results) == 3  # xa1, xa2, ya1
 
 
-def test_filter_by_multiple_doctypes(populated_storage):
+def test_filter_by_multiple_record_types(populated_storage):
     """
     AC-003: Filter by Multiple Doctypes
     """
@@ -130,7 +130,7 @@ def test_filter_by_multiple_plugins(populated_storage):
     assert len(results) == 5
 
 
-def test_combined_plugin_and_doctype_filter(populated_storage):
+def test_combined_plugin_and_record_type_filter(populated_storage):
     """
     AC-006: Combined Plugin and Doctype Filter
     """

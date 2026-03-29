@@ -142,7 +142,7 @@ def test_update_payload_preserves_weight(tmp_path):
     adapter.close()
 
 
-def test_update_payload_preserves_uri_plugin_doctype(tmp_path):
+def test_update_payload_preserves_uri_plugin_record_type(tmp_path):
     """update_payload does not change uri, plugin, or record_type."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))
@@ -240,7 +240,7 @@ def test_delete_by_uri_cleans_up_weights_and_vectors(tmp_path):
     adapter.close()
 
 
-def test_delete_by_uri_scoped_to_plugin_and_doctype(tmp_path):
+def test_delete_by_uri_scoped_to_plugin_and_record_type(tmp_path):
     """delete_by_uri only deletes matching plugin+record_type, not all docs with that URI."""
     db_path = tmp_path / "test.db"
     adapter = StorageAdapter(str(db_path))

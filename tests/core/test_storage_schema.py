@@ -51,7 +51,7 @@ def test_indexes_created(tmp_path):
     adapter.close()
 
 
-def test_save_payload_requires_plugin_and_doctype(tmp_path):
+def test_save_payload_requires_plugin_and_record_type(tmp_path):
     """
     AC-003: Save Payload Requires Plugin and record_type
     """
@@ -69,7 +69,7 @@ def test_save_payload_requires_plugin_and_doctype(tmp_path):
     adapter.close()
 
 
-def test_saved_record_contains_plugin_and_doctype(tmp_path):
+def test_saved_record_contains_plugin_and_record_type(tmp_path):
     """
     AC-004: Saved Record Contains Plugin and record_type
     """

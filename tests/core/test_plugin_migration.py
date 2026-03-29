@@ -10,7 +10,7 @@ from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle
 
 
-def test_markdown_plugin_declares_doctype(tmp_path):
+def test_markdown_plugin_declares_record_type(tmp_path):
     """
     AC-001: MarkdownPlugin Declares Doctype
     """
@@ -37,7 +37,7 @@ def test_markdown_plugin_declares_doctype(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_markdown_plugin_passes_plugin_and_doctype_on_save(tmp_path):
+async def test_markdown_plugin_passes_plugin_and_record_type_on_save(tmp_path):
     """
     AC-002: MarkdownPlugin Passes Plugin and Doctype on Save
     """
@@ -97,7 +97,7 @@ async def test_semantic_search_accepts_filters(tmp_path):
         {
             "query": "travel",
             "plugins": ["markdown_plugin"],
-            "doctypes": ["markdown_chunk"],
+            "record_types": ["markdown_chunk"],
         },
     )
     results = json.loads(response[0].text)
