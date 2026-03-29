@@ -3,7 +3,7 @@ SPEC-008 / STORY-001: Semantic Type and Media Type Schema
 """
 
 import sqlite3
-import pytest
+import sqlite_vec
 from team_mind_mcp.storage import StorageAdapter
 
 
@@ -76,7 +76,6 @@ def test_ac004_migration_applies_to_existing_data(tmp_path):
     # (simulate an older database without semantic_type / media_type columns)
     with sqlite3.connect(str(db_path)) as conn:
         conn.enable_load_extension(True)
-        import sqlite_vec
         sqlite_vec.load(conn)
         conn.execute("""
             CREATE TABLE documents (
@@ -150,8 +149,8 @@ def test_ac004_migration_applies_to_existing_data(tmp_path):
     adapter.close()
 
 
-def test_registered_plugins_has_semantic_types_and_supported_media_types_columns(tmp_path):
-    """registered_plugins table gains semantic_types and supported_media_types columns."""
+def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_columns(tmp_path):
+    """AC-005: registered_plugins table gains semantic_types and supported_media_types columns."""
     db_path = tmp_path / "test.db"
 
     # Given a freshly migrated database
@@ -161,23 +160,28 @@ def test_registered_plugins_has_semantic_types_and_supported_media_types_columns
     # When the registered_plugins table schema is inspected
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.execute("PRAGMA table_info(registered_plugins)")
-        columns = {row[1] for row in cursor.fetchall()}
+        columns = {row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()}
 
-    # Then semantic_types and supported_media_types columns exist
+    # Then semantic_types column exists with type JSON and no default (NULL)
     assert "semantic_types" in columns
+    assert columns["semantic_types"]["type"] == "JSON"
+    assert columns["semantic_types"]["default"] is None
+
+    # And supported_media_types column exists with type JSON and no default (NULL)
     assert "supported_media_types" in columns
+    assert columns["supported_media_types"]["type"] == "JSON"
+    assert columns["supported_media_types"]["default"] is None
 
     adapter.close()
 
 
-def test_registered_plugins_migration_on_existing_table(tmp_path):
-    """registered_plugins migration adds columns to a pre-existing table without data loss."""
+def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
+    """AC-006: registered_plugins migration adds columns to a pre-existing table without data loss."""
     db_path = tmp_path / "test.db"
 
     # Given a database with a registered_plugins table lacking the new columns
     with sqlite3.connect(str(db_path)) as conn:
         conn.enable_load_extension(True)
-        import sqlite_vec
         sqlite_vec.load(conn)
         conn.execute("""
             CREATE TABLE documents (
