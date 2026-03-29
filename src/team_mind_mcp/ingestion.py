@@ -128,7 +128,10 @@ class IngestionPipeline:
         return contexts
 
     async def ingest(
-        self, uris: List[str], semantic_types: list[str] | None = None
+        self,
+        uris: List[str],
+        semantic_types: list[str] | None = None,
+        reliability_hint: float | None = None,
     ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
         Returns the bundle with collected events, or None if no valid URIs."""
@@ -138,7 +141,9 @@ class IngestionPipeline:
             return None  # No-Op
 
         bundle = IngestionBundle(
-            uris=resolved_uris, semantic_types=semantic_types or []
+            uris=resolved_uris,
+            semantic_types=semantic_types or [],
+            reliability_hint=reliability_hint,
         )
 
         # Phase 1: Route to matching processors with per-processor bundle isolation.
@@ -169,6 +174,7 @@ class IngestionPipeline:
                 uris=filtered_uris,
                 contexts=contexts,
                 semantic_types=bundle.semantic_types,
+                reliability_hint=bundle.reliability_hint,
             )
             processor_tasks.append(processor.process_bundle(proc_bundle))
 
