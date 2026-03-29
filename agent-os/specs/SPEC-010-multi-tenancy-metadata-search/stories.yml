@@ -12,8 +12,10 @@ stories:
       methods (save_plugin_record, get_enabled_plugin_records,
       disable_plugin_record, delete_plugin_record) from StorageAdapter to
       TenantStorageManager operating on system.sqlite.
-    status: pending
-    verified_by: []
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
 
   STORY-002:
     name: Per-Tenant Database Lifecycle
