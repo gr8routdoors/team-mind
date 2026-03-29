@@ -122,10 +122,10 @@ IngestionEvent gains `semantic_types` (plural list — carries all types from th
 @dataclass
 class IngestionEvent:
     plugin: str
-    doctype: str                                    # Phase A: unchanged (renamed in Phase B)
+    record_type: str                                # Renamed from doctype in SPEC-009
     uris: list[str] = field(default_factory=list)
     doc_ids: list[int] = field(default_factory=list)
-    semantic_types: list[str] = field(default_factory=list)  # NEW — plural
+    semantic_types: list[str] = field(default_factory=list)
 ```
 
 EventFilter gains `semantic_types`:
@@ -134,8 +134,8 @@ EventFilter gains `semantic_types`:
 @dataclass
 class EventFilter:
     plugins: list[str] | None = None
-    doctypes: list[str] | None = None        # Phase A: unchanged (renamed in Phase B)
-    semantic_types: list[str] | None = None  # NEW
+    record_types: list[str] | None = None    # Renamed from doctypes in SPEC-009
+    semantic_types: list[str] | None = None
 ```
 
 Observer semantic type filtering uses ANY-match semantics: an event passes if any of its
@@ -143,12 +143,10 @@ Observer semantic type filtering uses ANY-match semantics: an event passes if an
 
 This enables observers to filter on any dimension:
 - "Notify me on any `payment_service` ingest" → `semantic_types=["payment_service"]`
-- "Notify me when `markdown_chunk` records are written" → `doctypes=["markdown_chunk"]`
+- "Notify me when `markdown_chunk` records are written" → `record_types=["markdown_chunk"]`
 - "Notify me on anything from `java_plugin`" → `plugins=["java_plugin"]`
 
-### 6. Schema Changes (Phase A)
-
-Note: `doctype → record_type` rename is Phase B. Phase A only adds new columns.
+### 6. Schema Changes
 
 ```sql
 -- Phase A: Add semantic_type and media_type to documents

@@ -54,12 +54,12 @@ When an `IngestProcessor` finishes writing documents, the pipeline collects stru
 @dataclass
 class IngestionEvent:
     plugin: str          # Which processor wrote the data
-    doctype: str         # What doctype was written
+    record_type: str     # What record type was written
     uris: list[str]      # Which source URIs were processed
     doc_ids: list[int]   # IDs of the document rows created
 ```
 
-Observers receive a list of these events — one per (plugin, doctype) combination — so they know exactly what changed without re-querying storage.
+Observers receive a list of these events — one per (plugin, record_type) combination — so they know exactly what changed without re-querying storage.
 
 ### 3. Two-Phase Ingestion Pipeline
 
@@ -68,7 +68,7 @@ The ingestion pipeline now runs in two phases:
 ```
 Phase 1: Processing (parallel)
   URIs → IngestionBundle → broadcast to all IngestProcessors via asyncio.gather
-  → Each processor writes its doctypes, returns IngestionEvents
+  → Each processor writes its record types, returns IngestionEvents
 
 Phase 2: Observation (parallel, after Phase 1 completes)
   Collected IngestionEvents → broadcast to all IngestObservers via asyncio.gather
@@ -84,7 +84,7 @@ The `PluginRegistry` manages all plugin lifecycle:
 - **Registration:** `register(plugin, semantic_types=None)` inspects the plugin via `isinstance` checks and routes it to the appropriate internal collections (`_tool_providers`, `_ingest_processors`, `_ingest_observers`). Multi-interface plugins are registered in all applicable collections. The optional `semantic_types` list controls which ingestion traffic the processor receives — a processor with no semantic types is available but idle.
 - **Semantic type routing:** The registry maps semantic types to registered processors. `get_ingest_processors(semantic_types)` returns only the processors enabled for those types (plus wildcard processors). See [ADR-007](ADR-007-semantic-type-routing.md) for the full routing model.
 - **Tool routing:** Maps tool names to their owning provider. Enforces uniqueness — no two plugins can register the same tool name.
-- **Unregistration:** `unregister(plugin_name)` removes a plugin from all internal collections — tools, processors, observers, doctypes, semantic type associations. Does not delete the plugin's data.
+- **Unregistration:** `unregister(plugin_name)` removes a plugin from all internal collections — tools, processors, observers, record types, semantic type associations. Does not delete the plugin's data.
 - **Observer broadcast:** Exposes `get_ingest_observers()` for Phase 2 of the ingestion pipeline. Observers still receive events via broadcast (filtered by EventFilter, which now supports `semantic_types`).
 
 ### 5. Semantic Type Routing (replaces broadcast fan-out, SPEC-008)
@@ -183,7 +183,7 @@ One `IngestListener` interface that receives bundles and is used for both active
 **Rejected because:**
 - Conflates two fundamentally different roles: "do ingestion work" vs. "react to completed ingestion."
 - Observers would receive raw URIs they don't care about and would need to re-query storage to understand what happened.
-- Processors and observers need different inputs: processors need raw URIs, observers need structured events (plugin, doctype, doc IDs).
+- Processors and observers need different inputs: processors need raw URIs, observers need structured events (plugin, record_type, doc IDs).
 - Two-phase pipeline (process then observe) provides ordering guarantees that a single-phase broadcast cannot.
 
 ## Consequences
@@ -193,14 +193,14 @@ One `IngestListener` interface that receives bundles and is used for both active
 - **Independent extensibility.** Adding a new plugin requires zero changes to the core system — just implement the interface(s) and register.
 - **Concurrent ingestion.** `asyncio.gather` processes bundles in parallel across all processors. No plugin blocks another.
 - **Flexible composition.** The three-interface pattern lets plugins be exactly what they need to be — no unused interface baggage.
-- **Reactive observers.** Plugins can react to completed ingestion with full context (what was written, by whom, which doctypes) without re-querying.
+- **Reactive observers.** Plugins can react to completed ingestion with full context (what was written, by whom, which record types) without re-querying.
 - **Client-side orchestration.** AI agents see all tools and choose their own query strategy. No server-side LLM required.
 - **Minimal infrastructure.** Single-process SQLite + in-process broadcast. No external brokers, no microservices.
 
 ### Negative
 
 - **Routing complexity.** SPEC-008 replaces broadcast-to-all with semantic-type-based routing. The pipeline must look up semantic type registrations, match media types, and build the routed processor list. More logic, more tests needed.
-- **No inter-plugin communication.** Plugins can't directly call each other. They share a `StorageAdapter` but can't invoke each other's tools. *(Partially addressed by SPEC-002's doctype system enabling cross-plugin data queries.)*
+- **No inter-plugin communication.** Plugins can't directly call each other. They share a `StorageAdapter` but can't invoke each other's tools. *(Partially addressed by SPEC-002's record type system enabling cross-plugin data queries.)*
 - **Single-process bottleneck.** The `asyncio.gather` fan-out is concurrent but not parallel (GIL-bound). CPU-intensive plugins will need offloading.
 - **Tool name collisions.** The registry enforces global uniqueness of tool names. Naming conventions may be needed at scale.
 - **Caller must know semantic types.** The ingestion caller specifies what the data means — additional burden but also clarity about intent.
@@ -217,7 +217,7 @@ One `IngestListener` interface that receives bundles and is used for both active
 | `MarkdownPlugin` | ToolProvider + IngestProcessor | `semantic_search` | Vectorizes markdown chunks, exposes semantic search |
 | `DocumentRetrievalPlugin` | ToolProvider | `get_full_document` | Fetches full document content from URI pointers |
 | `IngestionPlugin` | ToolProvider | `ingest_documents` | Exposes ingestion pipeline as an MCP tool for live use |
-| `DoctypeDiscoveryPlugin` | ToolProvider | `list_doctypes` | Exposes doctype catalog for AI client discovery |
+| `RecordTypeDiscoveryPlugin` | ToolProvider | `list_record_types` | Exposes record type catalog for AI client discovery |
 | `FeedbackPlugin` | ToolProvider | `provide_feedback` | Relevance feedback signals for weighting |
 | `LifecyclePlugin` | ToolProvider | `register_plugin`, `unregister_plugin`, `list_plugins` | Runtime plugin management |
 
@@ -225,7 +225,7 @@ One `IngestListener` interface that receives bundles and is used for both active
 
 | File | Role |
 |------|------|
-| `src/team_mind_mcp/server.py` | `ToolProvider`, `IngestProcessor`, `IngestObserver`, `EventFilter` ABCs, `DoctypeSpec`, `PluginRegistry`, `MCPGateway` |
+| `src/team_mind_mcp/server.py` | `ToolProvider`, `IngestProcessor`, `IngestObserver`, `EventFilter` ABCs, `RecordTypeSpec`, `PluginRegistry`, `MCPGateway` |
 | `src/team_mind_mcp/ingestion.py` | `IngestionPipeline`, `IngestionBundle`, `IngestionEvent`, `IngestionContext`, `ResourceResolver` |
 | `src/team_mind_mcp/storage.py` | `StorageAdapter` (SQLite + sqlite-vec), `registered_plugins` table |
 | `src/team_mind_mcp/lifecycle.py` | `LifecyclePlugin`, `PluginLoader`, `load_persisted_plugins` |

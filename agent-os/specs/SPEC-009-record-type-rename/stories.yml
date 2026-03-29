@@ -44,8 +44,8 @@ stories:
       Rename doctypes property → record_types. Update all doctype= kwargs to
       record_type= in save_payload(), delete_by_uri(), and process_bundle()
       calls. Update test_markdown_plugin.py and test_markdown_semantic.py.
-    status: pending
-    verified_by: null
+    status: complete
+    verified_by: tests_passing
 
   STORY-005:
     name: Documentation and Spec Cleanup
@@ -55,8 +55,8 @@ stories:
       Update SPEC-008 README.md (out-of-scope note still references doctype →
       record_type as Phase B). Update SPEC-009 README status table in index.yml
       once all stories pass.
-    status: pending
-    verified_by: null
+    status: complete
+    verified_by: manual_review
 
 verification:
   criteria:
@@ -66,5 +66,5 @@ verification:
     - list_record_types MCP tool name is exposed (not list_doctypes).
     - EventFilter.record_types filters events correctly.
     - MarkdownPlugin.record_types returns RecordTypeSpec correctly.
-  completed: false
-  completed_date: null
+  completed: true
+  completed_date: 2026-03-29

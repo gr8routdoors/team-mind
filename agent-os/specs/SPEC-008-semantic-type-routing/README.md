@@ -2,7 +2,7 @@
 
 ## Overview
 
-Introduces the three-type model (semantic type, media type, record type) and semantic-type-based routing to the ingestion pipeline. This is Phase A — all additive changes, no renames. Phase B (rename doctype → record_type) will be a separate spec to isolate the mechanical refactor from new functionality.
+Introduces the three-type model (semantic type, media type, record type) and semantic-type-based routing to the ingestion pipeline. This is Phase A — all additive changes, no renames. Phase B (rename doctype → record_type) was completed as SPEC-009.
 
 ## Scope
 
@@ -21,7 +21,7 @@ Introduces the three-type model (semantic type, media type, record type) and sem
 - Update documentation.
 
 **Out of scope:**
-- Rename doctype → record_type (Phase B, separate spec).
+- Rename doctype → record_type (Phase B, completed in SPEC-009).
 - Meta-plugins / chained processing (future roadmap item).
 - Auto-detection of semantic type from content (caller must specify).
 

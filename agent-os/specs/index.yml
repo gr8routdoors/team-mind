@@ -76,9 +76,9 @@ specs:
   SPEC-009:
     name: Record Type Rename (doctype → record_type)
     slug: record-type-rename
-    status: in_design
+    status: complete
     created: 2026-03-29
     stories: 5
-    stories_complete: 0
+    stories_complete: 5
 
 # Next spec number: 010
