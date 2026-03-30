@@ -25,7 +25,7 @@ def _content_hash(text: str) -> str:
 class MarkdownPlugin(ToolProvider, IngestProcessor):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
 
-    def __init__(self, storage: StorageAdapter):
+    def __init__(self, storage: StorageAdapter | None):
         self.storage = storage
 
     @property
@@ -114,6 +114,11 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         """Read URIs from bundle, chunk them, embed, and store."""
+        if bundle.storage is None:
+            raise RuntimeError(
+                "bundle.storage must be set before calling process_bundle; "
+                "use IngestionPipeline.ingest() to ensure storage is injected"
+            )
         processed_uris: list[str] = []
         doc_ids: list[int] = []
         semantic_type = ",".join(bundle.semantic_types)
@@ -149,7 +154,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     continue
 
                 # Content changed or version changed → wipe old chunks and re-ingest
-                self.storage.delete_by_uri(
+                bundle.storage.delete_by_uri(
                     uri, plugin=self.name, record_type="markdown_chunk"
                 )
             else:
@@ -164,7 +169,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             for chunk in chunks:
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
-                doc_id = self.storage.save_payload(
+                doc_id = bundle.storage.save_payload(
                     uri,
                     metadata,
                     vector,
@@ -186,6 +191,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     uris=processed_uris,
                     doc_ids=doc_ids,
                     semantic_types=bundle.semantic_types,
+                    tenant_id=bundle.tenant_id,
                 )
             ]
         return []

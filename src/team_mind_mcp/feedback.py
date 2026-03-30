@@ -1,14 +1,14 @@
 import json
 from mcp.types import Tool, TextContent
 from team_mind_mcp.server import ToolProvider
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 
 
 class FeedbackPlugin(ToolProvider):
     """Exposes feedback signaling as an MCP tool for AI agents and humans."""
 
-    def __init__(self, storage: StorageAdapter):
-        self.storage = storage
+    def __init__(self, tenant_manager: TenantStorageManager):
+        self.tenant_manager = tenant_manager
 
     @property
     def name(self) -> str:
@@ -38,6 +38,10 @@ class FeedbackPlugin(ToolProvider):
                             "type": "boolean",
                             "description": "If true, mark document as tombstoned (excluded from results). If false, un-tombstone.",
                         },
+                        "tenant_id": {
+                            "type": "string",
+                            "description": "Tenant to apply feedback to (default: 'default').",
+                        },
                     },
                     "required": ["doc_id", "signal"],
                 },
@@ -52,6 +56,7 @@ class FeedbackPlugin(ToolProvider):
         signal = arguments.get("signal")
         reason = arguments.get("reason")
         tombstone = arguments.get("tombstone")
+        tenant_id = arguments.get("tenant_id", "default")
 
         if doc_id is None or signal is None:
             raise ValueError("doc_id and signal are required")
@@ -60,11 +65,12 @@ class FeedbackPlugin(ToolProvider):
             raise ValueError("Signal must be an integer from -5 to +5")
 
         try:
-            result = self.storage.update_weight(
+            adapter = self.tenant_manager.get_adapter(tenant_id)
+            result = adapter.update_weight(
                 doc_id=doc_id, signal=signal, tombstone=tombstone
             )
             if reason:
                 result["reason"] = reason
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
-        except ValueError as e:
-            raise ValueError(str(e))
+        except ValueError:
+            raise

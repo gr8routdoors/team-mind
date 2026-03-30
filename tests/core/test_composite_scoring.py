@@ -181,14 +181,15 @@ async def test_tombstone_via_feedback_tool(tmp_path):
     STORY-006 / AC-002: Tombstone via Feedback Tool
     """
     from team_mind_mcp.feedback import FeedbackPlugin
+    from team_mind_mcp.tenant_manager import TenantStorageManager
     import json
 
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    mgr = TenantStorageManager(str(tmp_path / "mind"))
+    mgr.initialize()
+    adapter = mgr.get_adapter("default")
 
     doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
-    plugin = FeedbackPlugin(adapter)
+    plugin = FeedbackPlugin(mgr)
 
     response = await plugin.call_tool(
         "provide_feedback", {"doc_id": doc_id, "signal": 0, "tombstone": True}
@@ -200,7 +201,7 @@ async def test_tombstone_via_feedback_tool(tmp_path):
     # Verify excluded from search
     results = adapter.retrieve_by_vector_similarity([0.1] * 768, limit=10)
     assert all(r["id"] != doc_id for r in results)
-    adapter.close()
+    mgr.close()
 
 
 @pytest.mark.asyncio
@@ -209,14 +210,15 @@ async def test_un_tombstone_restores_document(tmp_path):
     STORY-006 / AC-003: Un-Tombstone Restores Document
     """
     from team_mind_mcp.feedback import FeedbackPlugin
+    from team_mind_mcp.tenant_manager import TenantStorageManager
     import json
 
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    mgr = TenantStorageManager(str(tmp_path / "mind2"))
+    mgr.initialize()
+    adapter = mgr.get_adapter("default")
 
     doc_id = adapter.save_payload("uri", {}, [0.1] * 768, plugin="p", record_type="t")
-    plugin = FeedbackPlugin(adapter)
+    plugin = FeedbackPlugin(mgr)
 
     # Tombstone
     await plugin.call_tool(
@@ -233,7 +235,7 @@ async def test_un_tombstone_restores_document(tmp_path):
     # Verify it reappears
     results = adapter.retrieve_by_vector_similarity([0.1] * 768, limit=10)
     assert any(r["id"] == doc_id for r in results)
-    adapter.close()
+    mgr.close()
 
 
 def test_tombstoned_row_still_in_database(weighted_storage):

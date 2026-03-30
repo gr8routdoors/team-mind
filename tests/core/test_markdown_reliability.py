@@ -47,6 +47,7 @@ async def test_ac001_uses_hint_when_provided(storage, tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         reliability_hint=0.8,
+        storage=storage,
     )
 
     # When
@@ -91,6 +92,7 @@ async def test_ac002_falls_back_to_default(tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         reliability_hint=None,
+        storage=storage,
     )
 
     # When
@@ -128,6 +130,7 @@ async def test_ac003_no_hint_no_default_uses_zero(storage, tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         reliability_hint=None,
+        storage=storage,
     )
 
     # When

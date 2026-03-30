@@ -11,7 +11,7 @@ Tests for:
 import json
 import sqlite3
 import pytest
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 from team_mind_mcp.server import PluginRegistry, IngestProcessor
 from team_mind_mcp.lifecycle import LifecyclePlugin, load_persisted_plugins
 
@@ -62,12 +62,13 @@ class UnenabledProcessor(IngestProcessor):
 def test_ac001_semantic_types_persisted_as_json(tmp_path):
     """AC-001: semantic_types stored as JSON in registered_plugins row."""
     # Given a plugin registering with semantic_types=["architecture_docs", "meeting_notes"]
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    import os
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
     # When the registration is persisted
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="arch_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
@@ -75,14 +76,15 @@ def test_ac001_semantic_types_persisted_as_json(tmp_path):
     )
 
     # Then the registered_plugins row has semantic_types stored as JSON
-    with sqlite3.connect(str(db_path)) as conn:
+    system_db = os.path.join(base, "system.sqlite")
+    with sqlite3.connect(system_db) as conn:
         row = conn.execute(
             "SELECT semantic_types FROM registered_plugins WHERE plugin_name = 'arch_plugin'"
         ).fetchone()
 
     assert row is not None
     assert json.loads(row[0]) == ["architecture_docs", "meeting_notes"]
-    adapter.close()
+    mgr.close()
 
 
 # ---------------------------------------------------------------------------
@@ -93,12 +95,13 @@ def test_ac001_semantic_types_persisted_as_json(tmp_path):
 def test_ac002_supported_media_types_persisted_as_json(tmp_path):
     """AC-002: supported_media_types stored as JSON in registered_plugins row."""
     # Given a plugin registering with supported_media_types=["text/markdown", "text/plain"]
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    import os
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
     # When the registration is persisted
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="md_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
@@ -106,14 +109,15 @@ def test_ac002_supported_media_types_persisted_as_json(tmp_path):
     )
 
     # Then the registered_plugins row has supported_media_types stored as JSON
-    with sqlite3.connect(str(db_path)) as conn:
+    system_db = os.path.join(base, "system.sqlite")
+    with sqlite3.connect(system_db) as conn:
         row = conn.execute(
             "SELECT supported_media_types FROM registered_plugins WHERE plugin_name = 'md_plugin'"
         ).fetchone()
 
     assert row is not None
     assert json.loads(row[0]) == ["text/markdown", "text/plain"]
-    adapter.close()
+    mgr.close()
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +128,11 @@ def test_ac002_supported_media_types_persisted_as_json(tmp_path):
 def test_ac003_semantic_types_deserialized_on_retrieval(tmp_path):
     """AC-003: semantic_types is deserialized when retrieved via get_enabled_plugin_records."""
     # Given a registered plugin with semantic_types=["architecture_docs"]
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="arch_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
@@ -137,32 +141,32 @@ def test_ac003_semantic_types_deserialized_on_retrieval(tmp_path):
     )
 
     # When the plugin record is retrieved
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
 
     # Then semantic_types is deserialized to ["architecture_docs"]
     assert len(records) == 1
     assert records[0]["semantic_types"] == ["architecture_docs"]
     assert records[0]["supported_media_types"] == ["text/markdown"]
-    adapter.close()
+    mgr.close()
 
 
 def test_ac003_null_semantic_types_returns_none(tmp_path):
     """AC-003: semantic_types=None is preserved through round-trip."""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="plain_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
     )
 
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert len(records) == 1
     assert records[0]["semantic_types"] is None
     assert records[0]["supported_media_types"] is None
-    adapter.close()
+    mgr.close()
 
 
 def test_ac003_registry_stores_semantic_types_per_processor():
@@ -183,8 +187,8 @@ def test_ac003_registry_stores_semantic_types_per_processor():
 def test_ac003_semantic_types_passed_on_startup_recovery(tmp_path):
     """AC-003: load_persisted_plugins passes semantic_types from DB to registry."""
     # Given a persisted plugin record with semantic_types
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     storage.save_plugin_record(
@@ -214,11 +218,11 @@ def test_ac003_semantic_types_passed_on_startup_recovery(tmp_path):
 def test_ac004_update_semantic_types_in_place(tmp_path):
     """AC-004: Re-registering a plugin updates semantic_types without uninstall/reinstall."""
     # Given a registered plugin with semantic_types=["architecture_docs"]
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="arch_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
@@ -226,7 +230,7 @@ def test_ac004_update_semantic_types_in_place(tmp_path):
     )
 
     # When the plugin is re-registered with updated semantic_types
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="arch_plugin",
         plugin_type="ingest_processor",
         module_path="team_mind_mcp.test_plugins.SampleIngestProcessor",
@@ -234,10 +238,10 @@ def test_ac004_update_semantic_types_in_place(tmp_path):
     )
 
     # Then the semantic_types column is updated
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert len(records) == 1  # No duplicate row created
     assert records[0]["semantic_types"] == ["architecture_docs", "design_docs"]
-    adapter.close()
+    mgr.close()
 
 
 # ---------------------------------------------------------------------------
@@ -292,8 +296,8 @@ def test_unregister_cleans_up_processor_semantic_types():
 @pytest.mark.asyncio
 async def test_register_plugin_tool_includes_semantic_types_in_result(tmp_path):
     """LifecyclePlugin._register returns semantic_types in result JSON."""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -323,8 +327,8 @@ async def test_register_plugin_tool_includes_semantic_types_in_result(tmp_path):
 @pytest.mark.asyncio
 async def test_register_plugin_tool_persists_supported_media_types(tmp_path):
     """LifecyclePlugin._register persists supported_media_types to storage."""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()

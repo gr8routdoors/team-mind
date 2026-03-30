@@ -4,7 +4,7 @@ import sys
 import anyio
 from pathlib import Path
 
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 from team_mind_mcp.server import MCPGateway
 from team_mind_mcp.markdown import MarkdownPlugin
 from team_mind_mcp.retrieval import DocumentRetrievalPlugin
@@ -12,6 +12,7 @@ from team_mind_mcp.ingestion_plugin import IngestionPlugin
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
 from team_mind_mcp.feedback import FeedbackPlugin
 from team_mind_mcp.lifecycle import LifecyclePlugin, load_persisted_plugins
+from team_mind_mcp.tenant_plugin import TenantPlugin
 
 
 def load_cli_config(config_path: Path | None = None) -> dict:
@@ -53,24 +54,28 @@ def get_default_db_path() -> Path:
 
 async def run_server(db_path: Path) -> int:
     """Initializes the database, registers plugins, and starts the MCP stdio loop."""
-    print(f"Team Mind MCP Server initializing... (DB: {db_path})", file=sys.stderr)
+    print(f"Team Mind MCP Server initializing... (DB: {db_path.parent})", file=sys.stderr)
 
-    # Initialize Storage
-    storage = StorageAdapter(str(db_path))
-    storage.initialize()
+    # Initialize TenantStorageManager — primary storage interface
+    tenant_manager = TenantStorageManager(str(db_path.parent))
+    tenant_manager.initialize()
+
+    # Default tenant adapter for non-tenant-aware plugins
+    default_storage = tenant_manager.get_adapter("default")
 
     # Initialize Gateway and Registry
     gateway = MCPGateway()
 
     # Register core plugins
     config = load_cli_config()
-    markdown_plugin = MarkdownPlugin(storage)
-    retrieval_plugin = DocumentRetrievalPlugin(storage)
-    ingestion_plugin = IngestionPlugin(gateway.registry, storage=storage)
+    markdown_plugin = MarkdownPlugin(default_storage)
+    retrieval_plugin = DocumentRetrievalPlugin(default_storage)
+    ingestion_plugin = IngestionPlugin(gateway.registry, tenant_manager=tenant_manager)
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
-    feedback_plugin = FeedbackPlugin(storage)
-    lifecycle_plugin = LifecyclePlugin(gateway.registry, storage)
+    feedback_plugin = FeedbackPlugin(tenant_manager)
+    lifecycle_plugin = LifecyclePlugin(gateway.registry, tenant_manager)
+    tenant_plugin = TenantPlugin(tenant_manager)
 
     markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
     gateway.registry.register(markdown_plugin, semantic_types=markdown_semantic_types)
@@ -79,9 +84,10 @@ async def run_server(db_path: Path) -> int:
     gateway.registry.register(discovery_plugin)
     gateway.registry.register(feedback_plugin)
     gateway.registry.register(lifecycle_plugin)
+    gateway.registry.register(tenant_plugin)
 
     # Load dynamically registered plugins from persistence table
-    load_persisted_plugins(storage, gateway.registry)
+    load_persisted_plugins(tenant_manager, gateway.registry)
 
     # Import the stdio server here to prevent overhead on simple CLI commands
     from mcp.server.stdio import stdio_server
@@ -96,23 +102,25 @@ async def run_server(db_path: Path) -> int:
 
 async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
     """Executes the offline ingestion pipeline against targets."""
-    print(f"Ingesting targets into {db_path}...", file=sys.stderr)
+    tenant_id = getattr(args, "tenant_id", "default") or "default"
+    print(f"Ingesting targets into {db_path} (tenant: {tenant_id})...", file=sys.stderr)
 
-    # Initialize Storage
-    storage = StorageAdapter(str(db_path))
-    storage.initialize()
+    # Initialize TenantStorageManager
+    tenant_manager = TenantStorageManager(str(db_path.parent))
+    tenant_manager.initialize()
 
     # Needs Plugins initialized so pipeline has somewhere to send data
     config = load_cli_config()
     gateway = MCPGateway()
+    default_storage = tenant_manager.get_adapter("default")
     markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
     gateway.registry.register(
-        MarkdownPlugin(storage), semantic_types=markdown_semantic_types
+        MarkdownPlugin(default_storage), semantic_types=markdown_semantic_types
     )
 
     from team_mind_mcp.ingestion import IngestionPipeline
 
-    pipeline = IngestionPipeline(gateway.registry, storage=storage)
+    pipeline = IngestionPipeline(gateway.registry, tenant_manager=tenant_manager)
 
     # Flatten targets if recursive
     final_uris = []
@@ -145,6 +153,7 @@ async def run_ingest(db_path: Path, args: argparse.Namespace) -> int:
         final_uris,
         semantic_types=args.semantic_types,
         reliability_hint=getattr(args, "reliability_hint", None),
+        tenant_id=tenant_id,
     )
     if bundle:
         print(
@@ -200,6 +209,13 @@ def main() -> int:
         type=float,
         default=None,
         help="Reliability hint (0.0–1.0) for the ingested content.",
+    )
+    ingest_parser.add_argument(
+        "--tenant-id",
+        dest="tenant_id",
+        type=str,
+        default="default",
+        help="Tenant to ingest documents into (default: 'default').",
     )
 
     # Temporary fallback for testing/backwards compatibility if no args provided

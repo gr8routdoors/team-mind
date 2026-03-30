@@ -2,12 +2,15 @@
 SPEC-006 / STORY-003: Plugin State Persistence Table
 SPEC-006 / STORY-004: Dynamic Registration MCP Tools
 SPEC-006 / STORY-005: Plugin Loader & Startup Recovery
+
+NOTE: Plugin registry (registered_plugins table) moved to TenantStorageManager /
+system.sqlite per SPEC-010 / STORY-001. Tests updated accordingly.
 """
 
 import json
 import sqlite3
 import pytest
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 from team_mind_mcp.server import (
     ToolProvider,
     IngestObserver,
@@ -63,26 +66,28 @@ class SampleObserverPlugin(IngestObserver):
 
 
 def test_registered_plugins_table_created(tmp_path):
-    """AC-001: Table Created on Initialize"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    """AC-001: Table Created on Initialize — now in system.sqlite via TenantStorageManager"""
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    with sqlite3.connect(str(db_path)) as conn:
+    import os
+    system_db = os.path.join(base, "system.sqlite")
+    with sqlite3.connect(system_db) as conn:
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='registered_plugins'"
         )
         assert cursor.fetchone() is not None
-    adapter.close()
+    mgr.close()
 
 
 def test_save_plugin_record(tmp_path):
     """AC-002: Save Plugin Record"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record(
+    mgr.save_plugin_record(
         plugin_name="test_plugin",
         plugin_type="tool_provider",
         module_path="my_plugins.TestPlugin",
@@ -90,84 +95,84 @@ def test_save_plugin_record(tmp_path):
         event_filter_json={"plugins": ["a"], "doctypes": ["b"]},
     )
 
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert len(records) == 1
     assert records[0]["plugin_name"] == "test_plugin"
     assert records[0]["module_path"] == "my_plugins.TestPlugin"
     assert records[0]["config"] == {"key": "value"}
     assert records[0]["event_filter"] == {"plugins": ["a"], "doctypes": ["b"]}
-    adapter.close()
+    mgr.close()
 
 
 def test_retrieve_enabled_plugins(tmp_path):
     """AC-003: Retrieve Enabled Plugins"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record("p1", "tool_provider", "mod.P1")
-    adapter.save_plugin_record("p2", "ingest_processor", "mod.P2")
-    adapter.save_plugin_record("p3", "ingest_observer", "mod.P3")
+    mgr.save_plugin_record("p1", "tool_provider", "mod.P1")
+    mgr.save_plugin_record("p2", "ingest_processor", "mod.P2")
+    mgr.save_plugin_record("p3", "ingest_observer", "mod.P3")
 
     # Disable one
-    adapter.disable_plugin_record("p3")
+    mgr.disable_plugin_record("p3")
 
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert len(records) == 2
     names = [r["plugin_name"] for r in records]
     assert "p3" not in names
-    adapter.close()
+    mgr.close()
 
 
 def test_disable_plugin(tmp_path):
     """AC-004: Disable Plugin"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record("p1", "tool_provider", "mod.P1")
-    result = adapter.disable_plugin_record("p1")
+    mgr.save_plugin_record("p1", "tool_provider", "mod.P1")
+    result = mgr.disable_plugin_record("p1")
     assert result is True
 
     # Still exists but not enabled
-    enabled = adapter.get_enabled_plugin_records()
+    enabled = mgr.get_enabled_plugin_records()
     assert len(enabled) == 0
 
-    with adapter._conn:
-        row = adapter._conn.execute(
+    with mgr._system_conn:
+        row = mgr._system_conn.execute(
             "SELECT enabled FROM registered_plugins WHERE plugin_name = 'p1'"
         ).fetchone()
     assert row[0] == 0
-    adapter.close()
+    mgr.close()
 
 
 def test_delete_plugin_record(tmp_path):
     """AC-005: Delete Plugin Record"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    adapter.save_plugin_record("p1", "tool_provider", "mod.P1")
-    result = adapter.delete_plugin_record("p1")
+    mgr.save_plugin_record("p1", "tool_provider", "mod.P1")
+    result = mgr.delete_plugin_record("p1")
     assert result is True
 
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert len(records) == 0
-    adapter.close()
+    mgr.close()
 
 
 def test_event_filter_round_trip(tmp_path):
     """AC-006: Event Filter Serialized as JSON"""
-    db_path = tmp_path / "test.db"
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    base = str(tmp_path / "mind")
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
     ef = {"plugins": ["java_plugin"], "doctypes": ["code_signature"]}
-    adapter.save_plugin_record("p1", "ingest_observer", "mod.P1", event_filter_json=ef)
+    mgr.save_plugin_record("p1", "ingest_observer", "mod.P1", event_filter_json=ef)
 
-    records = adapter.get_enabled_plugin_records()
+    records = mgr.get_enabled_plugin_records()
     assert records[0]["event_filter"] == ef
-    adapter.close()
+    mgr.close()
 
 
 # --- STORY-004: Dynamic Registration MCP Tools ---
@@ -175,8 +180,8 @@ def test_event_filter_round_trip(tmp_path):
 
 def test_lifecycle_tools_registered(tmp_path):
     """AC-001: Tools Registered"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -194,8 +199,8 @@ def test_lifecycle_tools_registered(tmp_path):
 @pytest.mark.asyncio
 async def test_register_plugin_successfully(tmp_path):
     """AC-002: Register Plugin Successfully"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -217,8 +222,8 @@ async def test_register_plugin_successfully(tmp_path):
 @pytest.mark.asyncio
 async def test_registered_plugin_tools_visible(tmp_path):
     """AC-003: Registered Plugin Tools Visible"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -239,8 +244,8 @@ async def test_registered_plugin_tools_visible(tmp_path):
 @pytest.mark.asyncio
 async def test_unregister_plugin_removes_tools(tmp_path):
     """AC-004: Unregister Plugin Removes Tools"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -269,8 +274,8 @@ async def test_unregister_plugin_removes_tools(tmp_path):
 @pytest.mark.asyncio
 async def test_list_plugins(tmp_path):
     """AC-005: List Plugins Returns Roster"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -294,8 +299,8 @@ async def test_list_plugins(tmp_path):
 @pytest.mark.asyncio
 async def test_invalid_module_path_errors(tmp_path):
     """AC-006: Invalid Module Path Errors"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -312,8 +317,8 @@ async def test_invalid_module_path_errors(tmp_path):
 @pytest.mark.asyncio
 async def test_duplicate_registration_errors(tmp_path):
     """AC-007: Duplicate Registration Errors"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     registry = PluginRegistry()
@@ -338,8 +343,8 @@ async def test_duplicate_registration_errors(tmp_path):
 
 def test_enabled_plugins_loaded_on_startup(tmp_path):
     """AC-001: Enabled Plugins Loaded on Startup"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     # Persist two plugin records
@@ -365,8 +370,8 @@ def test_enabled_plugins_loaded_on_startup(tmp_path):
 
 def test_disabled_plugins_not_loaded(tmp_path):
     """AC-002: Disabled Plugins Not Loaded"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     storage.save_plugin_record(
@@ -385,8 +390,8 @@ def test_disabled_plugins_not_loaded(tmp_path):
 
 def test_failed_load_logged_not_fatal(tmp_path):
     """AC-003: Failed Load Logged Not Fatal"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     # One valid, one invalid
@@ -413,8 +418,8 @@ def test_failed_load_logged_not_fatal(tmp_path):
 
 def test_event_filters_restored(tmp_path):
     """AC-004: Event Filters Restored"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
     storage.save_plugin_record(
@@ -438,15 +443,16 @@ def test_event_filters_restored(tmp_path):
 
 def test_core_plugins_unaffected(tmp_path):
     """AC-005: Core Plugins Unaffected"""
-    db_path = tmp_path / "test.db"
-    storage = StorageAdapter(str(db_path))
+    base = str(tmp_path / "mind")
+    storage = TenantStorageManager(base)
     storage.initialize()
 
-    # Register a "core" plugin first
+    # Register a "core" plugin first — MarkdownPlugin needs a StorageAdapter
     from team_mind_mcp.markdown import MarkdownPlugin
+    tenant_adapter = storage.get_adapter("default")
 
     registry = PluginRegistry()
-    core_plugin = MarkdownPlugin(storage)
+    core_plugin = MarkdownPlugin(tenant_adapter)
     registry.register(core_plugin)
 
     # Persist a dynamic plugin

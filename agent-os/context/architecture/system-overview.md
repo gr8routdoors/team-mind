@@ -61,8 +61,113 @@ Registered plugins exist in one of two operational states:
 
 This model ensures that newly installed plugins don't silently process all content. Activation requires an explicit admin action — associating semantic types with the plugin at registration time or via `update_plugin_semantic_types`.
 
+## Multi-Tenancy & Metadata Search (SPEC-010)
+
+### Tenant Sharding Architecture
+
+Every document belongs to exactly one tenant. Tenancy is implemented at the **SQLite file level** — each tenant gets its own database file. This means KNN vector search operates on exactly the right dataset by construction, avoiding the selectivity problem that plagues column-based tenant filtering.
+
+```mermaid
+graph TD
+    subgraph "~/.team-mind/"
+        SYS[(system.sqlite<br/>registered_plugins<br/>tenants)]
+        subgraph "tenants/"
+            D[(default/data.sqlite<br/>documents<br/>vec_documents<br/>doc_weights)]
+            U1[(user-123/data.sqlite<br/>documents<br/>vec_documents<br/>doc_weights)]
+            U2[(user-456/data.sqlite<br/>documents<br/>vec_documents<br/>doc_weights)]
+        end
+    end
+```
+
+**Key rules:**
+- `system.sqlite` holds plugin registry (`registered_plugins`) and tenant directory (`tenants`). Plugins are global — registered once, available to all tenants.
+- Each tenant's `data.sqlite` holds `documents`, `vec_documents`, and `doc_weights`. No `tenant_id` column — the file *is* the tenant scope.
+- The default tenant `"default"` is auto-created on startup. Single-tenant deployments use it and never think about sharding.
+
+### TenantStorageManager
+
+`TenantStorageManager` owns all per-tenant database lifecycle. Plugins and pipelines interact with it to obtain per-tenant `StorageAdapter` instances — they never open database connections directly.
+
+```mermaid
+graph LR
+    subgraph "TenantStorageManager"
+        INIT[initialize<br/>system.sqlite]
+        CREATE[create_tenant]
+        GET[get_adapter<br/>LRU cache, max 64]
+        QAT[query_across_tenants<br/>scatter-gather]
+        LIST[list_tenants]
+    end
+
+    Pipeline -->|tenant_id| GET
+    MCPTools -->|tenant_id| GET
+    MCPTools -->|tenant_ids| QAT
+    GET --> SYS[(system.sqlite)]
+    GET --> SA[StorageAdapter<br/>per-tenant data.sqlite]
+    QAT --> SA
+    INIT --> SYS
+    CREATE --> SYS
+    LIST --> SYS
+```
+
+**Responsibilities:**
+- Opens `system.sqlite` and ensures `registered_plugins` and `tenants` tables exist on `initialize()`.
+- `get_adapter(tenant_id)` opens the tenant's `data.sqlite` lazily on first access and caches it (LRU eviction, max 64 open connections). Raises `ValueError` for unregistered tenants.
+- `create_tenant(tenant_id)` registers the tenant in `system.sqlite` and creates the tenant directory. Idempotent.
+- `IngestionPipeline` auto-creates unregistered tenants on ingest (try → `ValueError` → create → retry).
+- `query_across_tenants` implements scatter-gather: runs `query_fn` on each shard sequentially, injects `tenant_id` into each result dict, merges and re-sorts.
+
+### Scatter-Gather Query Flow
+
+```mermaid
+sequenceDiagram
+    participant Tool as semantic_search MCP Tool
+    participant TSM as TenantStorageManager
+    participant SA1 as StorageAdapter<br/>(user-123)
+    participant SA2 as StorageAdapter<br/>(user-456)
+
+    Tool->>TSM: query_across_tenants(query_fn, tenant_ids=["user-123","user-456"])
+    TSM->>SA1: query_fn(adapter) → rows
+    SA1-->>TSM: [{doc_id, final_rank, ...}, ...]
+    TSM->>SA2: query_fn(adapter) → rows
+    SA2-->>TSM: [{doc_id, final_rank, ...}, ...]
+    TSM->>TSM: inject tenant_id into each row
+    TSM->>TSM: merge + sort by sort_key
+    TSM-->>Tool: [{doc_id, tenant_id, final_rank, ...}, ...]
+```
+
+**Sort direction:** `sort_descending=False` for vector queries (lower `final_rank` = better distance), `sort_descending=True` for weight-only queries (higher `weight_rank` = better score).
+
+When `tenant_ids` is omitted, the tool queries all registered tenants (full scatter-gather). Every result dict always includes `tenant_id` for consistent output.
+
+### Metadata Search
+
+The `metadata` JSON column is now queryable at search time through optional filter parameters on `retrieve_by_vector_similarity` and `semantic_search`:
+
+```python
+metadata_filters = {"interest_category": "sports", "league": "nfl"}
+# → WHERE json_extract(d.metadata, '$.interest_category') = 'sports'
+#     AND json_extract(d.metadata, '$.league') = 'nfl'
+```
+
+Metadata filter keys are validated against `^[A-Za-z0-9_]+$` before SQL interpolation to prevent injection. Filters compose with existing `plugin` and `record_type` filters.
+
+**Vector query is optional.** When `query` is omitted from `semantic_search`, results are ranked by composite weight score (`usage_score * decay`) descending — enabling pure metadata queries without semantic similarity.
+
+### Structural Fields vs. Metadata Fields
+
+| | First-class columns | Metadata fields |
+|---|---|---|
+| **Purpose** | Framework routing, identity, and system behavior | Domain-specific attributes for query-time filtering |
+| **When used** | Ingestion-time routing + query-time filtering | Query-time filtering only |
+| **Who controls** | Framework / pipeline | Plugins / domain logic |
+| **Examples** | `plugin`, `record_type`, `semantic_type`, `media_type` | `interest_category`, `league`, `destination`, `price_range` |
+| **Indexed** | Dedicated B-tree indexes | `json_extract` (per-query) |
+
+**The rule:** If the framework/pipeline needs it to make routing or identity decisions, it's a column. If only consumers need it at query time for filtering, it belongs in `metadata`.
+
 ## Key Architectural Decisions
 
 1. **Client-Side Orchestration:** The MCP Server does not need a heavy internal orchestrating LLM for retrieval. It exposes all plugin tools to the AI client, allowing the client (Claude/Cursor) to orchestrate its own deterministic tool calls.
 2. **Reliability Seeding (replaces Librarian):** Rather than a synchronous inline Librarian gatekeeper, reliability is seeded at ingestion time via a three-layer model (caller hint → plugin default → 0.0). High-quality sources rank higher immediately; the platform's scoring system handles refinement over time via feedback signals.
 3. **Embedded Relational/Document Storage (MVP):** Phase 1 skips flat files and avoids massive MongoDB deployments by utilizing an embedded database (e.g., SQLite with JSON/Vector extensions, or DuckDB). Modern SQLite provides native JSON document views (`JSONB`), allowing us to store and query arbitrary plugin metadata/documents just like MongoDB, alongside vector embeddings, entirely in process.
+4. **Tenant Sharding at File Level (SPEC-010):** Each tenant gets its own SQLite file. KNN vector search operates on exactly the right dataset by construction — no post-filter selectivity problem. `TenantStorageManager` owns all cross-tenant lifecycle. Plugins operate on a single `StorageAdapter` and are completely unaware of tenancy. See [ADR-010](ADRs/ADR-010-tenant-sharding.md).

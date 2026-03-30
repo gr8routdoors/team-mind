@@ -1,7 +1,10 @@
+import re
 import sqlite3
 import json
 import struct
 import sqlite_vec
+
+_SAFE_METADATA_KEY_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 class StorageAdapter:
@@ -138,30 +141,6 @@ class StorageAdapter:
                 ON doc_weights(tombstoned)
             """)
 
-            # Plugin lifecycle persistence
-            self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS registered_plugins (
-                    plugin_name TEXT PRIMARY KEY,
-                    plugin_type TEXT NOT NULL,
-                    module_path TEXT NOT NULL,
-                    config JSON,
-                    event_filter JSON,
-                    enabled INTEGER DEFAULT 1,
-                    registered_at TEXT NOT NULL DEFAULT (datetime('now'))
-                )
-            """)
-
-            # Migrate existing registered_plugins: add semantic_types and supported_media_types if missing
-            cursor = self._conn.execute("PRAGMA table_info(registered_plugins)")
-            plugin_columns = {row[1] for row in cursor.fetchall()}
-            if "semantic_types" not in plugin_columns:
-                self._conn.execute(
-                    "ALTER TABLE registered_plugins ADD COLUMN semantic_types JSON"
-                )
-            if "supported_media_types" not in plugin_columns:
-                self._conn.execute(
-                    "ALTER TABLE registered_plugins ADD COLUMN supported_media_types JSON"
-                )
 
     # --- Plugin persistence CRUD ---
 
@@ -460,12 +439,17 @@ class StorageAdapter:
         limit: int = 5,
         plugins: list[str] | None = None,
         record_types: list[str] | None = None,
+        metadata_filters: dict[str, str] | None = None,
     ) -> list[dict]:
         """Retrieves documents by KNN similarity with composite scoring.
 
         Combines vector distance with usage-based weighting and time decay.
         Tombstoned documents are always excluded. When no weights exist,
         results are ranked by pure vector distance (equivalent to no weighting).
+
+        metadata_filters: optional dict of key-value pairs. Each pair becomes
+        a json_extract condition (AND semantics). NULL metadata rows are
+        excluded when any filter is provided.
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -476,7 +460,11 @@ class StorageAdapter:
         if record_types is not None and len(record_types) == 0:
             return []
 
-        has_filters = plugins is not None or record_types is not None
+        has_filters = (
+            plugins is not None
+            or record_types is not None
+            or bool(metadata_filters)
+        )
         fetch_k = limit * self.KNN_OVERFETCH_MULTIPLIER if has_filters else limit
 
         vec_bytes = struct.pack(f"{len(target_vector)}f", *target_vector)
@@ -494,6 +482,16 @@ class StorageAdapter:
             placeholders = ",".join("?" for _ in record_types)
             where_clauses.append(f"d.record_type IN ({placeholders})")
             params.extend(record_types)
+
+        if metadata_filters:
+            for key, value in metadata_filters.items():
+                if not _SAFE_METADATA_KEY_RE.match(key):
+                    raise ValueError(
+                        f"Invalid metadata filter key {key!r}: "
+                        "only alphanumeric characters and underscores are allowed"
+                    )
+                where_clauses.append(f"json_extract(d.metadata, '$.{key}') = ?")
+                params.append(value)
 
         extra_where = "AND " + " AND ".join(where_clauses)
 
@@ -537,6 +535,94 @@ class StorageAdapter:
                     "score": row[5],
                     "usage_score": row[6],
                     "final_rank": row[9],
+                }
+            )
+        return results
+
+    def retrieve_by_weight(
+        self,
+        limit: int = 5,
+        plugins: list[str] | None = None,
+        record_types: list[str] | None = None,
+        metadata_filters: dict[str, str] | None = None,
+    ) -> list[dict]:
+        """Retrieves documents ranked by composite weight score (no vector required).
+
+        Results are ranked by usage_score * decay descending. Tombstoned
+        documents are always excluded.
+
+        metadata_filters: optional dict of key-value pairs. Each pair becomes
+        a json_extract condition (AND semantics). NULL metadata rows are
+        excluded when any filter is provided.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        # Short-circuit: explicit empty list means "match nothing"
+        if plugins is not None and len(plugins) == 0:
+            return []
+        if record_types is not None and len(record_types) == 0:
+            return []
+
+        where_clauses = ["COALESCE(w.tombstoned, 0) = 0"]
+        params: list = []
+
+        if plugins is not None:
+            placeholders = ",".join("?" for _ in plugins)
+            where_clauses.append(f"d.plugin IN ({placeholders})")
+            params.extend(plugins)
+
+        if record_types is not None:
+            placeholders = ",".join("?" for _ in record_types)
+            where_clauses.append(f"d.record_type IN ({placeholders})")
+            params.extend(record_types)
+
+        if metadata_filters:
+            for key, value in metadata_filters.items():
+                if not _SAFE_METADATA_KEY_RE.match(key):
+                    raise ValueError(
+                        f"Invalid metadata filter key {key!r}: "
+                        "only alphanumeric characters and underscores are allowed"
+                    )
+                where_clauses.append(f"json_extract(d.metadata, '$.{key}') = ?")
+                params.append(value)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+        params.append(limit)
+
+        query = f"""
+            SELECT d.id, d.uri, d.plugin, d.record_type, d.metadata,
+                   COALESCE(w.usage_score, 0.0) AS usage_score,
+                   (COALESCE(w.usage_score, 0.0)
+                    * CASE
+                        WHEN w.decay_half_life_days IS NOT NULL
+                             AND w.decay_half_life_days > 0
+                        THEN POWER(0.5,
+                             (JULIANDAY('now') - JULIANDAY(COALESCE(w.created_at, datetime('now'))))
+                             / w.decay_half_life_days)
+                        ELSE 1.0
+                      END
+                   ) AS weight_rank
+            FROM documents d
+            LEFT JOIN doc_weights w ON d.id = w.doc_id
+            {where_sql}
+            ORDER BY weight_rank DESC
+            LIMIT ?
+        """
+
+        cursor = self._conn.execute(query, params)
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "id": row[0],
+                    "uri": row[1],
+                    "plugin": row[2],
+                    "record_type": row[3],
+                    "metadata": json.loads(row[4]) if row[4] else {},
+                    "usage_score": row[5],
+                    "weight_rank": row[6],
                 }
             )
         return results

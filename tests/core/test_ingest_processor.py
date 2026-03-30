@@ -77,7 +77,7 @@ async def test_markdown_plugin_returns_events(tmp_path):
     f2 = tmp_path / "b.md"
     f1.write_text("Paragraph A1.\n\nParagraph A2.")
     f2.write_text("Paragraph B1.")
-    bundle = IngestionBundle(uris=[f1.as_uri(), f2.as_uri()])
+    bundle = IngestionBundle(uris=[f1.as_uri(), f2.as_uri()], storage=storage)
 
     # When process_bundle completes
     events = await plugin.process_bundle(bundle)

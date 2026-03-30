@@ -1,10 +1,15 @@
 """
 SPEC-008 / STORY-001: Semantic Type and Media Type Schema
+
+NOTE: The registered_plugins table moved to TenantStorageManager / system.sqlite
+per SPEC-010 / STORY-001. AC-005 and AC-006 updated accordingly.
 """
 
+import os
 import sqlite3
 import sqlite_vec
 from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.tenant_manager import TenantStorageManager
 
 
 def test_ac001_documents_table_has_semantic_type_column(tmp_path):
@@ -156,15 +161,17 @@ def test_ac004_migration_applies_to_existing_data(tmp_path):
 def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_columns(
     tmp_path,
 ):
-    """AC-005: registered_plugins table gains semantic_types and supported_media_types columns."""
-    db_path = tmp_path / "test.db"
+    """AC-005: registered_plugins table in system.sqlite has semantic_types and supported_media_types."""
+    base = str(tmp_path / "mind")
 
-    # Given a freshly migrated database
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    # Given a freshly initialized TenantStorageManager
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
+    mgr.close()
 
-    # When the registered_plugins table schema is inspected
-    with sqlite3.connect(str(db_path)) as conn:
+    # When the registered_plugins table schema in system.sqlite is inspected
+    system_db = os.path.join(base, "system.sqlite")
+    with sqlite3.connect(system_db) as conn:
         cursor = conn.execute("PRAGMA table_info(registered_plugins)")
         columns = {
             row[1]: {"type": row[2], "default": row[4]} for row in cursor.fetchall()
@@ -180,45 +187,15 @@ def test_ac005_registered_plugins_has_semantic_types_and_supported_media_types_c
     assert columns["supported_media_types"]["type"] == "JSON"
     assert columns["supported_media_types"]["default"] is None
 
-    adapter.close()
 
+def test_ac006_registered_plugins_idempotent_in_system_sqlite(tmp_path):
+    """AC-006: TenantStorageManager.initialize() is idempotent on an existing system.sqlite with registered_plugins data."""
+    base = str(tmp_path / "mind")
 
-def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
-    """AC-006: registered_plugins migration adds columns to a pre-existing table without data loss."""
-    db_path = tmp_path / "test.db"
-
-    # Given a database with a registered_plugins table lacking the new columns
-    with sqlite3.connect(str(db_path)) as conn:
-        conn.enable_load_extension(True)
-        sqlite_vec.load(conn)
-        conn.execute("""
-            CREATE TABLE documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uri TEXT NOT NULL,
-                plugin TEXT NOT NULL DEFAULT '',
-                doctype TEXT NOT NULL DEFAULT '',
-                metadata JSON,
-                content_hash TEXT,
-                plugin_version TEXT DEFAULT '0.0.0'
-            )
-        """)
-        conn.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
-                id INTEGER PRIMARY KEY,
-                embedding float[768]
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS doc_weights (
-                doc_id INTEGER PRIMARY KEY REFERENCES documents(id),
-                usage_score REAL DEFAULT 0.0,
-                signal_count INTEGER DEFAULT 0,
-                last_accessed TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                tombstoned INTEGER DEFAULT 0,
-                decay_half_life_days REAL
-            )
-        """)
+    # Given a system.sqlite pre-created with a registered_plugins row
+    os.makedirs(base, exist_ok=True)
+    system_db = os.path.join(base, "system.sqlite")
+    with sqlite3.connect(system_db) as conn:
         conn.execute("""
             CREATE TABLE registered_plugins (
                 plugin_name TEXT PRIMARY KEY,
@@ -226,8 +203,17 @@ def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
                 module_path TEXT NOT NULL,
                 config JSON,
                 event_filter JSON,
+                semantic_types JSON,
+                supported_media_types JSON,
                 enabled INTEGER DEFAULT 1,
                 registered_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE tenants (
+                tenant_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                metadata JSON
             )
         """)
         conn.execute(
@@ -235,12 +221,12 @@ def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
             ("my_plugin", "tool_provider", "my.module.Plugin"),
         )
 
-    # When the migration is applied
-    adapter = StorageAdapter(str(db_path))
-    adapter.initialize()
+    # When TenantStorageManager.initialize() is called on the existing DB
+    mgr = TenantStorageManager(base)
+    mgr.initialize()
 
-    # Then the pre-existing row is intact and new columns are NULL (JSON default)
-    with sqlite3.connect(str(db_path)) as conn:
+    # Then the pre-existing row is still intact
+    with sqlite3.connect(system_db) as conn:
         cursor = conn.execute(
             "SELECT plugin_name, plugin_type, module_path, semantic_types, supported_media_types "
             "FROM registered_plugins"
@@ -248,13 +234,11 @@ def test_ac006_registered_plugins_migration_on_existing_table(tmp_path):
         rows = cursor.fetchall()
 
     assert len(rows) == 1
-    plugin_name, plugin_type, module_path, semantic_types, supported_media_types = rows[
-        0
-    ]
+    plugin_name, plugin_type, module_path, semantic_types, supported_media_types = rows[0]
     assert plugin_name == "my_plugin"
     assert plugin_type == "tool_provider"
     assert module_path == "my.module.Plugin"
     assert semantic_types is None
     assert supported_media_types is None
 
-    adapter.close()
+    mgr.close()

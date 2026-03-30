@@ -1,3 +1,4 @@
+import hashlib
 import json
 import urllib.request
 import urllib.parse
@@ -5,6 +6,18 @@ from pathlib import Path
 from mcp.types import Tool, TextContent
 from team_mind_mcp.server import ToolProvider
 from team_mind_mcp.storage import StorageAdapter
+
+
+def _embed(text: str) -> list[float]:
+    """Generate a deterministic 768-d vector from text.
+
+    Must match _mock_embed in markdown.py — same vector space used for ingest and query.
+    """
+    vector = [0.0] * 768
+    h = hashlib.md5(text.encode("utf-8")).digest()
+    for i in range(min(16, len(h))):
+        vector[i] = h[i] / 255.0
+    return vector
 
 
 class DocumentRetrievalPlugin(ToolProvider):
@@ -20,6 +33,41 @@ class DocumentRetrievalPlugin(ToolProvider):
     def get_tools(self) -> list[Tool]:
         return [
             Tool(
+                name="retrieve_documents",
+                description=(
+                    "Search stored documents. Use 'vector' mode for semantic similarity "
+                    "(requires query_text), or 'weight' mode for recency/usage ranked "
+                    "retrieval (no query_text needed)."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query_text": {
+                            "type": "string",
+                            "description": "Search query (required for vector mode).",
+                        },
+                        "query_mode": {
+                            "type": "string",
+                            "enum": ["vector", "weight"],
+                            "description": (
+                                "Use 'vector' for semantic similarity search (requires "
+                                "query_text), 'weight' for recency/usage ranked retrieval "
+                                "(no query_text needed)."
+                            ),
+                        },
+                        "metadata_filters": {
+                            "type": "object",
+                            "description": "Filter results by metadata key-value pairs (AND semantics).",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results (default 10).",
+                        },
+                    },
+                    "required": [],
+                },
+            ),
+            Tool(
                 name="get_full_document",
                 description="Retrieve the complete text content of a document by its URI.",
                 inputSchema={
@@ -29,10 +77,37 @@ class DocumentRetrievalPlugin(ToolProvider):
                     },
                     "required": ["uri"],
                 },
-            )
+            ),
         ]
 
+    async def _retrieve_documents(self, arguments: dict) -> list[TextContent]:
+        """Handle the retrieve_documents tool call."""
+        query_mode = arguments.get("query_mode", "vector")
+        query_text = arguments.get("query_text")
+        limit = int(arguments.get("limit", 5))
+        metadata_filters = arguments.get("metadata_filters") or None
+
+        if query_mode == "weight":
+            results = self.storage.retrieve_by_weight(
+                limit=limit,
+                metadata_filters=metadata_filters,
+            )
+        else:
+            # vector mode (default)
+            if not query_text:
+                raise ValueError("query_text is required for vector mode")
+            vector = _embed(query_text)
+            results = self.storage.retrieve_by_vector_similarity(
+                vector,
+                limit=limit,
+                metadata_filters=metadata_filters,
+            )
+
+        return [TextContent(type="text", text=json.dumps(results))]
+
     async def call_tool(self, name: str, arguments: dict) -> list[TextContent]:
+        if name == "retrieve_documents":
+            return await self._retrieve_documents(arguments)
         if name != "get_full_document":
             raise ValueError(f"Unsupported tool: {name}")
 

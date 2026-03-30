@@ -16,16 +16,24 @@ graph TD
         Gateway[MCP Gateway]
         Registry[Plugin Registry]
         Pipeline[Ingestion Pipeline]
-        
+
         %% Plugins
         subgraph Plugins
             IngestPlugin(Ingestion Plugin)
             RetrievePlugin(Retrieval Plugin)
             MarkdownPlugin(Markdown Plugin)
+            TenantPlugin(Tenant Plugin)
         end
-        
-        %% Storage
-        DB[(SQLite + sqlite-vec)]
+
+        %% Multi-Tenancy Layer
+        subgraph Multi-Tenancy
+            TSM[TenantStorageManager]
+            SYS[(system.sqlite<br/>plugins · tenants)]
+            subgraph Shards
+                DB1[(default/data.sqlite)]
+                DB2[(user-123/data.sqlite)]
+            end
+        end
     end
 
     %% Connections
@@ -34,12 +42,15 @@ graph TD
     Registry --> IngestPlugin
     Registry --> RetrievePlugin
     Registry --> MarkdownPlugin
-    
+    Registry --> TenantPlugin
+
     IngestPlugin -->|Triggers| Pipeline
-    Pipeline -->|Broadcasts IngestionBundle| MarkdownPlugin
-    
-    MarkdownPlugin -->|Stores chunks & vectors| DB
-    RetrievePlugin -->|Fetches full docs| DB
+    Pipeline -->|routes by tenant_id| TSM
+    TSM -->|injects bundle.storage| MarkdownPlugin
+    TSM --- SYS
+    TSM --- DB1
+    TSM --- DB2
+    RetrievePlugin -->|Fetches full docs| TSM
 ```
 
 ### Core Components
@@ -72,6 +83,9 @@ You can seamlessly pre-load the database with context from local files, entire d
 ```bash
 # Ingest diverse targets simultaneously
 uv run team-mind-mcp ingest ./docs/ https://example.com/api.md ./notes.txt
+
+# Ingest into a specific tenant shard
+uv run team-mind-mcp ingest --tenant-id user-123 ./user-docs/
 ```
 
 ### Live Agent Ingestion
@@ -88,11 +102,15 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
   - SPEC-001: MCP Gateway, SQLite storage, ingestion pipeline, Markdown plugin, CLI
   - SPEC-002: Doctype system, plugin-scoped namespacing, scoped queries, discovery tool
   - SPEC-003: IngestProcessor/IngestObserver split, two-phase pipeline, IngestionEvent
-- **Phase 2: Intelligence & Weighting** - **IN PROGRESS**
-  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates — **COMPLETE**
-  - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext) — **COMPLETE**
-  - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence) — *In design*
-  - SPEC-008: Semantic type routing — three-type model (semantic/media/record type), registration-time routing, available vs enabled activation model — *In progress*
+- **Phase 2: Intelligence & Weighting** - **COMPLETE**
+  - SPEC-004: Usage-based ranking (cumulative average), information decay, tombstoning, doc updates
+  - SPEC-005: Idempotent ingestion (content hashing, plugin versioning, IngestionContext)
+  - SPEC-006: Plugin lifecycle management (dynamic registration, filtered subscriptions, persistence)
+  - SPEC-007: Reliability seeding — three-layer initial score model (ingest hint > plugin default > 0.0)
+  - SPEC-008: Semantic type routing — three-type model (semantic/media/record type), registration-time routing, available vs enabled activation model
+  - SPEC-009: Record type rename (`doctype` → `record_type`) throughout codebase
+- **Phase 3: Reliability & Extensibility** - **IN PROGRESS**
+  - SPEC-010: Multi-tenancy & metadata search — per-tenant SQLite sharding, `TenantStorageManager`, scatter-gather cross-tenant queries, metadata filters via `json_extract`, optional vector query — **COMPLETE**
 
 ---
 

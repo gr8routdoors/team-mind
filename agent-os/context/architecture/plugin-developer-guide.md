@@ -25,11 +25,19 @@ When you build a plugin, you own:
 
 You don't build these — they're shared infrastructure:
 
-- **The `documents` table** — A shared table with columns: `id`, `uri`, `plugin`, `doctype`, `metadata` (JSON). Your plugin writes rows tagged with your plugin name and doctype. Other plugins can read your data by querying your doctype.
+- **The `documents` table** — A per-tenant table with columns: `id`, `uri`, `plugin`, `record_type`, `metadata` (JSON). Your plugin writes rows tagged with your plugin name and record type. Other plugins can read your data by querying your record type.
 - **The `vec_documents` table** — Vector embeddings linked to document rows. Used for semantic (KNN) search.
-- **The `PluginRegistry`** — Handles registration, tool routing, and doctype catalog. You register; it routes.
-- **The `IngestionPipeline`** — Two-phase pipeline: broadcasts bundles to processors (Phase 1), then notifies observers with structured events (Phase 2).
-- **Cross-plugin queries** — Any plugin can query by `plugins` and/or `doctypes` lists. If your data is useful to others, they can discover it via `list_doctypes` and query it via `semantic_search`.
+- **The `doc_weights` table** — Per-document relevance scores, decay configuration, and tombstone flag. Platform-managed.
+- **The `PluginRegistry`** — Handles registration, tool routing, and record type catalog. You register; it routes.
+- **The `IngestionPipeline`** — Two-phase pipeline: broadcasts bundles to processors (Phase 1), then notifies observers with structured events (Phase 2). Injects the correct per-tenant `StorageAdapter` into `bundle.storage` before calling your processor.
+- **The `TenantStorageManager`** — Manages per-tenant SQLite databases. Plugins never interact with this directly — the pipeline resolves the correct adapter and injects it via `bundle.storage`.
+- **Cross-plugin queries** — Any plugin can query by `plugins` and/or `record_types` lists. If your data is useful to others, they can discover it via `list_record_types` and query it via `semantic_search`.
+
+### Tenant Transparency
+
+**Plugins are tenant-unaware by design.** Your `process_bundle` method receives a `bundle` with `bundle.storage` already pointing to the correct per-tenant `StorageAdapter`. You write to `bundle.storage` — the pipeline and `TenantStorageManager` handle all tenant routing.
+
+You will never see `TenantStorageManager` in your plugin code. Tenant routing is a pipeline/manager concern, not a plugin concern.
 
 ## Plugin Interfaces
 
@@ -102,22 +110,20 @@ class MyPlugin(ToolProvider):
 Processors receive raw URIs, do the heavy lifting (parsing, chunking, embedding), write to storage, and return `IngestionEvent` objects describing what they wrote.
 
 ```python
-from team_mind_mcp.server import IngestProcessor, DoctypeSpec
-from team_mind_mcp.storage import StorageAdapter
+from team_mind_mcp.server import IngestProcessor, RecordTypeSpec
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 
 class MyIngestionPlugin(IngestProcessor):
-    def __init__(self, storage: StorageAdapter):
-        self.storage = storage
+    # No storage injected in constructor — the pipeline injects it via bundle.storage
 
     @property
     def name(self) -> str:
         return "my_ingestion_plugin"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="processed_item",
                 description="An item extracted during ingestion.",
                 schema={"content": {"type": "string"}}
@@ -136,23 +142,26 @@ class MyIngestionPlugin(IngestProcessor):
             content = self._fetch_and_process(uri)
             vector = self._generate_embedding(content)
 
+            # Use bundle.storage — the pipeline has already resolved the correct
+            # per-tenant StorageAdapter. Never use self.storage in process_bundle.
+
             # Pointer mode: store URI reference, fetch content on demand
-            doc_id = self.storage.save_payload(
+            doc_id = bundle.storage.save_payload(
                 uri=uri,
                 metadata={"summary": content[:200]},
                 vector=vector,
                 plugin=self.name,
-                doctype="processed_item"
+                record_type="processed_item"
             )
             doc_ids.append(doc_id)
 
             # OR Embedded mode: store full content in metadata
-            doc_id = self.storage.save_payload(
+            doc_id = bundle.storage.save_payload(
                 uri=uri,
                 metadata={"local_payload": content, "summary": content[:200]},
                 vector=vector,
                 plugin=self.name,
-                doctype="processed_item"
+                record_type="processed_item"
             )
             doc_ids.append(doc_id)
 
@@ -160,7 +169,7 @@ class MyIngestionPlugin(IngestProcessor):
         if processed_uris:
             return [IngestionEvent(
                 plugin=self.name,
-                doctype="processed_item",
+                record_type="processed_item",
                 uris=processed_uris,
                 doc_ids=doc_ids
             )]
@@ -192,9 +201,10 @@ class AuditPlugin(IngestObserver):
 @dataclass
 class IngestionEvent:
     plugin: str          # Which processor wrote the data
-    doctype: str         # What doctype was written
+    record_type: str     # What record type was written
     uris: list[str]      # Which source URIs were processed
     doc_ids: list[int]   # IDs of the document rows created
+    tenant_id: str       # Which tenant shard was written to (default: "default")
 ```
 
 ### Combining interfaces
@@ -261,21 +271,51 @@ The `documents` table is shared, but your data is yours:
 results = storage.retrieve_by_vector_similarity(
     vector, limit=10,
     plugins=["my_plugin"],
-    doctypes=["my_data_type"]
+    record_types=["my_data_type"]
 )
 
 # Query another plugin's data (cross-plugin)
 results = storage.retrieve_by_vector_similarity(
     vector, limit=10,
     plugins=["travel_plugin"],
-    doctypes=["interest", "dest_info"]
+    record_types=["interest", "dest_info"]
 )
 
 # Query across all plugins (no filters)
 results = storage.retrieve_by_vector_similarity(vector, limit=10)
 ```
 
-All filter parameters accept **lists**, so you can query multiple plugins and doctypes in a single call.
+All filter parameters accept **lists**, so you can query multiple plugins and record types in a single call.
+
+### Metadata Filters
+
+The `metadata` JSON column is queryable at search time through optional equality filters:
+
+```python
+results = storage.retrieve_by_vector_similarity(
+    vector, limit=10,
+    metadata_filters={"interest_category": "sports", "league": "nfl"}
+)
+# → WHERE json_extract(metadata, '$.interest_category') = 'sports'
+#     AND json_extract(metadata, '$.league') = 'nfl'
+```
+
+Metadata filters compose with `plugins` and `record_types` filters. All filter keys must match `^[A-Za-z0-9_]+$` (alphanumeric and underscores only).
+
+**Optional vector query:** When the caller omits `target_vector`, the storage layer queries the `documents` table directly without a KNN join and ranks results by composite weight score (`usage_score * decay`) descending. All metadata, plugin, and record_type filters still apply.
+
+### Structural Fields vs. Metadata Fields
+
+This distinction determines what you should put in first-class columns vs. what goes in the `metadata` JSON:
+
+| | First-class columns | Metadata fields |
+|---|---|---|
+| **Purpose** | Framework routing, identity, system behavior | Domain-specific attributes for query-time filtering |
+| **Who controls** | Framework / pipeline | Your plugin |
+| **Examples** | `plugin`, `record_type`, `semantic_type`, `media_type` | `interest_category`, `league`, `destination`, `price_range` |
+| **How to filter** | Dedicated WHERE clause (fast, indexed) | `json_extract` (per-query) |
+
+**The rule:** If the framework/pipeline needs it to make routing or identity decisions, it's a column. If only your plugin's consumers need it at query time for filtering, it belongs in `metadata`.
 
 ## Understanding the Three-Type Model
 
@@ -430,8 +470,8 @@ class MyPlugin(IngestProcessor):
             content = self._fetch_and_process(uri)
             vector = self._generate_embedding(content)
 
-            # Pass initial_score to seed usage_score in doc_weights
-            doc_id = self.storage.save_payload(
+            # Use bundle.storage — the pipeline injects the correct per-tenant adapter
+            doc_id = bundle.storage.save_payload(
                 uri=uri,
                 metadata={"content": content},
                 vector=vector,
@@ -564,12 +604,12 @@ async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
                 continue  # Nothing changed — skip
 
             # Content or version changed — wipe and re-ingest
-            self.storage.delete_by_uri(uri, plugin=self.name, doctype="my_type")
+            bundle.storage.delete_by_uri(uri, plugin=self.name, record_type="my_type")
 
         # Process and save with hash + version
-        doc_id = self.storage.save_payload(
+        doc_id = bundle.storage.save_payload(
             uri, metadata, vector,
-            plugin=self.name, doctype="my_type",
+            plugin=self.name, record_type="my_type",
             content_hash=current_hash, plugin_version=self.version,
         )
 ```
@@ -602,25 +642,25 @@ The platform provides two methods for keeping data current:
 **Update a specific chunk in place** (preserves its weight):
 ```python
 # Plugin knows the doc_id of the chunk it wants to update
-storage.update_payload(
+bundle.storage.update_payload(
     doc_id=42,
     metadata={"chunk": "updated content", "version": 2},
     vector=new_embedding
 )
-# uri, plugin, doctype, and usage_score are all preserved
+# uri, plugin, record_type, and usage_score are all preserved
 ```
 
 **Wipe and re-ingest a whole document** (fresh start):
 ```python
 # Delete all old chunks for this URI, then re-ingest
-deleted = storage.delete_by_uri(
+deleted = bundle.storage.delete_by_uri(
     uri="file:///doc.md",
     plugin=self.name,
-    doctype="markdown_chunk"
+    record_type="markdown_chunk"
 )
 # Now insert new chunks — they start with usage_score=0.0
 for chunk in new_chunks:
-    storage.save_payload(uri, chunk_meta, vector, plugin=self.name, doctype="markdown_chunk")
+    bundle.storage.save_payload(uri, chunk_meta, vector, plugin=self.name, record_type="markdown_chunk")
 ```
 
 `delete_by_uri` is scoped to your plugin and doctype — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
@@ -703,4 +743,7 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [SPEC-006: Plugin Lifecycle](../../specs/SPEC-006-plugin-lifecycle/design.md) | EventFilter, persistence table, MCP tools, startup recovery |
 | [ADR-007: Three-Type Model & Semantic Routing](ADRs/ADR-007-semantic-type-routing.md) | Three-type model, semantic type routing, available vs enabled, record type rename |
 | [SPEC-007: Reliability Seeding](../../specs/SPEC-007-reliability-seeding/design.md) | Three-layer reliability model, initial_score seeding, ingest hint propagation |
-| [System Overview](system-overview.md) | High-level architecture and design philosophy |
+| [ADR-008: Multi-Tenancy & Metadata Search](ADRs/ADR-008-multi-tenancy-metadata-search.md) | Required tenancy, metadata search via json_extract, cross-tenant query model, structural vs metadata fields |
+| [ADR-010: Tenant Sharding](ADRs/ADR-010-tenant-sharding.md) | File-level sharding, TenantStorageManager, scatter-gather, KNN correctness rationale |
+| [SPEC-010: Multi-Tenancy & Metadata Search](../../specs/SPEC-010-multi-tenancy-metadata-search/design.md) | Implementation details: TenantStorageManager, per-tenant lifecycle, ingestion routing, metadata filters |
+| [System Overview](system-overview.md) | High-level architecture and design philosophy, including tenant sharding diagrams |

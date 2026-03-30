@@ -23,6 +23,7 @@
 ## Phase 3: Reliability & Extensibility — IN PROGRESS
 
 - **Reliability Seeding:** Three-layer initial quality scoring — ingest hint (from caller), plugin-declared default on `RecordTypeSpec`, platform default (0.0). Seeds `usage_score` at ingestion time so high-quality sources rank higher immediately. Replaces the original inline Librarian concept (ADR-006). *(SPEC-007 — COMPLETE)*
+- **Multi-Tenancy & Metadata Search:** Per-tenant SQLite file sharding via `TenantStorageManager`. Each tenant gets its own `data.sqlite` shard — KNN operates on exactly the right dataset by construction. Scatter-gather cross-tenant queries. Metadata search via `json_extract` equality filters on the existing `metadata` column. Optional vector query (weight-ranked retrieval when query is omitted). Plugin developer guide updated: plugins are tenant-unaware, use `bundle.storage`. *(SPEC-010 — COMPLETE)*
 - **LLM Background Reaper:** Async post-ingestion process that scans for near-duplicate content across different URIs and cross-document contradictions. Covers both semantic deduplication (same fact, different URI) and conflict detection (contradicting facts). *(Future — see ADR-006)*
 - **Meta-Plugins / Chained Processing:** Observer-triggered secondary ingestion enabling complex processing pipelines (e.g., dependency audit across code + POM output). *(Future — see ADR-007)*
 
