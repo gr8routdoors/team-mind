@@ -682,6 +682,91 @@ class StorageAdapter:
             )
         return results
 
+    def get_document_with_segments(self, doc_id: int) -> dict:
+        """Return a parent document with all its non-tombstoned child segments.
+
+        If doc_id is a parent (has children), returns parent metadata + children.
+        If doc_id is a segment (has parent_id), resolves root and returns siblings.
+        If doc_id is standalone (no parent, no children), returns doc with empty segments.
+
+        Raises ValueError if doc_id does not exist.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        # Step 1: Fetch the requested document row
+        row = self._conn.execute(
+            "SELECT id, uri, plugin, record_type, metadata, parent_id FROM documents WHERE id = ?",
+            (doc_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No document with id={doc_id}")
+
+        fetched_parent_id = row[5]
+
+        # Step 2: Determine the root document id
+        if fetched_parent_id is not None:
+            root_id = fetched_parent_id
+        else:
+            root_id = doc_id
+
+        # Step 3: Fetch the root document row (may already be fetched if root_id == doc_id)
+        if root_id == doc_id:
+            root_row = row
+        else:
+            root_row = self._conn.execute(
+                "SELECT id, uri, plugin, record_type, metadata, parent_id FROM documents WHERE id = ?",
+                (root_id,),
+            ).fetchone()
+            if root_row is None:
+                raise ValueError(f"No document with id={root_id}")
+
+        # Step 4: Fetch non-tombstoned children of root
+        children_cursor = self._conn.execute(
+            """
+            SELECT d.id, d.uri, d.record_type, d.metadata,
+                   COALESCE(w.usage_score, 0.0) AS usage_score
+            FROM documents d
+            LEFT JOIN doc_weights w ON d.id = w.doc_id
+            WHERE d.parent_id = ?
+              AND COALESCE(w.tombstoned, 0) = 0
+            ORDER BY d.id
+            """,
+            (root_id,),
+        )
+        children = children_cursor.fetchall()
+
+        segments = [
+            {
+                "id": c[0],
+                "uri": c[1],
+                "record_type": c[2],
+                "metadata": json.loads(c[3]) if c[3] else {},
+                "usage_score": c[4],
+            }
+            for c in children
+        ]
+
+        # Step 5: Compute aggregate score
+        if segments:
+            aggregate_score = sum(s["usage_score"] for s in segments) / len(segments)
+        else:
+            aggregate_score = None
+
+        segment_count = len(segments)
+
+        parent = {
+            "id": root_row[0],
+            "uri": root_row[1],
+            "plugin": root_row[2],
+            "record_type": root_row[3],
+            "metadata": json.loads(root_row[4]) if root_row[4] else {},
+            "aggregate_score": aggregate_score,
+            "segment_count": segment_count,
+        }
+
+        return {"parent": parent, "segments": segments}
+
     def close(self):
         if self._conn:
             self._conn.close()
