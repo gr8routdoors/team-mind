@@ -1,10 +1,13 @@
 import asyncio
 import pathlib
 from dataclasses import dataclass, field
-from typing import List, Any, Dict
+from typing import List, Any, Dict, TYPE_CHECKING
 from urllib.parse import urlparse
 
 from team_mind_mcp.media_types import filter_uris_by_media_type
+
+if TYPE_CHECKING:
+    from team_mind_mcp.storage import StorageAdapter
 
 
 @dataclass
@@ -16,6 +19,7 @@ class IngestionEvent:
     uris: list[str] = field(default_factory=list)
     doc_ids: list[int] = field(default_factory=list)
     semantic_types: list[str] = field(default_factory=list)
+    tenant_id: str = "default"
 
 
 @dataclass
@@ -42,6 +46,8 @@ class IngestionBundle:
     contexts: Dict[str, IngestionContext] = field(default_factory=dict)
     semantic_types: list[str] = field(default_factory=list)
     reliability_hint: float | None = None
+    tenant_id: str = "default"
+    storage: "StorageAdapter | None" = None
 
 
 class ResourceResolver:
@@ -75,9 +81,10 @@ class ResourceResolver:
 class IngestionPipeline:
     """Two-phase ingestion pipeline with context-aware processing."""
 
-    def __init__(self, registry: Any, storage: Any = None):
+    def __init__(self, registry: Any, storage: Any = None, tenant_manager: Any = None):
         self.registry = registry
         self.storage = storage
+        self.tenant_manager = tenant_manager
 
     def _build_contexts(
         self,
@@ -85,11 +92,15 @@ class IngestionPipeline:
         processor_name: str,
         processor_version: str,
         processor_record_types: list[str],
+        storage: Any = None,
     ) -> Dict[str, IngestionContext]:
         """Build IngestionContext per URI by looking up existing docs."""
         contexts: Dict[str, IngestionContext] = {}
 
-        if self.storage is None:
+        # Use provided storage, fall back to self.storage
+        effective_storage = storage if storage is not None else self.storage
+
+        if effective_storage is None:
             # No storage = no context (all fresh)
             for uri in uris:
                 contexts[uri] = IngestionContext(uri=uri)
@@ -103,7 +114,7 @@ class IngestionPipeline:
             is_update = False
 
             for dt in processor_record_types:
-                existing = self.storage.lookup_existing_docs(uri, processor_name, dt)
+                existing = effective_storage.lookup_existing_docs(uri, processor_name, dt)
                 if existing:
                     is_update = True
                     all_previous_ids.extend(doc["id"] for doc in existing)
@@ -127,11 +138,23 @@ class IngestionPipeline:
 
         return contexts
 
+    def _get_adapter_for_tenant(self, tenant_id: str) -> Any:
+        """Get the StorageAdapter for the given tenant, auto-creating if needed."""
+        if self.tenant_manager is None:
+            return self.storage
+
+        try:
+            return self.tenant_manager.get_adapter(tenant_id)
+        except ValueError:
+            self.tenant_manager.create_tenant(tenant_id)
+            return self.tenant_manager.get_adapter(tenant_id)
+
     async def ingest(
         self,
         uris: List[str],
         semantic_types: list[str] | None = None,
         reliability_hint: float | None = None,
+        tenant_id: str = "default",
     ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
         Returns the bundle with collected events, or None if no valid URIs."""
@@ -140,10 +163,15 @@ class IngestionPipeline:
         if not resolved_uris:
             return None  # No-Op
 
+        # Resolve the tenant-specific adapter (auto-creating the tenant if needed)
+        adapter = self._get_adapter_for_tenant(tenant_id)
+
         bundle = IngestionBundle(
             uris=resolved_uris,
             semantic_types=semantic_types or [],
             reliability_hint=reliability_hint,
+            tenant_id=tenant_id,
+            storage=adapter,
         )
 
         # Phase 1: Route to matching processors with per-processor bundle isolation.
@@ -168,6 +196,7 @@ class IngestionPipeline:
                 processor.name,
                 processor.version,
                 record_type_names,
+                storage=adapter,
             )
             # Create a per-processor bundle with filtered URIs — no shared state
             proc_bundle = IngestionBundle(
@@ -175,6 +204,8 @@ class IngestionPipeline:
                 contexts=contexts,
                 semantic_types=bundle.semantic_types,
                 reliability_hint=bundle.reliability_hint,
+                tenant_id=tenant_id,
+                storage=adapter,
             )
             processor_tasks.append(processor.process_bundle(proc_bundle))
 

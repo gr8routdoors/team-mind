@@ -48,6 +48,7 @@ async def test_process_bundle_passes_semantic_type_to_save_payload(tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         semantic_types=["architecture_docs"],
+        storage=storage,
     )
 
     # When the plugin processes and saves a document
@@ -80,6 +81,7 @@ async def test_process_bundle_joins_multiple_semantic_types(tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         semantic_types=["architecture_docs", "design"],
+        storage=storage,
     )
 
     # When the plugin processes and saves a document
@@ -114,7 +116,7 @@ async def test_process_bundle_passes_media_type_for_md_file(tmp_path):
     md_file = tmp_path / "design.md"
     md_file.write_text("Design content.")
 
-    bundle = IngestionBundle(uris=[md_file.as_uri()])
+    bundle = IngestionBundle(uris=[md_file.as_uri()], storage=storage)
 
     # When the document is saved
     await plugin.process_bundle(bundle)
@@ -143,7 +145,7 @@ async def test_process_bundle_passes_media_type_for_txt_file(tmp_path):
     txt_file = tmp_path / "notes.txt"
     txt_file.write_text("Plain text content.")
 
-    bundle = IngestionBundle(uris=[txt_file.as_uri()])
+    bundle = IngestionBundle(uris=[txt_file.as_uri()], storage=storage)
 
     # When the document is saved
     await plugin.process_bundle(bundle)
@@ -178,7 +180,7 @@ async def test_plugin_accepts_txt_uris(tmp_path):
     txt_file = tmp_path / "readme.txt"
     txt_file.write_text("Plain text paragraph one.\n\nParagraph two.")
 
-    bundle = IngestionBundle(uris=[txt_file.as_uri()])
+    bundle = IngestionBundle(uris=[txt_file.as_uri()], storage=storage)
 
     # When the plugin processes the bundle
     await plugin.process_bundle(bundle)
@@ -229,6 +231,7 @@ async def test_process_bundle_includes_semantic_types_in_event(tmp_path):
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],
         semantic_types=["specs"],
+        storage=storage,
     )
 
     # When the plugin processes the bundle

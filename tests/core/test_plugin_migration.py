@@ -49,7 +49,7 @@ async def test_markdown_plugin_passes_plugin_and_record_type_on_save(tmp_path):
     # Given the MarkdownPlugin is processing a markdown bundle
     md_file = tmp_path / "test.md"
     md_file.write_text("Hello world paragraph.")
-    bundle = IngestionBundle(uris=[md_file.as_uri()])
+    bundle = IngestionBundle(uris=[md_file.as_uri()], storage=storage)
 
     # When it calls storage.save_payload
     await plugin.process_bundle(bundle)
@@ -79,7 +79,7 @@ async def test_semantic_search_accepts_filters(tmp_path):
     # Ingest some markdown
     md_file = tmp_path / "test.md"
     md_file.write_text("Interesting travel content.\n\nAnother paragraph about food.")
-    bundle = IngestionBundle(uris=[md_file.as_uri()])
+    bundle = IngestionBundle(uris=[md_file.as_uri()], storage=storage)
     await plugin.process_bundle(bundle)
 
     # Also insert a document from a different plugin to test filtering
@@ -130,7 +130,7 @@ async def test_response_metadata_includes_plugin_and_doctype(tmp_path):
 
     md_file = tmp_path / "test.md"
     md_file.write_text("Sample content for testing.")
-    bundle = IngestionBundle(uris=[md_file.as_uri()])
+    bundle = IngestionBundle(uris=[md_file.as_uri()], storage=storage)
     await plugin.process_bundle(bundle)
 
     # When semantic_search returns results

@@ -149,7 +149,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     continue
 
                 # Content changed or version changed → wipe old chunks and re-ingest
-                self.storage.delete_by_uri(
+                bundle.storage.delete_by_uri(
                     uri, plugin=self.name, record_type="markdown_chunk"
                 )
             else:
@@ -164,7 +164,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             for chunk in chunks:
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
-                doc_id = self.storage.save_payload(
+                doc_id = bundle.storage.save_payload(
                     uri,
                     metadata,
                     vector,
@@ -186,6 +186,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     uris=processed_uris,
                     doc_ids=doc_ids,
                     semantic_types=bundle.semantic_types,
+                    tenant_id=bundle.tenant_id,
                 )
             ]
         return []

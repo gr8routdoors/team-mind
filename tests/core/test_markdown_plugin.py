@@ -26,7 +26,7 @@ async def test_markdown_semantic_ingestion(tmp_path):
     md_file.write_text("Paragraph one.\n\nParagraph two.")
 
     # When it receives a .process_bundle() event containing a .md resource
-    bundle = IngestionBundle(uris=[md_file.as_uri()])
+    bundle = IngestionBundle(uris=[md_file.as_uri()], storage=storage)
     await plugin.process_bundle(bundle)
 
     # Then it chunks the text and requests embeddings for each chunk
@@ -86,7 +86,7 @@ async def test_markdown_processes_only_passed_uris(tmp_path):
     notes_file.write_text("Hello markdown")
 
     # When the MarkdownPlugin processes the bundle (pipeline pre-filtered URIs)
-    bundle = IngestionBundle(uris=[notes_file.as_uri()])
+    bundle = IngestionBundle(uris=[notes_file.as_uri()], storage=storage)
     await plugin.process_bundle(bundle)
 
     # Then it successfully parses notes.md
