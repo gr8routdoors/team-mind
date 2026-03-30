@@ -13,6 +13,7 @@ from team_mind_mcp.ingestion_plugin import IngestionPlugin
 from team_mind_mcp.discovery import DoctypeDiscoveryPlugin
 from team_mind_mcp.feedback import FeedbackPlugin
 from team_mind_mcp.lifecycle import LifecyclePlugin, load_persisted_plugins
+from team_mind_mcp.tenant_plugin import TenantPlugin
 
 
 def load_cli_config(config_path: Path | None = None) -> dict:
@@ -74,8 +75,9 @@ async def run_server(db_path: Path) -> int:
     ingestion_plugin = IngestionPlugin(gateway.registry, storage=storage)
 
     discovery_plugin = DoctypeDiscoveryPlugin(gateway.registry)
-    feedback_plugin = FeedbackPlugin(storage)
+    feedback_plugin = FeedbackPlugin(tenant_manager)
     lifecycle_plugin = LifecyclePlugin(gateway.registry, tenant_manager)
+    tenant_plugin = TenantPlugin(tenant_manager)
 
     markdown_semantic_types = config.get("markdown_plugin", {}).get("semantic_types")
     gateway.registry.register(markdown_plugin, semantic_types=markdown_semantic_types)
@@ -84,6 +86,7 @@ async def run_server(db_path: Path) -> int:
     gateway.registry.register(discovery_plugin)
     gateway.registry.register(feedback_plugin)
     gateway.registry.register(lifecycle_plugin)
+    gateway.registry.register(tenant_plugin)
 
     # Load dynamically registered plugins from persistence table
     load_persisted_plugins(tenant_manager, gateway.registry)
