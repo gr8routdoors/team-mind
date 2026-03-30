@@ -24,14 +24,17 @@ def test_markdown_plugin_declares_record_type(tmp_path):
     # When its doctypes property is accessed
     specs = plugin.record_types
 
-    # Then it returns a list containing a RecordTypeSpec with name="markdown_chunk"
-    assert len(specs) == 1
-    assert isinstance(specs[0], RecordTypeSpec)
-    assert specs[0].name == "markdown_chunk"
+    # Then it returns a list containing RecordTypeSpecs for markdown_source and markdown_chunk
+    assert len(specs) == 2
+    names = [s.name for s in specs]
+    assert "markdown_source" in names
+    assert "markdown_chunk" in names
 
-    # And the spec includes a description and schema describing the chunk metadata
-    assert len(specs[0].description) > 0
-    assert "chunk" in specs[0].schema
+    # And the markdown_chunk spec includes a description and schema describing the chunk metadata
+    chunk_spec = next(s for s in specs if s.name == "markdown_chunk")
+    assert isinstance(chunk_spec, RecordTypeSpec)
+    assert len(chunk_spec.description) > 0
+    assert "chunk" in chunk_spec.schema
 
     storage.close()
 
