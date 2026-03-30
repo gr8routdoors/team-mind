@@ -1,7 +1,10 @@
+import re
 import sqlite3
 import json
 import struct
 import sqlite_vec
+
+_SAFE_METADATA_KEY_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 class StorageAdapter:
@@ -482,6 +485,11 @@ class StorageAdapter:
 
         if metadata_filters:
             for key, value in metadata_filters.items():
+                if not _SAFE_METADATA_KEY_RE.match(key):
+                    raise ValueError(
+                        f"Invalid metadata filter key {key!r}: "
+                        "only alphanumeric characters and underscores are allowed"
+                    )
                 where_clauses.append(f"json_extract(d.metadata, '$.{key}') = ?")
                 params.append(value)
 
@@ -571,6 +579,11 @@ class StorageAdapter:
 
         if metadata_filters:
             for key, value in metadata_filters.items():
+                if not _SAFE_METADATA_KEY_RE.match(key):
+                    raise ValueError(
+                        f"Invalid metadata filter key {key!r}: "
+                        "only alphanumeric characters and underscores are allowed"
+                    )
                 where_clauses.append(f"json_extract(d.metadata, '$.{key}') = ?")
                 params.append(value)
 

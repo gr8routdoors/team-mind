@@ -309,3 +309,40 @@ class TestRetrieveByWeight:
         assert d1 in result_ids
         assert d2 not in result_ids
         adapter.close()
+
+
+# ---------------------------------------------------------------------------
+# Key validation — SQL injection prevention
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_key_raises_vector_similarity(tmp_path):
+    """retrieve_by_vector_similarity raises ValueError for unsafe filter keys."""
+    db_path = tmp_path / "test.db"
+    adapter = StorageAdapter(str(db_path))
+    adapter.initialize()
+    query_vec = [0.1] * 768
+    with pytest.raises(ValueError, match="Invalid metadata filter key"):
+        adapter.retrieve_by_vector_similarity(query_vec, metadata_filters={"bad-key!": "v"})
+    adapter.close()
+
+
+def test_invalid_key_raises_retrieve_by_weight(tmp_path):
+    """retrieve_by_weight raises ValueError for unsafe filter keys."""
+    db_path = tmp_path / "test.db"
+    adapter = StorageAdapter(str(db_path))
+    adapter.initialize()
+    with pytest.raises(ValueError, match="Invalid metadata filter key"):
+        adapter.retrieve_by_weight(limit=10, metadata_filters={"'; DROP TABLE documents; --": "v"})
+    adapter.close()
+
+
+def test_valid_key_with_underscores_allowed(tmp_path):
+    """Keys with alphanumeric characters and underscores are accepted."""
+    db_path = tmp_path / "test.db"
+    adapter = StorageAdapter(str(db_path))
+    adapter.initialize()
+    # Should not raise — just return empty results
+    results = adapter.retrieve_by_weight(limit=10, metadata_filters={"record_type_v2": "foo"})
+    assert results == []
+    adapter.close()

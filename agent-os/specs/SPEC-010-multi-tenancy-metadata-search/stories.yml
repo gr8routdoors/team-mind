@@ -51,14 +51,16 @@ stories:
 
   STORY-004:
     name: Metadata Search Filters
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
     description: >
       Add metadata_filters parameter (dict[str, str] | None) to
       retrieve_by_vector_similarity. Each entry becomes a WHERE clause
       using json_extract(d.metadata, '$.key') = ?. Filters compose with
       existing plugin/record_type filters. KNN over-fetch multiplier
       unchanged — 4x constant is adequate at per-tenant shard scale.
-    status: pending
-    verified_by: []
 
   STORY-005:
     name: Optional Vector Query (Weight-Ranked Retrieval)
