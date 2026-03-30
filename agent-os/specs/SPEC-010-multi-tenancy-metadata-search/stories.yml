@@ -64,6 +64,10 @@ stories:
 
   STORY-005:
     name: Optional Vector Query (Weight-Ranked Retrieval)
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
     description: >
       Make target_vector optional (None allowed) in
       retrieve_by_vector_similarity. When None, query documents table
@@ -71,8 +75,6 @@ stories:
       weight score (usage_score * decay) descending. All other filters
       (metadata, plugin, record_type) still apply. Tombstoned documents
       still excluded.
-    status: pending
-    verified_by: []
 
   STORY-006:
     name: Cross-Tenant Scatter-Gather

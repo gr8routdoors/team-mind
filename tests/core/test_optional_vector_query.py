@@ -164,11 +164,9 @@ async def test_metadata_filters_passed_to_vector_path(plugin, storage):
         )
     call_kwargs = mock_vec.call_args
     assert call_kwargs is not None
-    # metadata_filters should be passed as keyword arg
     kwargs = call_kwargs.kwargs if call_kwargs.kwargs else {}
-    args = call_kwargs.args if call_kwargs.args else ()
-    # Check it was passed either as kwarg or in the call
-    assert "metadata_filters" in kwargs or "metadata_filters" in str(call_kwargs)
+    assert "metadata_filters" in kwargs
+    assert kwargs["metadata_filters"] == {"category": "sports"}
     results = json.loads(response[0].text)
     # Only the sports document should be returned
     assert all(r.get("metadata", {}).get("category") == "sports" for r in results)

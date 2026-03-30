@@ -1,7 +1,5 @@
 import hashlib
 import json
-import random
-import struct
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -11,11 +9,15 @@ from team_mind_mcp.storage import StorageAdapter
 
 
 def _embed(text: str) -> list[float]:
-    """Generate a deterministic mock vector for the given text."""
-    seed_bytes = hashlib.sha256(text.encode()).digest()
-    seed = int.from_bytes(seed_bytes[:4], "big")
-    rng = random.Random(seed)
-    return [rng.uniform(-1, 1) for _ in range(768)]
+    """Generate a deterministic 768-d vector from text.
+
+    Must match _mock_embed in markdown.py — same vector space used for ingest and query.
+    """
+    vector = [0.0] * 768
+    h = hashlib.md5(text.encode("utf-8")).digest()
+    for i in range(min(16, len(h))):
+        vector[i] = h[i] / 255.0
+    return vector
 
 
 class DocumentRetrievalPlugin(ToolProvider):
@@ -82,16 +84,12 @@ class DocumentRetrievalPlugin(ToolProvider):
         """Handle the retrieve_documents tool call."""
         query_mode = arguments.get("query_mode", "vector")
         query_text = arguments.get("query_text")
-        limit = arguments.get("limit", 5)
-        plugins_filter = arguments.get("plugins")
-        record_types_filter = arguments.get("record_types")
-        metadata_filters = arguments.get("metadata_filters")
+        limit = int(arguments.get("limit", 5))
+        metadata_filters = arguments.get("metadata_filters") or None
 
         if query_mode == "weight":
             results = self.storage.retrieve_by_weight(
                 limit=limit,
-                plugins=plugins_filter,
-                record_types=record_types_filter,
                 metadata_filters=metadata_filters,
             )
         else:
@@ -102,8 +100,6 @@ class DocumentRetrievalPlugin(ToolProvider):
             results = self.storage.retrieve_by_vector_similarity(
                 vector,
                 limit=limit,
-                plugins=plugins_filter,
-                record_types=record_types_filter,
                 metadata_filters=metadata_filters,
             )
 
