@@ -124,8 +124,9 @@ async def test_ac003_no_hint_no_default_uses_zero(storage, tmp_path):
     md_file.write_text("Only one paragraph.")
     plugin = MarkdownPlugin(storage)
 
-    # Confirm no default_reliability set
-    assert plugin.record_types[0].default_reliability is None
+    # Confirm no default_reliability set on the markdown_chunk record type (index 1)
+    chunk_rt = next(rt for rt in plugin.record_types if rt.name == "markdown_chunk")
+    assert chunk_rt.default_reliability is None
 
     bundle = IngestionBundle(
         uris=[md_file.as_uri()],

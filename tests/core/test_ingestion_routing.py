@@ -262,8 +262,9 @@ async def test_tenant_isolation_same_uri(tmp_path, tenant_manager):
     adapter_b = tenant_manager.get_adapter("tenant-b")
 
     # Each tenant's shard should have documents for this URI
-    docs_a = adapter_a.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_chunk")
-    docs_b = adapter_b.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_chunk")
+    # Chunks now use {uri}#chunk-{i} URIs; look up parent via markdown_source at base URI
+    docs_a = adapter_a.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_source")
+    docs_b = adapter_b.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_source")
 
     assert len(docs_a) > 0, "tenant-a should have documents"
     assert len(docs_b) > 0, "tenant-b should have documents"
@@ -300,9 +301,10 @@ async def test_markdown_plugin_uses_bundle_storage(tmp_path, tenant_manager):
 
     assert bundle is not None
     # Check that documents were written to the tenant shard
+    # Chunks use {uri}#chunk-{i} URIs; look up parent via markdown_source at base URI
     adapter = tenant_manager.get_adapter("md-tenant")
-    docs = adapter.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_chunk")
-    assert len(docs) > 0, "MarkdownPlugin should have written chunks to bundle.storage"
+    docs = adapter.lookup_existing_docs(md_file.as_uri(), "markdown_plugin", "markdown_source")
+    assert len(docs) > 0, "MarkdownPlugin should have written parent document to bundle.storage"
 
 
 @pytest.mark.asyncio

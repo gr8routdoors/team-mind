@@ -36,11 +36,15 @@ async def test_markdown_semantic_ingestion(tmp_path):
         cursor = storage._conn.execute("SELECT uri, metadata FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 2
+    # Now includes: 1 parent (markdown_source) + 2 chunks (markdown_chunk)
+    assert len(rows) == 3
+    # Parent row uses the base URI
     assert rows[0][0] == md_file.as_uri()
-    assert "Paragraph one" in rows[0][1]
-    assert rows[1][0] == md_file.as_uri()
-    assert "Paragraph two" in rows[1][1]
+    # Chunk rows use the segment URI convention
+    assert rows[1][0] == f"{md_file.as_uri()}#chunk-0"
+    assert "Paragraph one" in rows[1][1]
+    assert rows[2][0] == f"{md_file.as_uri()}#chunk-1"
+    assert "Paragraph two" in rows[2][1]
 
     storage.close()
 
@@ -94,7 +98,9 @@ async def test_markdown_processes_only_passed_uris(tmp_path):
         cursor = storage._conn.execute("SELECT uri FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 1
+    # Now includes: 1 parent (markdown_source) + 1 chunk (markdown_chunk)
+    assert len(rows) == 2
     assert rows[0][0] == notes_file.as_uri()
+    assert rows[1][0] == f"{notes_file.as_uri()}#chunk-0"
 
     storage.close()
