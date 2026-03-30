@@ -47,7 +47,8 @@ class StorageAdapter:
                     content_hash TEXT,
                     plugin_version TEXT DEFAULT '0.0.0',
                     semantic_type TEXT NOT NULL DEFAULT '',
-                    media_type TEXT NOT NULL DEFAULT ''
+                    media_type TEXT NOT NULL DEFAULT '',
+                    parent_id INTEGER REFERENCES documents(id)
                 )
             """)
 
@@ -88,6 +89,10 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN media_type TEXT NOT NULL DEFAULT ''"
                 )
+            if "parent_id" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN parent_id INTEGER REFERENCES documents(id)"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -108,6 +113,10 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_semantic_type
                 ON documents(semantic_type)
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_parent_id
+                ON documents(parent_id)
             """)
             self._conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
@@ -140,7 +149,6 @@ class StorageAdapter:
                 CREATE INDEX IF NOT EXISTS idx_doc_weights_tombstoned
                 ON doc_weights(tombstoned)
             """)
-
 
     # --- Plugin persistence CRUD ---
 
@@ -461,9 +469,7 @@ class StorageAdapter:
             return []
 
         has_filters = (
-            plugins is not None
-            or record_types is not None
-            or bool(metadata_filters)
+            plugins is not None or record_types is not None or bool(metadata_filters)
         )
         fetch_k = limit * self.KNN_OVERFETCH_MULTIPLIER if has_filters else limit
 
