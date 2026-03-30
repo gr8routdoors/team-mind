@@ -4,6 +4,7 @@ SPEC-002 / STORY-002: Storage Schema Evolution
 
 import sqlite3
 import pytest
+import sqlite_vec
 from team_mind_mcp.storage import StorageAdapter
 
 
@@ -140,8 +141,6 @@ def test_parent_id_migration_on_existing_database(tmp_path):
     # Given an existing database without parent_id (simulating a pre-migration DB)
     with sqlite3.connect(str(db_path)) as conn:
         conn.enable_load_extension(True)
-        import sqlite_vec
-
         sqlite_vec.load(conn)
         conn.execute("""
             CREATE TABLE documents (
