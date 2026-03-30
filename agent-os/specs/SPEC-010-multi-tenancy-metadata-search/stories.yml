@@ -44,8 +44,10 @@ stories:
       changes. MarkdownPlugin migration is a one-line change (self.storage →
       bundle.storage). EventFilter unchanged — tenant filtering on observers
       is future work.
-    status: pending
-    verified_by: []
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
 
   STORY-004:
     name: Metadata Search Filters

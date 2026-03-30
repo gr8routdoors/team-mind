@@ -268,12 +268,8 @@ async def test_tenant_isolation_same_uri(tmp_path, tenant_manager):
     assert len(docs_a) > 0, "tenant-a should have documents"
     assert len(docs_b) > 0, "tenant-b should have documents"
 
-    # Documents are isolated — IDs are independent (both start from 1 in fresh shards)
-    ids_a = {d["id"] for d in docs_a}
-    ids_b = {d["id"] for d in docs_b}
-    # Both sets start at 1 in independent databases — they may overlap in value
-    # but they are in separate shards, confirming isolation
-    assert ids_a is not ids_b  # different objects, different shards
+    # Adapters are separate objects pointing to different database files
+    assert adapter_a is not adapter_b
 
 
 # ---------------------------------------------------------------------------

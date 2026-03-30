@@ -25,7 +25,7 @@ def _content_hash(text: str) -> str:
 class MarkdownPlugin(ToolProvider, IngestProcessor):
     """Parses markdown resources, generates embeddings, and exposes semantic search."""
 
-    def __init__(self, storage: StorageAdapter):
+    def __init__(self, storage: StorageAdapter | None):
         self.storage = storage
 
     @property
@@ -114,6 +114,11 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         """Read URIs from bundle, chunk them, embed, and store."""
+        if bundle.storage is None:
+            raise RuntimeError(
+                "bundle.storage must be set before calling process_bundle; "
+                "use IngestionPipeline.ingest() to ensure storage is injected"
+            )
         processed_uris: list[str] = []
         doc_ids: list[int] = []
         semantic_type = ",".join(bundle.semantic_types)
