@@ -6,9 +6,11 @@ from team_mind_mcp.ingestion import IngestionPipeline
 class IngestionPlugin(ToolProvider):
     """Exposes the internal ingestion loop to external MCP Clients."""
 
-    def __init__(self, registry: PluginRegistry, storage=None):
+    def __init__(self, registry: PluginRegistry, storage=None, tenant_manager=None):
         self.registry = registry
-        self.pipeline = IngestionPipeline(self.registry, storage=storage)
+        self.pipeline = IngestionPipeline(
+            self.registry, storage=storage, tenant_manager=tenant_manager
+        )
 
     @property
     def name(self) -> str:
@@ -36,6 +38,10 @@ class IngestionPlugin(ToolProvider):
                             "type": "number",
                             "description": "Optional reliability hint (0.0–1.0) for the ingested content.",
                         },
+                        "tenant_id": {
+                            "type": "string",
+                            "description": "Tenant to ingest documents into (default: 'default').",
+                        },
                     },
                     "required": ["uris"],
                 },
@@ -52,12 +58,14 @@ class IngestionPlugin(ToolProvider):
 
         semantic_types = arguments.get("semantic_types")
         reliability_hint = arguments.get("reliability_hint")
+        tenant_id = arguments.get("tenant_id", "default")
 
         try:
             bundle = await self.pipeline.ingest(
                 uris,
                 semantic_types=semantic_types,
                 reliability_hint=reliability_hint,
+                tenant_id=tenant_id,
             )
             if bundle:
                 return [

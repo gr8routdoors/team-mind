@@ -64,13 +64,13 @@ class FeedbackPlugin(ToolProvider):
         if not isinstance(signal, int) or signal < -5 or signal > 5:
             raise ValueError("Signal must be an integer from -5 to +5")
 
-        adapter = self.tenant_manager.get_adapter(tenant_id)
         try:
+            adapter = self.tenant_manager.get_adapter(tenant_id)
             result = adapter.update_weight(
                 doc_id=doc_id, signal=signal, tombstone=tombstone
             )
             if reason:
                 result["reason"] = reason
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
-        except ValueError as e:
-            raise ValueError(str(e))
+        except ValueError:
+            raise
