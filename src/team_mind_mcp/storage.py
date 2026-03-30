@@ -561,7 +561,8 @@ class StorageAdapter:
                              / w.decay_half_life_days)
                         ELSE 1.0
                       END
-                   ) AS final_rank
+                   ) AS final_rank,
+                   d.parent_id
             FROM vec_documents v
             JOIN documents d ON v.id = d.id
             LEFT JOIN doc_weights w ON d.id = w.doc_id
@@ -586,6 +587,7 @@ class StorageAdapter:
                     "score": row[5],
                     "usage_score": row[6],
                     "final_rank": row[9],
+                    "parent_id": row[-1],
                 }
             )
         return results
@@ -653,7 +655,8 @@ class StorageAdapter:
                              / w.decay_half_life_days)
                         ELSE 1.0
                       END
-                   ) AS weight_rank
+                   ) AS weight_rank,
+                   d.parent_id
             FROM documents d
             LEFT JOIN doc_weights w ON d.id = w.doc_id
             {where_sql}
@@ -674,6 +677,7 @@ class StorageAdapter:
                     "metadata": json.loads(row[4]) if row[4] else {},
                     "usage_score": row[5],
                     "weight_rank": row[6],
+                    "parent_id": row[-1],
                 }
             )
         return results
