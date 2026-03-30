@@ -43,6 +43,8 @@ ALTER TABLE documents ADD COLUMN parent_id INTEGER REFERENCES documents(id);
 CREATE INDEX idx_documents_parent_id ON documents(parent_id);
 ```
 
+**Note on foreign key enforcement:** SQLite does not enforce `REFERENCES` constraints unless `PRAGMA foreign_keys = ON` is set, which is not currently enabled. The `REFERENCES documents(id)` clause is declarative documentation. Cascade and orphan protection are enforced at the application layer via `delete_by_uri` and `delete_by_id`. Direct SQL deletes that bypass these methods could create orphaned children.
+
 ### Document types by `parent_id` value
 
 | `parent_id` | Has children? | Type | Vector? | Weight? |
@@ -109,27 +111,33 @@ When `parent_id` is `None` (default):
 
 ### StorageAdapter.retrieve_by_vector_similarity extension
 
-Results gain `parent_id`:
+Results gain `parent_id`. **Append `d.parent_id` to the end of the SELECT clause** — do not insert mid-list, as the result-building code uses hardcoded row indices. Adding a column mid-SELECT would silently shift all subsequent indices.
+
+Both retrieval paths must include `parent_id`:
+- **Vector query** (KNN path): append `d.parent_id` to the SELECT.
+- **Non-vector query** (weight-ranked path, `target_vector=None`): also append `d.parent_id` to the SELECT.
+
+This ensures consistent result format regardless of query type.
 
 ```python
-# In the SELECT clause, add:
-# d.parent_id
+# In BOTH SELECT clauses (vector and non-vector), append at end:
+# ..., d.parent_id
 
-# In the result dict:
+# In the result dict (both paths):
 {
-    "id": row[0],
-    "uri": row[1],
-    "plugin": row[2],
-    "record_type": row[3],
-    "metadata": json.loads(row[4]) if row[4] else {},
-    "parent_id": row[N],              # NEW — None for standalone/parent, int for segment
+    "id": ...,
+    "uri": ...,
+    "plugin": ...,
+    "record_type": ...,
+    "metadata": ...,
     "score": ...,
     "usage_score": ...,
     "final_rank": ...,
+    "parent_id": row[-1],            # LAST column — None for standalone/parent, int for segment
 }
 ```
 
-Parent documents (no vector) will never appear in KNN results. Only segments and standalone documents appear.
+Parent documents (no vector, no weight) will never appear in either KNN or weight-ranked results. Only segments and standalone documents appear.
 
 Note: `tenant_id` is not in the result dict from `StorageAdapter` — it operates within one shard. `TenantStorageManager.query_across_tenants` injects `tenant_id` into results during scatter-gather (see SPEC-010).
 
@@ -324,7 +332,14 @@ for i, chunk in enumerate(chunks):
 **Changes to MarkdownPlugin:**
 - New `record_types` entry: `RecordTypeSpec(name="markdown_source", ...)` for parent documents.
 - `process_bundle` creates a parent first, then segments.
-- `delete_by_uri` cascade handles cleanup — no change needed in the plugin's wipe-and-replace logic.
+- **Wipe-and-replace call must change.** The current call `delete_by_uri(uri, record_type="markdown_chunk")` will return zero matches after migration because chunk URIs are now `{uri}#chunk-N`, not `{uri}`. The updated call targets the parent instead:
+  ```python
+  # Before migration:
+  bundle.storage.delete_by_uri(uri, plugin=self.name, record_type="markdown_chunk")
+  # After migration:
+  bundle.storage.delete_by_uri(uri, plugin=self.name, record_type="markdown_source")
+  ```
+  Cascade delete on the parent handles removing all child segments.
 
 ## Ingestion Pipeline Impact
 
@@ -334,7 +349,7 @@ for i, chunk in enumerate(chunks):
 
 ### IngestionEvent
 
-No changes to `IngestionEvent` structure. The event reports `doc_ids` which may include both parent IDs and segment IDs. Observers that need to distinguish can query the document to check `parent_id`.
+No changes to `IngestionEvent` structure. Plugins should emit **one event per record type**: one event with `record_type="markdown_source"` containing the parent's `doc_id`, and one event with `record_type="markdown_chunk"` containing the segment `doc_ids`. This is consistent with how events work today — each event has a single `record_type` field. Observers that need to distinguish parents from segments can filter by `record_type` or query the document's `parent_id`.
 
 ## Documentation Updates (STORY-009)
 
@@ -381,7 +396,8 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 
 ### Task 4: Search Results
 - Add `parent_id` to result dicts from `retrieve_by_vector_similarity`.
-- Add `d.parent_id` to SELECT clause.
+- Append `d.parent_id` to the end of BOTH SELECT clauses (vector and non-vector paths).
+- Do not insert mid-SELECT — hardcoded row indices will shift.
 - *Stories:* STORY-004
 
 ### Task 5: Get Document with Segments
@@ -406,7 +422,8 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 ### Task 8: MarkdownPlugin Migration
 - Add `markdown_source` record type for parent documents.
 - Update `process_bundle` to create parent + segments.
-- Update wipe-and-replace logic (cascade delete handles this).
+- Update wipe-and-replace: change `delete_by_uri` call from `record_type="markdown_chunk"` to `record_type="markdown_source"` — cascade delete handles children.
+- Emit separate `IngestionEvent` per record type (one for parent, one for segments).
 - Update existing MarkdownPlugin tests.
 - *Stories:* STORY-008
 
