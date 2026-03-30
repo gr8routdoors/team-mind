@@ -3,7 +3,7 @@ import sqlite3
 import json
 import os
 from collections import OrderedDict
-from typing import Any, Callable
+from typing import Callable
 
 from team_mind_mcp.storage import StorageAdapter
 
@@ -255,8 +255,8 @@ class TenantStorageManager:
         for tenant_id in tenant_ids:
             try:
                 adapter = self.get_adapter(tenant_id)
-            except Exception:
-                logger.warning("query_across_tenants: skipping tenant %r (get_adapter failed)", tenant_id)
+            except ValueError:
+                logger.warning("query_across_tenants: skipping tenant %r (not registered)", tenant_id)
                 continue
             try:
                 rows = query_fn(adapter)

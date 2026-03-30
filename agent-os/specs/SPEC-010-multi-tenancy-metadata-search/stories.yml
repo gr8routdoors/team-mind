@@ -78,6 +78,10 @@ stories:
 
   STORY-006:
     name: Cross-Tenant Scatter-Gather
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
     description: >
       Implement TenantStorageManager.query_across_tenants. Sequential
       shard queries (MVP). Run query_fn on each tenant's StorageAdapter,
@@ -86,8 +90,6 @@ stories:
       flag — False for distance-based final_rank, True for weight-based
       weight_rank), trim to limit. When tenant_ids is None, query all
       registered tenants.
-    status: pending
-    verified_by: []
 
   STORY-007:
     name: MCP Tools and CLI
