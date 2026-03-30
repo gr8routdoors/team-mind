@@ -37,10 +37,12 @@ stories:
   STORY-004:
     name: Parent ID in Search Results
     description: >
-      Add d.parent_id to the SELECT clause in retrieve_by_vector_similarity.
-      Include parent_id in result dicts (None for standalone/parent documents,
-      int for segments). Parent documents with no vector will never appear in
-      KNN results — only segments and standalone documents appear.
+      Append d.parent_id to the END of the SELECT clause in BOTH retrieval
+      paths (vector KNN and non-vector weight-ranked) in
+      retrieve_by_vector_similarity. Do not insert mid-SELECT — hardcoded
+      row indices will shift. Include parent_id in result dicts (None for
+      standalone/parent documents, int for segments). Parent documents with
+      no vector or weight will never appear in results.
     status: pending
     verified_by: []
 
@@ -88,9 +90,13 @@ stories:
       Update MarkdownPlugin to use parent-child segments. Add markdown_source
       RecordTypeSpec for parent documents. Update process_bundle to create a
       parent document per source file (via save_parent), then create paragraph
-      chunks as segments (via save_payload with parent_id). Cascade delete in
-      delete_by_uri handles wipe-and-replace cleanup. Update all existing
-      MarkdownPlugin tests to account for parent documents.
+      chunks as segments (via save_payload with parent_id). Update
+      wipe-and-replace call from delete_by_uri(uri, record_type="markdown_chunk")
+      to delete_by_uri(uri, record_type="markdown_source") — cascade delete
+      handles children. Emit separate IngestionEvent per record type (one for
+      parent with record_type="markdown_source", one for segments with
+      record_type="markdown_chunk"). Update all existing MarkdownPlugin tests
+      to account for parent documents.
     status: pending
     verified_by: []
 
@@ -120,12 +126,15 @@ verification:
     - parent_id column exists on documents table, nullable, defaults to NULL.
     - save_parent creates a document row with no vector and no weight.
     - save_payload accepts optional parent_id and validates parent exists.
-    - retrieve_by_vector_similarity returns parent_id in result dicts.
+    - retrieve_by_vector_similarity returns parent_id in result dicts (both vector and non-vector paths).
+    - parent_id appended to end of SELECT clauses (no mid-list insertion).
     - get_document_with_segments navigates parent/segment/standalone cases correctly.
     - get_parent_aggregate_score returns AVG of non-tombstoned children's scores.
     - delete_by_uri cascades to children when deleting a parent.
     - delete_by_id cascades for parents, is surgical for segments.
     - MarkdownPlugin creates parent per source file and segments per paragraph.
+    - MarkdownPlugin wipe-and-replace targets record_type="markdown_source" (not "markdown_chunk").
+    - MarkdownPlugin emits separate IngestionEvent per record type.
     - Existing standalone documents (parent_id=NULL) continue to work identically.
     - Documentation is updated with segment patterns and stale references fixed.
   completed: false
