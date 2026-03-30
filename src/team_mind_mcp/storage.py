@@ -767,6 +767,49 @@ class StorageAdapter:
 
         return {"parent": parent, "segments": segments}
 
+    def get_parent_aggregate_score(self, parent_id: int) -> dict:
+        """Compute aggregate score for a parent from its children's weights.
+
+        Returns:
+            {
+                "parent_id": 42,
+                "aggregate_score": 2.8,   # None if no non-tombstoned children
+                "segment_count": 5,       # 0 if no non-tombstoned children
+                "min_score": -1.0,        # None if no non-tombstoned children
+                "max_score": 4.5,         # None if no non-tombstoned children
+            }
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        row = self._conn.execute(
+            """
+            SELECT
+                COUNT(s.id) AS segment_count,
+                AVG(w.usage_score) AS aggregate_score,
+                MIN(w.usage_score) AS min_score,
+                MAX(w.usage_score) AS max_score
+            FROM documents s
+            JOIN doc_weights w ON s.id = w.doc_id
+            WHERE s.parent_id = ?
+              AND COALESCE(w.tombstoned, 0) = 0
+            """,
+            (parent_id,),
+        ).fetchone()
+
+        segment_count = row[0] if row[0] is not None else 0
+        aggregate_score = row[1]
+        min_score = row[2]
+        max_score = row[3]
+
+        return {
+            "parent_id": parent_id,
+            "aggregate_score": aggregate_score,
+            "segment_count": segment_count,
+            "min_score": min_score,
+            "max_score": max_score,
+        }
+
     def close(self):
         if self._conn:
             self._conn.close()
