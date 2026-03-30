@@ -1,9 +1,13 @@
+import logging
 import sqlite3
 import json
 import os
 from collections import OrderedDict
+from typing import Any, Callable
 
 from team_mind_mcp.storage import StorageAdapter
+
+logger = logging.getLogger(__name__)
 
 _MAX_OPEN_ADAPTERS = 64
 
@@ -226,3 +230,47 @@ class TenantStorageManager:
                 (plugin_name,),
             )
             return cursor.rowcount > 0
+
+    def query_across_tenants(
+        self,
+        query_fn: Callable[[StorageAdapter], list[dict]],
+        sort_key: str = "final_rank",
+        sort_descending: bool = False,
+        tenant_ids: list[str] | None = None,
+    ) -> list[dict]:
+        """Run query_fn on each tenant's adapter, inject tenant_id, merge and sort results.
+
+        sort_descending=False: ascending (lower value = better, e.g. final_rank from KNN).
+        sort_descending=True: descending (higher value = better, e.g. weight_rank).
+        Results missing sort_key sort to the end regardless of direction.
+        Tenants that fail get_adapter are skipped with a warning.
+        """
+        if self._system_conn is None:
+            raise RuntimeError("TenantStorageManager not initialized")
+
+        if tenant_ids is None:
+            tenant_ids = [t["tenant_id"] for t in self.list_tenants()]
+
+        merged: list[dict] = []
+        for tenant_id in tenant_ids:
+            try:
+                adapter = self.get_adapter(tenant_id)
+            except Exception:
+                logger.warning("query_across_tenants: skipping tenant %r (get_adapter failed)", tenant_id)
+                continue
+            try:
+                rows = query_fn(adapter)
+            except Exception:
+                logger.warning("query_across_tenants: query_fn failed for tenant %r", tenant_id)
+                continue
+            for row in rows:
+                result = dict(row)
+                result["tenant_id"] = tenant_id
+                merged.append(result)
+
+        _sentinel = float("inf") if not sort_descending else float("-inf")
+        merged.sort(
+            key=lambda r: r.get(sort_key, _sentinel),
+            reverse=sort_descending,
+        )
+        return merged
