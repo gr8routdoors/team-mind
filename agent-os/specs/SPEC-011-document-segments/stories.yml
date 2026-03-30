@@ -38,11 +38,13 @@ stories:
     name: Parent ID in Search Results
     description: >
       Append d.parent_id to the END of the SELECT clause in BOTH retrieval
-      paths (vector KNN and non-vector weight-ranked) in
-      retrieve_by_vector_similarity. Do not insert mid-SELECT — hardcoded
-      row indices will shift. Include parent_id in result dicts (None for
-      standalone/parent documents, int for segments). Parent documents with
-      no vector or weight will never appear in results.
+      methods: retrieve_by_vector_similarity (KNN path) AND
+      retrieve_by_weight (weight-ranked path — separate method, not a
+      branch within retrieve_by_vector_similarity). Do not insert
+      mid-SELECT — hardcoded row indices will shift. Include parent_id
+      in result dicts (None for standalone/parent documents, int for
+      segments). Parent documents with no vector or weight will never
+      appear in results from either method.
     status: pending
     verified_by: []
 
@@ -126,8 +128,9 @@ verification:
     - parent_id column exists on documents table, nullable, defaults to NULL.
     - save_parent creates a document row with no vector and no weight.
     - save_payload accepts optional parent_id and validates parent exists.
-    - retrieve_by_vector_similarity returns parent_id in result dicts (both vector and non-vector paths).
-    - parent_id appended to end of SELECT clauses (no mid-list insertion).
+    - retrieve_by_vector_similarity returns parent_id in result dicts.
+    - retrieve_by_weight returns parent_id in result dicts.
+    - parent_id appended to end of SELECT clauses in both methods (no mid-list insertion).
     - get_document_with_segments navigates parent/segment/standalone cases correctly.
     - get_parent_aggregate_score returns AVG of non-tombstoned children's scores.
     - delete_by_uri cascades to children when deleting a parent.
