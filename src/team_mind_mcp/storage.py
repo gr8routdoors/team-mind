@@ -271,6 +271,7 @@ class StorageAdapter:
         vector: list[float],
         plugin: str,
         record_type: str,
+        parent_id: int | None = None,
         decay_half_life_days: float | None = None,
         content_hash: str | None = None,
         plugin_version: str = "0.0.0",
@@ -282,10 +283,17 @@ class StorageAdapter:
         if self._conn is None:
             raise RuntimeError("Database not initialized")
 
+        if parent_id is not None:
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (parent_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No document with id={parent_id}")
+
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, plugin_version, semantic_type, media_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, plugin_version, semantic_type, media_type, parent_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 (
                     uri,
                     plugin,
@@ -295,6 +303,7 @@ class StorageAdapter:
                     plugin_version,
                     semantic_type,
                     media_type,
+                    parent_id,
                 ),
             )
             doc_id = cursor.fetchone()[0]
