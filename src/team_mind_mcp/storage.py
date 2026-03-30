@@ -228,6 +228,42 @@ class StorageAdapter:
             )
             return cursor.rowcount > 0
 
+    def save_parent(
+        self,
+        uri: str,
+        plugin: str,
+        record_type: str,
+        metadata: dict | None = None,
+        content_hash: str | None = None,
+        plugin_version: str = "0.0.0",
+        semantic_type: str = "",
+        media_type: str = "",
+    ) -> int:
+        """Create a parent document — no vector embedding, no weight row.
+
+        Returns the document ID for child segments to reference via parent_id.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            cursor = self._conn.execute(
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, "
+                "plugin_version, semantic_type, media_type, parent_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING id",
+                (
+                    uri,
+                    plugin,
+                    record_type,
+                    json.dumps(metadata) if metadata is not None else None,
+                    content_hash,
+                    plugin_version,
+                    semantic_type,
+                    media_type,
+                ),
+            )
+            return cursor.fetchone()[0]
+
     def save_payload(
         self,
         uri: str,
