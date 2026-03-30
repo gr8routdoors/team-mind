@@ -21,6 +21,7 @@ Adds a `parent_id` column to the `documents` table, enabling formal parent-child
 | StorageAdapter.save_parent | Storage | **New** — Creates parent document (no vector, no weight). |
 | StorageAdapter.save_payload | Storage | **Extended** — Optional `parent_id` parameter. |
 | StorageAdapter.retrieve_by_vector_similarity | Storage | **Extended** — `parent_id` in result dicts. |
+| StorageAdapter.retrieve_by_weight | Storage | **Extended** — `parent_id` in result dicts. |
 | StorageAdapter.get_document_with_segments | Storage | **New** — Navigate parent/sibling relationships. |
 | StorageAdapter.get_parent_aggregate_score | Storage | **New** — Computed AVG of children's scores. |
 | StorageAdapter.delete_by_uri | Storage | **Extended** — Cascade delete children when deleting parent. |
@@ -109,21 +110,19 @@ When `parent_id` is provided:
 When `parent_id` is `None` (default):
 - Behavior is identical to today — standalone document.
 
-### StorageAdapter.retrieve_by_vector_similarity extension
+### StorageAdapter retrieval extensions — parent_id in results
 
-Results gain `parent_id`. **Append `d.parent_id` to the end of the SELECT clause** — do not insert mid-list, as the result-building code uses hardcoded row indices. Adding a column mid-SELECT would silently shift all subsequent indices.
+Both retrieval methods must include `parent_id` in results for consistent format. **Append `d.parent_id` to the end of each method's SELECT clause** — do not insert mid-list, as the result-building code uses hardcoded row indices.
 
-Both retrieval paths must include `parent_id`:
-- **Vector query** (KNN path): append `d.parent_id` to the SELECT.
-- **Non-vector query** (weight-ranked path, `target_vector=None`): also append `d.parent_id` to the SELECT.
+**`retrieve_by_vector_similarity`** — KNN path. Append `d.parent_id` to the SELECT. Parent documents (no vector) never appear in KNN results.
 
-This ensures consistent result format regardless of query type.
+**`retrieve_by_weight`** — Weight-ranked path (separate method, not a branch within `retrieve_by_vector_similarity`). Append `d.parent_id` to the SELECT. Parent documents (no `doc_weights` row) never appear in weight-ranked results.
 
 ```python
-# In BOTH SELECT clauses (vector and non-vector), append at end:
+# In BOTH methods' SELECT clauses, append at end:
 # ..., d.parent_id
 
-# In the result dict (both paths):
+# In the result dict (both methods):
 {
     "id": ...,
     "uri": ...,
@@ -136,8 +135,6 @@ This ensures consistent result format regardless of query type.
     "parent_id": row[-1],            # LAST column — None for standalone/parent, int for segment
 }
 ```
-
-Parent documents (no vector, no weight) will never appear in either KNN or weight-ranked results. Only segments and standalone documents appear.
 
 Note: `tenant_id` is not in the result dict from `StorageAdapter` — it operates within one shard. `TenantStorageManager.query_across_tenants` injects `tenant_id` into results during scatter-gather (see SPEC-010).
 
@@ -395,8 +392,8 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 - *Stories:* STORY-003
 
 ### Task 4: Search Results
-- Add `parent_id` to result dicts from `retrieve_by_vector_similarity`.
-- Append `d.parent_id` to the end of BOTH SELECT clauses (vector and non-vector paths).
+- Add `parent_id` to result dicts from both `retrieve_by_vector_similarity` and `retrieve_by_weight`.
+- Append `d.parent_id` to the end of each method's SELECT clause.
 - Do not insert mid-SELECT — hardcoded row indices will shift.
 - *Stories:* STORY-004
 
