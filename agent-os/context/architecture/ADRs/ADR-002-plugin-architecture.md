@@ -1,9 +1,9 @@
 # ADR-002: Plugin Architecture with Three Interfaces
 
 **Status:** Accepted
-**Date:** 2026-03-10 (retroactive — originally designed in SPEC-001, updated 2026-03-25, updated 2026-03-29 for SPEC-008)
-**Spec:** SPEC-001 (Core Information Architecture, MVP), SPEC-003 (Ingestion Interface Split), SPEC-008 (Semantic Type Routing)
-**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins; [ADR-007: Three-Type Model](ADR-007-semantic-type-routing.md) — semantic type routing and the three-type model
+**Date:** 2026-03-10 (retroactive — originally designed in SPEC-001, updated 2026-03-25, updated 2026-03-29 for SPEC-008, updated 2026-03-30 for SPEC-010)
+**Spec:** SPEC-001 (Core Information Architecture, MVP), SPEC-003 (Ingestion Interface Split), SPEC-008 (Semantic Type Routing), SPEC-010 (Multi-Tenancy & Metadata Search)
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins; [ADR-007: Three-Type Model](ADR-007-semantic-type-routing.md) — semantic type routing and the three-type model; [ADR-008: Multi-Tenancy & Metadata Search](ADR-008-multi-tenancy-metadata-search.md) — tenancy model, metadata search; [ADR-010: Tenant Sharding](ADR-010-tenant-sharding.md) — file-level sharding, TenantStorageManager, scatter-gather
 
 ## Context
 
@@ -209,17 +209,19 @@ One `IngestListener` interface that receives bundles and is used for both active
 
 - The inline Librarian concept has been retired (ADR-006). Reliability is addressed via Reliability Seeding (SPEC-007) and a future background conflict detection reaper.
 - Storage is currently SQLite but the `StorageAdapter` abstraction allows migration without plugin changes.
+- **SPEC-010 (Multi-Tenancy):** The `registered_plugins` table moved from per-tenant `StorageAdapter` to `system.sqlite` (managed by `TenantStorageManager`). Plugins are registered globally once. `IngestProcessor` plugins no longer hold a `storage` reference — the pipeline injects `bundle.storage` at call time, pointing to the correct per-tenant `StorageAdapter`. Plugins are completely tenant-unaware by design. See [ADR-008](ADR-008-multi-tenancy-metadata-search.md) and [ADR-010](ADR-010-tenant-sharding.md).
 
 ## Current Plugin Inventory
 
 | Plugin | Interfaces | Tools | Purpose |
 |--------|-----------|-------|---------|
 | `MarkdownPlugin` | ToolProvider + IngestProcessor | `semantic_search` | Vectorizes markdown chunks, exposes semantic search |
-| `DocumentRetrievalPlugin` | ToolProvider | `get_full_document` | Fetches full document content from URI pointers |
-| `IngestionPlugin` | ToolProvider | `ingest_documents` | Exposes ingestion pipeline as an MCP tool for live use |
-| `RecordTypeDiscoveryPlugin` | ToolProvider | `list_record_types` | Exposes record type catalog for AI client discovery |
-| `FeedbackPlugin` | ToolProvider | `provide_feedback` | Relevance feedback signals for weighting |
-| `LifecyclePlugin` | ToolProvider | `register_plugin`, `unregister_plugin`, `list_plugins` | Runtime plugin management |
+| `DocumentRetrievalPlugin` | ToolProvider | `get_full_document`, `retrieve_documents` | Fetches full document content from URI pointers; weight-ranked retrieval |
+| `IngestionPlugin` | ToolProvider | `ingest_documents` | Exposes ingestion pipeline as an MCP tool; routes to correct tenant shard |
+| `DoctypeDiscoveryPlugin` | ToolProvider | `list_record_types` | Exposes record type catalog for AI client discovery |
+| `FeedbackPlugin` | ToolProvider | `provide_feedback` | Relevance feedback signals for weighting; requires `tenant_id` (shard-scoped `doc_id`) |
+| `LifecyclePlugin` | ToolProvider | `register_plugin`, `unregister_plugin`, `list_plugins` | Runtime plugin management; operates on `system.sqlite` |
+| `TenantPlugin` | ToolProvider | `register_tenant`, `list_tenants` | Tenant lifecycle management via `TenantStorageManager` |
 
 ## Key Files
 
@@ -227,10 +229,13 @@ One `IngestListener` interface that receives bundles and is used for both active
 |------|------|
 | `src/team_mind_mcp/server.py` | `ToolProvider`, `IngestProcessor`, `IngestObserver`, `EventFilter` ABCs, `RecordTypeSpec`, `PluginRegistry`, `MCPGateway` |
 | `src/team_mind_mcp/ingestion.py` | `IngestionPipeline`, `IngestionBundle`, `IngestionEvent`, `IngestionContext`, `ResourceResolver` |
-| `src/team_mind_mcp/storage.py` | `StorageAdapter` (SQLite + sqlite-vec), `registered_plugins` table |
-| `src/team_mind_mcp/lifecycle.py` | `LifecyclePlugin`, `PluginLoader`, `load_persisted_plugins` |
-| `src/team_mind_mcp/markdown.py` | `MarkdownPlugin` (ToolProvider + IngestProcessor) |
+| `src/team_mind_mcp/storage.py` | `StorageAdapter` (per-tenant SQLite + sqlite-vec); no `tenant_id` parameters — operates on one database |
+| `src/team_mind_mcp/tenant_manager.py` | `TenantStorageManager` — per-tenant database lifecycle, `system.sqlite`, LRU adapter cache, scatter-gather |
+| `src/team_mind_mcp/lifecycle.py` | `LifecyclePlugin`, `PluginLoader`, `load_persisted_plugins`; operates on `system.sqlite` via `TenantStorageManager` |
+| `src/team_mind_mcp/markdown.py` | `MarkdownPlugin` (ToolProvider + IngestProcessor); uses `bundle.storage` in `process_bundle` |
 | `src/team_mind_mcp/retrieval.py` | `DocumentRetrievalPlugin` (ToolProvider only) |
-| `src/team_mind_mcp/ingestion_plugin.py` | `IngestionPlugin` (ToolProvider only) |
+| `src/team_mind_mcp/ingestion_plugin.py` | `IngestionPlugin` (ToolProvider only); passes `tenant_id` to pipeline |
 | `src/team_mind_mcp/discovery.py` | `DoctypeDiscoveryPlugin` (ToolProvider only) |
-| `src/team_mind_mcp/cli.py` | CLI entry point, wires everything together |
+| `src/team_mind_mcp/feedback.py` | `FeedbackPlugin` (ToolProvider only); accepts `tenant_id`, resolves adapter via `TenantStorageManager` |
+| `src/team_mind_mcp/tenant_plugin.py` | `TenantPlugin` (ToolProvider only); `register_tenant`, `list_tenants` |
+| `src/team_mind_mcp/cli.py` | CLI entry point, wires everything together; uses `TenantStorageManager` exclusively |

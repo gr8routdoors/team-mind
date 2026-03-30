@@ -122,8 +122,9 @@ stories:
       search within a shard is isolated, cross-tenant scatter-gather
       merges correctly. Add tests for metadata filters and optional
       vector query. Add tests for system.sqlite plugin registry.
-    status: pending
-    verified_by: []
+    status: passing
+    verified_by:
+      - incremental (completed across STORY-001 through STORY-007)
 
   STORY-009:
     name: Update Documentation and Diagrams
@@ -138,8 +139,10 @@ stories:
       cross-references to ADR-008 and ADR-010. Update roadmap with
       SPEC-010 status. Ensure structural-vs-metadata field guidance
       is documented.
-    status: pending
-    verified_by: []
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
 
 verification:
   criteria:
@@ -166,4 +169,4 @@ verification:
     - ingest_documents MCP tool accepts tenant_id (defaults to "default").
     - provide_feedback MCP tool requires tenant_id.
     - Tombstoned documents excluded in all query paths.
-  completed: false
+  completed: true
