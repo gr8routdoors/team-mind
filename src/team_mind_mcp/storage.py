@@ -362,8 +362,11 @@ class StorageAdapter:
     ) -> int:
         """Delete all documents (and their weights/vectors) for a URI/plugin/record_type combo.
 
-        Returns the number of documents deleted. Used by plugins to wipe old
-        chunks before re-ingesting an updated document.
+        Cascades to children: if a matching document is a parent, all its child
+        segments (weights, vectors, document rows) are also deleted.
+
+        Returns the total number of documents deleted (parents + children).
+        Used by plugins to wipe old chunks before re-ingesting an updated document.
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -379,23 +382,78 @@ class StorageAdapter:
             if not doc_ids:
                 return 0
 
-            placeholders = ",".join("?" for _ in doc_ids)
+            # Collect child IDs for any parent documents
+            all_ids = list(doc_ids)
+            for parent_id in doc_ids:
+                child_cursor = self._conn.execute(
+                    "SELECT id FROM documents WHERE parent_id = ?",
+                    (parent_id,),
+                )
+                child_ids = [row[0] for row in child_cursor.fetchall()]
+                all_ids.extend(child_ids)
+
+            placeholders = ",".join("?" for _ in all_ids)
+
+            # Delete weights, vectors, then documents (children first, then parents)
+            self._conn.execute(
+                f"DELETE FROM doc_weights WHERE doc_id IN ({placeholders})",
+                all_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM vec_documents WHERE id IN ({placeholders})",
+                all_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM documents WHERE id IN ({placeholders})",
+                all_ids,
+            )
+
+            return len(all_ids)
+
+    def delete_by_id(self, doc_id: int) -> int:
+        """Delete a single document by ID.
+
+        If parent (has children): cascades — deletes all children then parent.
+        If segment (has parent_id): surgical — deletes only this segment.
+        If standalone: deletes just this document.
+
+        Returns total count of deleted documents. Returns 0 if doc_id not found.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            # Check if the document exists
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+            if row is None:
+                return 0
+
+            # Find any children of this document
+            child_cursor = self._conn.execute(
+                "SELECT id FROM documents WHERE parent_id = ?", (doc_id,)
+            )
+            child_ids = [r[0] for r in child_cursor.fetchall()]
+
+            all_ids = child_ids + [doc_id]
+            placeholders = ",".join("?" for _ in all_ids)
 
             # Delete weights, vectors, then documents
             self._conn.execute(
                 f"DELETE FROM doc_weights WHERE doc_id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
             self._conn.execute(
                 f"DELETE FROM vec_documents WHERE id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
             self._conn.execute(
                 f"DELETE FROM documents WHERE id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
 
-            return len(doc_ids)
+            return len(all_ids)
 
     def lookup_existing_docs(
         self,
