@@ -93,6 +93,10 @@ stories:
 
   STORY-007:
     name: MCP Tools and CLI
+    status: passing
+    verified_by:
+      - spec-compliance-review
+      - code-quality-review
     description: >
       Update semantic_search tool: add tenant_ids (list[str], optional)
       and metadata_filters (dict, optional) parameters. Make query
@@ -108,8 +112,6 @@ stories:
       self.tenant_manager.get_adapter(arguments["tenant_id"]). Update
       cli.py where FeedbackPlugin is initialized. Update CLI ingest
       subcommand: add --tenant-id flag (default "default").
-    status: pending
-    verified_by: []
 
   STORY-008:
     name: Update Existing Tests
