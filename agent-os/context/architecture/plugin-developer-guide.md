@@ -6,7 +6,7 @@
 
 When you build a plugin, you own:
 
-1. **Your doctypes** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_doctype`), so you'll never collide with other plugins.
+1. **Your record types** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_record_type`), so you'll never collide with other plugins.
 
 2. **Your metadata schema** — The `metadata` JSON column is yours. Store whatever structure you need per document — free-form fields, nested objects, arrays. You declare an advisory schema so other plugins can understand your data, but it's your design.
 
@@ -62,7 +62,7 @@ Common combinations:
 ### ToolProvider — Expose tools to AI clients
 
 ```python
-from team_mind_mcp.server import ToolProvider, DoctypeSpec
+from team_mind_mcp.server import ToolProvider, RecordTypeSpec
 from mcp.types import Tool, TextContent
 
 class MyPlugin(ToolProvider):
@@ -71,9 +71,9 @@ class MyPlugin(ToolProvider):
         return "my_plugin"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="my_data_type",
                 description="What this document type represents.",
                 schema={
@@ -191,7 +191,7 @@ class AuditPlugin(IngestObserver):
 
     async def on_ingest_complete(self, events: list[IngestionEvent]) -> None:
         for event in events:
-            if event.plugin == "java_plugin" and event.doctype == "code_signature":
+            if event.plugin == "java_plugin" and event.record_type == "code_signature":
                 # Java code was updated — trigger compliance audit
                 await self._run_audit(event.uris, event.doc_ids)
 ```
@@ -242,26 +242,26 @@ Phase 2 — Observation (parallel, after Phase 1 completes):
 The `documents` table is shared, but your data is yours:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        documents table                           │
-├────┬──────────────────┬───────────────────┬───────────┬──────────┤
-│ id │ uri              │ plugin            │ doctype   │ metadata │
-├────┼──────────────────┼───────────────────┼───────────┼──────────┤
-│  1 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
-│  2 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
-│  3 │ user://input     │ travel_plugin     │ interest  │ {local…} │
-│  4 │ https://dest.com │ travel_plugin     │ dest_info │ {name…}  │
-│  5 │ file:///code.py  │ ast_plugin        │ signature │ {func…}  │
-└────┴──────────────────┴───────────────────┴───────────┴──────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          documents table                             │
+├────┬──────────────────┬───────────────────┬─────────────┬───────────┤
+│ id │ uri              │ plugin            │ record_type │ metadata  │
+├────┼──────────────────┼───────────────────┼─────────────┼───────────┤
+│  1 │ file:///doc.md   │ markdown_plugin   │ md_chunk    │ {chunk…}  │
+│  2 │ file:///doc.md   │ markdown_plugin   │ md_chunk    │ {chunk…}  │
+│  3 │ user://input     │ travel_plugin     │ interest    │ {local…}  │
+│  4 │ https://dest.com │ travel_plugin     │ dest_info   │ {name…}   │
+│  5 │ file:///code.py  │ ast_plugin        │ signature   │ {func…}   │
+└────┴──────────────────┴───────────────────┴─────────────┴───────────┘
 
- Your plugin's rows are scoped by the `plugin` and `doctype` columns.
- Other plugins can query your data by doctype, but you own it.
+ Your plugin's rows are scoped by the `plugin` and `record_type` columns.
+ Other plugins can query your data by record_type, but you own it.
 ```
 
 **Key points:**
 - The `plugin` column is always set to your plugin's `name` property. This is automatic ownership.
-- The `doctype` column is whatever you declared in your `doctypes` property. One plugin can have multiple doctypes.
-- The `metadata` column is a JSON blob — you define its shape. Your doctype's `schema` tells others what to expect, but it's not enforced (advisory only).
+- The `record_type` column is whatever you declared in your `record_types` property. One plugin can have multiple record types.
+- The `metadata` column is a JSON blob — you define its shape. Your record type's `schema` tells others what to expect, but it's not enforced (advisory only).
 - The `uri` column identifies the source. For embedded content, it can be any identifier you choose (e.g., `user://preferences/hiking`).
 
 ## Querying Data (Yours or Other Plugins')
@@ -393,7 +393,7 @@ Dynamically registered plugins:
 
 ### What happens on registration:
 - Your tools are added to the MCP tool catalog (visible to AI clients).
-- Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
+- Your record types are added to the record type catalog (discoverable via `list_record_types`).
 - If you implement `IngestProcessor` **and** have semantic types configured, you receive bundles for those types during ingestion.
 - If you implement `IngestObserver`, you start receiving events after ingestion completes.
 
@@ -423,8 +423,8 @@ class AuditPlugin(IngestObserver):
 | Fire hose | `None` (default) | Every event from every processor |
 | Semantic type filter | `EventFilter(semantic_types=["architecture_docs"])` | Events where any semantic type matches |
 | Plugin filter | `EventFilter(plugins=["java_plugin"])` | Only events from that plugin |
-| Doctype filter | `EventFilter(doctypes=["code_signature"])` | Only events with that doctype |
-| Combined | `EventFilter(plugins=[...], doctypes=[...], semantic_types=[...])` | Events matching all specified filters |
+| Record type filter | `EventFilter(record_types=["code_signature"])` | Only events with that record type |
+| Combined | `EventFilter(plugins=[...], record_types=[...], semantic_types=[...])` | Events matching all specified filters |
 
 Semantic type filtering uses ANY-match semantics: an event passes if any of its `semantic_types` values appears in the filter's `semantic_types` list.
 
@@ -538,16 +538,16 @@ The platform automatically manages relevance weighting for all plugins. You don'
 
 ### What you control: Decay policy
 
-Declare `decay_half_life_days` on your DoctypeSpec to control how fast your data's boost decays over time:
+Declare `decay_half_life_days` on your `RecordTypeSpec` to control how fast your data's boost decays over time:
 
 ```python
-DoctypeSpec(
+RecordTypeSpec(
     name="meeting_notes",
     description="Notes from team meetings.",
     decay_half_life_days=30,     # Loses half its boost every 30 days
 )
 
-DoctypeSpec(
+RecordTypeSpec(
     name="code_signature",
     description="Function signatures from source code.",
     decay_half_life_days=None,   # No decay — code doesn't age
@@ -582,7 +582,7 @@ doc_weights
 ├── created_at      → When the doc was ingested
 ├── last_accessed   → Last feedback timestamp
 ├── tombstoned      → 0 or 1
-└── decay_half_life_days → Copied from DoctypeSpec (nullable)
+└── decay_half_life_days → Copied from RecordTypeSpec (nullable)
 ```
 
 There is **one row per document**, not one row per feedback event. The running average is maintained via `signal_count` — no compaction or aggregation needed at scale.
@@ -704,10 +704,10 @@ The platform has no concept of "chunks." Every row in the `documents` table is j
 
 ## Discovery: How Others Find Your Data
 
-AI clients can call the `list_doctypes` MCP tool to discover what's available:
+AI clients can call the `list_record_types` MCP tool to discover what's available:
 
 ```json
-// list_doctypes(plugins=["travel_plugin"])
+// list_record_types(plugins=["travel_plugin"])
 [
   {
     "plugin": "travel_plugin",
@@ -731,9 +731,9 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | Document | What it covers |
 |----------|---------------|
 | [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Three interfaces, two-phase pipeline, dual-mode storage, design rationale |
-| [ADR-001: Plugin-Scoped Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md) | Doctype namespacing, cross-plugin queries, schema contracts |
+| [ADR-001: Plugin-Scoped Record Types](ADRs/ADR-001-plugin-scoped-doctypes.md) | Record type namespacing, cross-plugin queries, schema contracts |
 | [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
-| [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | DoctypeSpec model, scoped queries, discovery tool |
+| [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | RecordTypeSpec model, scoped queries, discovery tool |
 | [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |
 | [ADR-003: Relevance Weighting](ADRs/ADR-003-relevance-weighting.md) | Scoring model, decay policy, tombstoning, signal design |
 | [SPEC-004: Relevance Weighting](../../specs/SPEC-004-relevance-weighting/design.md) | doc_weights table, feedback tool, composite scoring, spike results |
@@ -744,6 +744,7 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [ADR-007: Three-Type Model & Semantic Routing](ADRs/ADR-007-semantic-type-routing.md) | Three-type model, semantic type routing, available vs enabled, record type rename |
 | [SPEC-007: Reliability Seeding](../../specs/SPEC-007-reliability-seeding/design.md) | Three-layer reliability model, initial_score seeding, ingest hint propagation |
 | [ADR-008: Multi-Tenancy & Metadata Search](ADRs/ADR-008-multi-tenancy-metadata-search.md) | Required tenancy, metadata search via json_extract, cross-tenant query model, structural vs metadata fields |
+| [ADR-009: Document Segments](ADRs/ADR-009-document-segments.md) | Parent-child hierarchy, segment model, aggregate scoring, `save_parent` |
 | [ADR-010: Tenant Sharding](ADRs/ADR-010-tenant-sharding.md) | File-level sharding, TenantStorageManager, scatter-gather, KNN correctness rationale |
 | [SPEC-010: Multi-Tenancy & Metadata Search](../../specs/SPEC-010-multi-tenancy-metadata-search/design.md) | Implementation details: TenantStorageManager, per-tenant lifecycle, ingestion routing, metadata filters |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy, including tenant sharding diagrams |
