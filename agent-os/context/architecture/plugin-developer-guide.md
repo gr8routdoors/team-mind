@@ -776,6 +776,14 @@ After deletion, re-ingest as normal: create a new parent, then new segments.
 
 Search results include a `parent_id` field. When `parent_id` is non-null, the client knows the result is a segment and can call `get_document_with_segments(doc_id)` to retrieve the parent's metadata and all sibling segments for broader context.
 
+### Segment ordering
+
+`get_document_with_segments` returns segments in **insertion order** — the order you called `save_payload` is the order segments are returned.
+
+**Mechanism:** Each segment row gets an `INTEGER PRIMARY KEY AUTOINCREMENT` id. `get_document_with_segments` queries with `ORDER BY id`, which maps directly to insertion sequence. Because `save_payload` is synchronous, each call completes before the next begins, guaranteeing monotonically increasing ids that preserve call order.
+
+**Contrast with retrieval methods:** `retrieve_by_vector_similarity` and `retrieve_by_weight` return segments ranked by relevance or weight score — not by their positional order within the parent. Use `get_document_with_segments` when positional order matters (e.g., reconstructing a document from ordered paragraph chunks).
+
 ## Discovery: How Others Find Your Data
 
 AI clients can call the `list_record_types` MCP tool to discover what's available:
