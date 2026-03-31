@@ -82,13 +82,18 @@ async def test_markdown_plugin_returns_events(tmp_path):
     # When process_bundle completes
     events = await plugin.process_bundle(bundle)
 
-    # Then it returns IngestionEvent objects with correct fields
-    assert len(events) == 1
-    event = events[0]
-    assert event.plugin == "markdown_plugin"
-    assert event.record_type == "markdown_chunk"
-    assert len(event.uris) == 2
-    assert len(event.doc_ids) == 3  # 2 chunks from a.md + 1 from b.md
+    # Then it returns two IngestionEvent objects: one for markdown_source, one for markdown_chunk
+    assert len(events) == 2
+    source_event = events[0]
+    chunk_event = events[1]
+    assert source_event.plugin == "markdown_plugin"
+    assert source_event.record_type == "markdown_source"
+    assert len(source_event.uris) == 2
+    assert len(source_event.doc_ids) == 2  # 1 parent per file (a.md + b.md)
+    assert chunk_event.plugin == "markdown_plugin"
+    assert chunk_event.record_type == "markdown_chunk"
+    assert len(chunk_event.uris) == 2
+    assert len(chunk_event.doc_ids) == 3  # 2 chunks from a.md + 1 from b.md
 
     storage.close()
 

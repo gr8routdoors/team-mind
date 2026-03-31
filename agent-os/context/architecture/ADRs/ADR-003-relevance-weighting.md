@@ -3,7 +3,7 @@
 **Status:** Accepted (spike validated SQL-side composite scoring — see SPEC-004 STORY-001)
 **Date:** 2026-03-25
 **Spec:** SPEC-004 (Relevance Weighting System)
-**See also:** [Plugin Developer Guide](../plugin-developer-guide.md), [ADR-001: Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md)
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md), [ADR-001: Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md), [ADR-009: Document Segments](ADR-009-document-segments.md) — formalizes the "unit of weighting is the row" insight with explicit parent-child hierarchy and aggregate parent scoring
 
 ## Context
 
@@ -188,3 +188,4 @@ Remove bad documents entirely.
 
 - The `provide_feedback` tool adds one more tool to the MCP catalog. Lightweight.
 - DoctypeSpec gains one optional field (`decay_half_life_days`). Backward compatible.
+- **SPEC-011 (Document Segments):** The insight that "the unit of weighting is the row" established here is now formalized by ADR-009. Segments (child rows) each have their own `doc_weights` entry and are independently rated. Parent documents have no weight row — their effective score is computed at query time as the average of their non-tombstoned children's scores. This extends the decay and feedback model without changing it: all weight operations still target individual rows. See [ADR-009: Document Segments](ADR-009-document-segments.md).

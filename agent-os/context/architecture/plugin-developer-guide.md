@@ -6,14 +6,14 @@
 
 When you build a plugin, you own:
 
-1. **Your doctypes** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_doctype`), so you'll never collide with other plugins.
+1. **Your record types** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_record_type`), so you'll never collide with other plugins.
 
 2. **Your metadata schema** — The `metadata` JSON column is yours. Store whatever structure you need per document — free-form fields, nested objects, arrays. You declare an advisory schema so other plugins can understand your data, but it's your design.
 
 3. **Your storage mode per document** — For each document you ingest, you choose:
    - **Pointer mode**: Store a URI reference. The content lives externally (file, URL, API) and is fetched live on demand. Best for stable, long-lived sources.
    - **Embedded mode**: Store the full content directly in the `metadata` JSON under a `local_payload` key. Best for ephemeral content, user input, or anything without a stable external URL.
-   - You can mix both modes freely within the same doctype.
+   - You can mix both modes freely within the same record type.
 
 4. **Your MCP tools** — You define what tools AI agents can call and what those tools do. Tools are your plugin's public API.
 
@@ -62,7 +62,7 @@ Common combinations:
 ### ToolProvider — Expose tools to AI clients
 
 ```python
-from team_mind_mcp.server import ToolProvider, DoctypeSpec
+from team_mind_mcp.server import ToolProvider, RecordTypeSpec
 from mcp.types import Tool, TextContent
 
 class MyPlugin(ToolProvider):
@@ -71,9 +71,9 @@ class MyPlugin(ToolProvider):
         return "my_plugin"
 
     @property
-    def doctypes(self) -> list[DoctypeSpec]:
+    def record_types(self) -> list[RecordTypeSpec]:
         return [
-            DoctypeSpec(
+            RecordTypeSpec(
                 name="my_data_type",
                 description="What this document type represents.",
                 schema={
@@ -191,7 +191,7 @@ class AuditPlugin(IngestObserver):
 
     async def on_ingest_complete(self, events: list[IngestionEvent]) -> None:
         for event in events:
-            if event.plugin == "java_plugin" and event.doctype == "code_signature":
+            if event.plugin == "java_plugin" and event.record_type == "code_signature":
                 # Java code was updated — trigger compliance audit
                 await self._run_audit(event.uris, event.doc_ids)
 ```
@@ -212,7 +212,7 @@ class IngestionEvent:
 ```python
 # Ingest AND expose tools (like MarkdownPlugin)
 class MyFullPlugin(ToolProvider, IngestProcessor):
-    # Implement: name, doctypes, get_tools, call_tool, process_bundle
+    # Implement: name, record_types, get_tools, call_tool, process_bundle
     ...
 
 # Tools AND react to ingestion
@@ -242,26 +242,26 @@ Phase 2 — Observation (parallel, after Phase 1 completes):
 The `documents` table is shared, but your data is yours:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        documents table                           │
-├────┬──────────────────┬───────────────────┬───────────┬──────────┤
-│ id │ uri              │ plugin            │ doctype   │ metadata │
-├────┼──────────────────┼───────────────────┼───────────┼──────────┤
-│  1 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
-│  2 │ file:///doc.md   │ markdown_plugin   │ md_chunk  │ {chunk…} │
-│  3 │ user://input     │ travel_plugin     │ interest  │ {local…} │
-│  4 │ https://dest.com │ travel_plugin     │ dest_info │ {name…}  │
-│  5 │ file:///code.py  │ ast_plugin        │ signature │ {func…}  │
-└────┴──────────────────┴───────────────────┴───────────┴──────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          documents table                             │
+├────┬──────────────────┬───────────────────┬─────────────┬───────────┤
+│ id │ uri              │ plugin            │ record_type │ metadata  │
+├────┼──────────────────┼───────────────────┼─────────────┼───────────┤
+│  1 │ file:///doc.md   │ markdown_plugin   │ md_chunk    │ {chunk…}  │
+│  2 │ file:///doc.md   │ markdown_plugin   │ md_chunk    │ {chunk…}  │
+│  3 │ user://input     │ travel_plugin     │ interest    │ {local…}  │
+│  4 │ https://dest.com │ travel_plugin     │ dest_info   │ {name…}   │
+│  5 │ file:///code.py  │ ast_plugin        │ signature   │ {func…}   │
+└────┴──────────────────┴───────────────────┴─────────────┴───────────┘
 
- Your plugin's rows are scoped by the `plugin` and `doctype` columns.
- Other plugins can query your data by doctype, but you own it.
+ Your plugin's rows are scoped by the `plugin` and `record_type` columns.
+ Other plugins can query your data by record_type, but you own it.
 ```
 
 **Key points:**
 - The `plugin` column is always set to your plugin's `name` property. This is automatic ownership.
-- The `doctype` column is whatever you declared in your `doctypes` property. One plugin can have multiple doctypes.
-- The `metadata` column is a JSON blob — you define its shape. Your doctype's `schema` tells others what to expect, but it's not enforced (advisory only).
+- The `record_type` column is whatever you declared in your `record_types` property. One plugin can have multiple record types.
+- The `metadata` column is a JSON blob — you define its shape. Your record type's `schema` tells others what to expect, but it's not enforced (advisory only).
 - The `uri` column identifies the source. For embedded content, it can be any identifier you choose (e.g., `user://preferences/hiking`).
 
 ## Querying Data (Yours or Other Plugins')
@@ -331,7 +331,7 @@ Previously called `doctype`, record type is the plugin-scoped output concept. Se
 
 ## Available vs Enabled: Activation Model
 
-Registered plugins exist in one of three states:
+Registered plugins exist in one of two states:
 
 | State | Registered? | Has semantic types? | Processes content? |
 |-------|------------|--------------------|--------------------|
@@ -393,7 +393,7 @@ Dynamically registered plugins:
 
 ### What happens on registration:
 - Your tools are added to the MCP tool catalog (visible to AI clients).
-- Your doctypes are added to the doctype catalog (discoverable via `list_doctypes`).
+- Your record types are added to the record type catalog (discoverable via `list_record_types`).
 - If you implement `IngestProcessor` **and** have semantic types configured, you receive bundles for those types during ingestion.
 - If you implement `IngestObserver`, you start receiving events after ingestion completes.
 
@@ -423,8 +423,8 @@ class AuditPlugin(IngestObserver):
 | Fire hose | `None` (default) | Every event from every processor |
 | Semantic type filter | `EventFilter(semantic_types=["architecture_docs"])` | Events where any semantic type matches |
 | Plugin filter | `EventFilter(plugins=["java_plugin"])` | Only events from that plugin |
-| Doctype filter | `EventFilter(doctypes=["code_signature"])` | Only events with that doctype |
-| Combined | `EventFilter(plugins=[...], doctypes=[...], semantic_types=[...])` | Events matching all specified filters |
+| Record type filter | `EventFilter(record_types=["code_signature"])` | Only events with that record type |
+| Combined | `EventFilter(plugins=[...], record_types=[...], semantic_types=[...])` | Events matching all specified filters |
 
 Semantic type filtering uses ANY-match semantics: an event passes if any of its `semantic_types` values appears in the filter's `semantic_types` list.
 
@@ -519,7 +519,7 @@ Team Mind plugins support a wide array of integration patterns:
 | **Activation** | Available (no semantic types = idle) or enabled (specific types or `["*"]` wildcard) |
 | **Routing** | Semantic type routing — processors receive only URIs for their registered semantic types |
 | **Media type filtering** | Declare `supported_media_types`; only matching URIs are routed to your plugin |
-| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype/semantic_type) |
+| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/record_type/semantic_type) |
 | **Storage mode** | Pointer (URI reference) or embedded (`local_payload` in metadata) |
 | **Idempotent ingestion** | Content hashing, plugin versioning, `IngestionContext` per URI |
 | **Relevance weighting** | Decay policy per record type, feedback signals, tombstoning |
@@ -538,16 +538,16 @@ The platform automatically manages relevance weighting for all plugins. You don'
 
 ### What you control: Decay policy
 
-Declare `decay_half_life_days` on your DoctypeSpec to control how fast your data's boost decays over time:
+Declare `decay_half_life_days` on your `RecordTypeSpec` to control how fast your data's boost decays over time:
 
 ```python
-DoctypeSpec(
+RecordTypeSpec(
     name="meeting_notes",
     description="Notes from team meetings.",
     decay_half_life_days=30,     # Loses half its boost every 30 days
 )
 
-DoctypeSpec(
+RecordTypeSpec(
     name="code_signature",
     description="Function signatures from source code.",
     decay_half_life_days=None,   # No decay — code doesn't age
@@ -582,7 +582,7 @@ doc_weights
 ├── created_at      → When the doc was ingested
 ├── last_accessed   → Last feedback timestamp
 ├── tombstoned      → 0 or 1
-└── decay_half_life_days → Copied from DoctypeSpec (nullable)
+└── decay_half_life_days → Copied from RecordTypeSpec (nullable)
 ```
 
 There is **one row per document**, not one row per feedback event. The running average is maintained via `signal_count` — no compaction or aggregation needed at scale.
@@ -663,7 +663,7 @@ for chunk in new_chunks:
     bundle.storage.save_payload(uri, chunk_meta, vector, plugin=self.name, record_type="markdown_chunk")
 ```
 
-`delete_by_uri` is scoped to your plugin and doctype — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
+`delete_by_uri` is scoped to your plugin and record type — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
 
 **Which to use:** If your chunks have stable identities (e.g., a user preference by ID), use `update_payload`. If the document's structure changes on update (paragraphs added/removed), use wipe-and-replace.
 
@@ -702,12 +702,86 @@ The URI serves as a logical identifier for `delete_by_uri` and `get_full_documen
 
 The platform has no concept of "chunks." Every row in the `documents` table is just a document — the platform doesn't know or care whether a row represents a whole file, a paragraph, a sentence, or a function signature. If your plugin splits a source file into 10 chunks, that's 10 document rows. If another plugin stores one row per file, that's fine too. The platform treats all rows identically.
 
+## Working with Segments (SPEC-011)
+
+SPEC-011 (ADR-009) formalizes the **parent-child relationship** for plugins that split a logical document into multiple independently-weighted rows. This pattern is called **document segmentation**.
+
+### When to use segments
+
+Use segments when your plugin splits a single logical source (a file, a user profile, an API response) into multiple independently-searchable and independently-ratable rows. Examples:
+
+- A markdown file split into paragraph-level chunks
+- A user's travel preferences stored as individual interest atoms
+- A code file parsed into per-function signature rows
+
+If your plugin stores one row per source, you don't need segments — standalone documents (`parent_id = NULL`) are unchanged.
+
+### Parent-child hierarchy
+
+```mermaid
+graph TD
+    P["Parent Document\n(record_type=markdown_source)\nno vector, no weight"]
+    C1["Segment 0\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-0"]
+    C2["Segment 1\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-1"]
+    P --> C1
+    P --> C2
+```
+
+- **Parent document**: Has a URI, record type, and metadata. No vector embedding — it is not searchable in KNN. No `doc_weights` row — its score is derived from its children's aggregate.
+- **Segments (children)**: Each has its own URI, vector embedding, and weight. These are the units of retrieval and rating. `parent_id` links them back to the parent.
+
+### Creating parents and segments
+
+```python
+# Create parent document for the source file
+parent_id = storage.save_parent(
+    uri=uri,
+    plugin=self.name,
+    record_type="document_source",
+    metadata={"source_uri": uri, "chunk_count": len(chunks)},
+    content_hash=content_hash,
+    plugin_version=self.version,
+)
+
+# Create child segments with parent_id
+for i, chunk in enumerate(chunks):
+    storage.save_payload(
+        uri=f"{uri}#chunk-{i}",
+        metadata={"chunk": chunk},
+        vector=embed(chunk),
+        plugin=self.name,
+        record_type="document_chunk",
+        parent_id=parent_id,   # links segment to parent
+    )
+```
+
+`save_parent` creates a document row with no vector and no weight entry. It returns the `doc_id` for segments to reference via `parent_id`.
+
+### Wipe-and-replace with segments
+
+When re-ingesting an existing source, delete by the parent's URI — the platform cascades the deletion to all child segments:
+
+```python
+# Target the parent — cascade delete handles children
+storage.delete_by_uri(uri, plugin=self.name, record_type="document_source")
+```
+
+After deletion, re-ingest as normal: create a new parent, then new segments.
+
+### Backward compatibility
+
+`parent_id` defaults to `NULL`. Plugins that do not use segments are completely unaffected — their rows are standalone documents and all existing query behavior is unchanged. Segments are opt-in.
+
+### Segment navigation
+
+Search results include a `parent_id` field. When `parent_id` is non-null, the client knows the result is a segment and can call `get_document_with_segments(doc_id)` to retrieve the parent's metadata and all sibling segments for broader context.
+
 ## Discovery: How Others Find Your Data
 
-AI clients can call the `list_doctypes` MCP tool to discover what's available:
+AI clients can call the `list_record_types` MCP tool to discover what's available:
 
 ```json
-// list_doctypes(plugins=["travel_plugin"])
+// list_record_types(plugins=["travel_plugin"])
 [
   {
     "plugin": "travel_plugin",
@@ -731,9 +805,9 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | Document | What it covers |
 |----------|---------------|
 | [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Three interfaces, two-phase pipeline, dual-mode storage, design rationale |
-| [ADR-001: Plugin-Scoped Doctypes](ADRs/ADR-001-plugin-scoped-doctypes.md) | Doctype namespacing, cross-plugin queries, schema contracts |
+| [ADR-001: Plugin-Scoped Record Types](ADRs/ADR-001-plugin-scoped-doctypes.md) | Record type namespacing, cross-plugin queries, schema contracts |
 | [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
-| [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | DoctypeSpec model, scoped queries, discovery tool |
+| [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | RecordTypeSpec model, scoped queries, discovery tool |
 | [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |
 | [ADR-003: Relevance Weighting](ADRs/ADR-003-relevance-weighting.md) | Scoring model, decay policy, tombstoning, signal design |
 | [SPEC-004: Relevance Weighting](../../specs/SPEC-004-relevance-weighting/design.md) | doc_weights table, feedback tool, composite scoring, spike results |
@@ -744,6 +818,7 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [ADR-007: Three-Type Model & Semantic Routing](ADRs/ADR-007-semantic-type-routing.md) | Three-type model, semantic type routing, available vs enabled, record type rename |
 | [SPEC-007: Reliability Seeding](../../specs/SPEC-007-reliability-seeding/design.md) | Three-layer reliability model, initial_score seeding, ingest hint propagation |
 | [ADR-008: Multi-Tenancy & Metadata Search](ADRs/ADR-008-multi-tenancy-metadata-search.md) | Required tenancy, metadata search via json_extract, cross-tenant query model, structural vs metadata fields |
+| [ADR-009: Document Segments](ADRs/ADR-009-document-segments.md) | Parent-child hierarchy, segment model, aggregate scoring, `save_parent` |
 | [ADR-010: Tenant Sharding](ADRs/ADR-010-tenant-sharding.md) | File-level sharding, TenantStorageManager, scatter-gather, KNN correctness rationale |
 | [SPEC-010: Multi-Tenancy & Metadata Search](../../specs/SPEC-010-multi-tenancy-metadata-search/design.md) | Implementation details: TenantStorageManager, per-tenant lifecycle, ingestion routing, metadata filters |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy, including tenant sharding diagrams |

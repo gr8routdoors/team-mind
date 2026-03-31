@@ -54,13 +54,13 @@ async def test_process_bundle_passes_semantic_type_to_save_payload(tmp_path):
     # When the plugin processes and saves a document
     await plugin.process_bundle(bundle)
 
-    # Then the document row has semantic_type="architecture_docs"
+    # Then all document rows (parent + chunk) have semantic_type="architecture_docs"
     with storage._conn:
         cursor = storage._conn.execute("SELECT semantic_type FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 1
-    assert rows[0][0] == "architecture_docs"
+    assert len(rows) == 2  # 1 parent + 1 chunk
+    assert all(row[0] == "architecture_docs" for row in rows)
 
     storage.close()
 
@@ -87,13 +87,13 @@ async def test_process_bundle_joins_multiple_semantic_types(tmp_path):
     # When the plugin processes and saves a document
     await plugin.process_bundle(bundle)
 
-    # Then the document row has semantic_type as a comma-joined string
+    # Then all document rows (parent + chunk) have semantic_type as a comma-joined string
     with storage._conn:
         cursor = storage._conn.execute("SELECT semantic_type FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 1
-    assert rows[0][0] == "architecture_docs,design"
+    assert len(rows) == 2  # 1 parent + 1 chunk
+    assert all(row[0] == "architecture_docs,design" for row in rows)
 
     storage.close()
 
@@ -121,13 +121,13 @@ async def test_process_bundle_passes_media_type_for_md_file(tmp_path):
     # When the document is saved
     await plugin.process_bundle(bundle)
 
-    # Then the document row has media_type="text/markdown"
+    # Then all document rows (parent + chunk) have media_type="text/markdown"
     with storage._conn:
         cursor = storage._conn.execute("SELECT media_type FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 1
-    assert rows[0][0] == "text/markdown"
+    assert len(rows) == 2  # 1 parent + 1 chunk
+    assert all(row[0] == "text/markdown" for row in rows)
 
     storage.close()
 
@@ -150,13 +150,13 @@ async def test_process_bundle_passes_media_type_for_txt_file(tmp_path):
     # When the document is saved
     await plugin.process_bundle(bundle)
 
-    # Then the document row has media_type="text/plain"
+    # Then all document rows (parent + chunk) have media_type="text/plain"
     with storage._conn:
         cursor = storage._conn.execute("SELECT media_type FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 1
-    assert rows[0][0] == "text/plain"
+    assert len(rows) == 2  # 1 parent + 1 chunk
+    assert all(row[0] == "text/plain" for row in rows)
 
     storage.close()
 
@@ -190,8 +190,13 @@ async def test_plugin_accepts_txt_uris(tmp_path):
         cursor = storage._conn.execute("SELECT uri FROM documents")
         rows = cursor.fetchall()
 
-    assert len(rows) == 2
-    assert all(rows[i][0] == txt_file.as_uri() for i in range(len(rows)))
+    # 1 parent (base URI) + 2 chunks (segment URIs)
+    assert len(rows) == 3
+    # Parent uses the base URI
+    assert rows[0][0] == txt_file.as_uri()
+    # Chunks use segment URI convention
+    assert rows[1][0] == f"{txt_file.as_uri()}#chunk-0"
+    assert rows[2][0] == f"{txt_file.as_uri()}#chunk-1"
 
     storage.close()
 
@@ -237,8 +242,11 @@ async def test_process_bundle_includes_semantic_types_in_event(tmp_path):
     # When the plugin processes the bundle
     events = await plugin.process_bundle(bundle)
 
-    # Then the returned IngestionEvent includes semantic_types=["specs"]
-    assert len(events) == 1
+    # Then two IngestionEvents are returned: one for markdown_source, one for markdown_chunk
+    assert len(events) == 2
+    assert events[0].record_type == "markdown_source"
     assert events[0].semantic_types == ["specs"]
+    assert events[1].record_type == "markdown_chunk"
+    assert events[1].semantic_types == ["specs"]
 
     storage.close()

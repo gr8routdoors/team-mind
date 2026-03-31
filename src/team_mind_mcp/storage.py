@@ -47,7 +47,8 @@ class StorageAdapter:
                     content_hash TEXT,
                     plugin_version TEXT DEFAULT '0.0.0',
                     semantic_type TEXT NOT NULL DEFAULT '',
-                    media_type TEXT NOT NULL DEFAULT ''
+                    media_type TEXT NOT NULL DEFAULT '',
+                    parent_id INTEGER REFERENCES documents(id)
                 )
             """)
 
@@ -88,6 +89,10 @@ class StorageAdapter:
                 self._conn.execute(
                     "ALTER TABLE documents ADD COLUMN media_type TEXT NOT NULL DEFAULT ''"
                 )
+            if "parent_id" not in existing_columns:
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN parent_id INTEGER REFERENCES documents(id)"
+                )
 
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_plugin
@@ -108,6 +113,10 @@ class StorageAdapter:
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_semantic_type
                 ON documents(semantic_type)
+            """)
+            self._conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_parent_id
+                ON documents(parent_id)
             """)
             self._conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
@@ -140,7 +149,6 @@ class StorageAdapter:
                 CREATE INDEX IF NOT EXISTS idx_doc_weights_tombstoned
                 ON doc_weights(tombstoned)
             """)
-
 
     # --- Plugin persistence CRUD ---
 
@@ -220,6 +228,42 @@ class StorageAdapter:
             )
             return cursor.rowcount > 0
 
+    def save_parent(
+        self,
+        uri: str,
+        plugin: str,
+        record_type: str,
+        metadata: dict | None = None,
+        content_hash: str | None = None,
+        plugin_version: str = "0.0.0",
+        semantic_type: str = "",
+        media_type: str = "",
+    ) -> int:
+        """Create a parent document — no vector embedding, no weight row.
+
+        Returns the document ID for child segments to reference via parent_id.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            cursor = self._conn.execute(
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, "
+                "plugin_version, semantic_type, media_type, parent_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING id",
+                (
+                    uri,
+                    plugin,
+                    record_type,
+                    json.dumps(metadata) if metadata is not None else None,
+                    content_hash,
+                    plugin_version,
+                    semantic_type,
+                    media_type,
+                ),
+            )
+            return cursor.fetchone()[0]
+
     def save_payload(
         self,
         uri: str,
@@ -227,6 +271,7 @@ class StorageAdapter:
         vector: list[float],
         plugin: str,
         record_type: str,
+        parent_id: int | None = None,
         decay_half_life_days: float | None = None,
         content_hash: str | None = None,
         plugin_version: str = "0.0.0",
@@ -238,10 +283,17 @@ class StorageAdapter:
         if self._conn is None:
             raise RuntimeError("Database not initialized")
 
+        if parent_id is not None:
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (parent_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No document with id={parent_id}")
+
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, plugin_version, semantic_type, media_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, plugin_version, semantic_type, media_type, parent_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 (
                     uri,
                     plugin,
@@ -251,6 +303,7 @@ class StorageAdapter:
                     plugin_version,
                     semantic_type,
                     media_type,
+                    parent_id,
                 ),
             )
             doc_id = cursor.fetchone()[0]
@@ -309,8 +362,11 @@ class StorageAdapter:
     ) -> int:
         """Delete all documents (and their weights/vectors) for a URI/plugin/record_type combo.
 
-        Returns the number of documents deleted. Used by plugins to wipe old
-        chunks before re-ingesting an updated document.
+        Cascades to children: if a matching document is a parent, all its child
+        segments (weights, vectors, document rows) are also deleted.
+
+        Returns the total number of documents deleted (parents + children).
+        Used by plugins to wipe old chunks before re-ingesting an updated document.
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -326,23 +382,78 @@ class StorageAdapter:
             if not doc_ids:
                 return 0
 
-            placeholders = ",".join("?" for _ in doc_ids)
+            # Collect child IDs for any parent documents
+            all_ids = list(doc_ids)
+            for parent_id in doc_ids:
+                child_cursor = self._conn.execute(
+                    "SELECT id FROM documents WHERE parent_id = ?",
+                    (parent_id,),
+                )
+                child_ids = [row[0] for row in child_cursor.fetchall()]
+                all_ids.extend(child_ids)
+
+            placeholders = ",".join("?" for _ in all_ids)
+
+            # Delete weights, vectors, then documents (children first, then parents)
+            self._conn.execute(
+                f"DELETE FROM doc_weights WHERE doc_id IN ({placeholders})",
+                all_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM vec_documents WHERE id IN ({placeholders})",
+                all_ids,
+            )
+            self._conn.execute(
+                f"DELETE FROM documents WHERE id IN ({placeholders})",
+                all_ids,
+            )
+
+            return len(all_ids)
+
+    def delete_by_id(self, doc_id: int) -> int:
+        """Delete a single document by ID.
+
+        If parent (has children): cascades — deletes all children then parent.
+        If segment (has parent_id): surgical — deletes only this segment.
+        If standalone: deletes just this document.
+
+        Returns total count of deleted documents. Returns 0 if doc_id not found.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            # Check if the document exists
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+            if row is None:
+                return 0
+
+            # Find any children of this document
+            child_cursor = self._conn.execute(
+                "SELECT id FROM documents WHERE parent_id = ?", (doc_id,)
+            )
+            child_ids = [r[0] for r in child_cursor.fetchall()]
+
+            all_ids = child_ids + [doc_id]
+            placeholders = ",".join("?" for _ in all_ids)
 
             # Delete weights, vectors, then documents
             self._conn.execute(
                 f"DELETE FROM doc_weights WHERE doc_id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
             self._conn.execute(
                 f"DELETE FROM vec_documents WHERE id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
             self._conn.execute(
                 f"DELETE FROM documents WHERE id IN ({placeholders})",
-                doc_ids,
+                all_ids,
             )
 
-            return len(doc_ids)
+            return len(all_ids)
 
     def lookup_existing_docs(
         self,
@@ -461,9 +572,7 @@ class StorageAdapter:
             return []
 
         has_filters = (
-            plugins is not None
-            or record_types is not None
-            or bool(metadata_filters)
+            plugins is not None or record_types is not None or bool(metadata_filters)
         )
         fetch_k = limit * self.KNN_OVERFETCH_MULTIPLIER if has_filters else limit
 
@@ -510,7 +619,8 @@ class StorageAdapter:
                              / w.decay_half_life_days)
                         ELSE 1.0
                       END
-                   ) AS final_rank
+                   ) AS final_rank,
+                   d.parent_id
             FROM vec_documents v
             JOIN documents d ON v.id = d.id
             LEFT JOIN doc_weights w ON d.id = w.doc_id
@@ -535,6 +645,7 @@ class StorageAdapter:
                     "score": row[5],
                     "usage_score": row[6],
                     "final_rank": row[9],
+                    "parent_id": row[-1],
                 }
             )
         return results
@@ -602,7 +713,8 @@ class StorageAdapter:
                              / w.decay_half_life_days)
                         ELSE 1.0
                       END
-                   ) AS weight_rank
+                   ) AS weight_rank,
+                   d.parent_id
             FROM documents d
             LEFT JOIN doc_weights w ON d.id = w.doc_id
             {where_sql}
@@ -623,9 +735,138 @@ class StorageAdapter:
                     "metadata": json.loads(row[4]) if row[4] else {},
                     "usage_score": row[5],
                     "weight_rank": row[6],
+                    "parent_id": row[-1],
                 }
             )
         return results
+
+    def get_document_with_segments(self, doc_id: int) -> dict:
+        """Return a parent document with all its non-tombstoned child segments.
+
+        If doc_id is a parent (has children), returns parent metadata + children.
+        If doc_id is a segment (has parent_id), resolves root and returns siblings.
+        If doc_id is standalone (no parent, no children), returns doc with empty segments.
+
+        Raises ValueError if doc_id does not exist.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        # Step 1: Fetch the requested document row
+        row = self._conn.execute(
+            "SELECT id, uri, plugin, record_type, metadata, parent_id FROM documents WHERE id = ?",
+            (doc_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No document with id={doc_id}")
+
+        fetched_parent_id = row[5]
+
+        # Step 2: Determine the root document id
+        if fetched_parent_id is not None:
+            root_id = fetched_parent_id
+        else:
+            root_id = doc_id
+
+        # Step 3: Fetch the root document row (may already be fetched if root_id == doc_id)
+        if root_id == doc_id:
+            root_row = row
+        else:
+            root_row = self._conn.execute(
+                "SELECT id, uri, plugin, record_type, metadata, parent_id FROM documents WHERE id = ?",
+                (root_id,),
+            ).fetchone()
+            if root_row is None:
+                raise ValueError(f"No document with id={root_id}")
+
+        # Step 4: Fetch non-tombstoned children of root
+        children_cursor = self._conn.execute(
+            """
+            SELECT d.id, d.uri, d.record_type, d.metadata,
+                   COALESCE(w.usage_score, 0.0) AS usage_score
+            FROM documents d
+            LEFT JOIN doc_weights w ON d.id = w.doc_id
+            WHERE d.parent_id = ?
+              AND COALESCE(w.tombstoned, 0) = 0
+            ORDER BY d.id
+            """,
+            (root_id,),
+        )
+        children = children_cursor.fetchall()
+
+        segments = [
+            {
+                "id": c[0],
+                "uri": c[1],
+                "record_type": c[2],
+                "metadata": json.loads(c[3]) if c[3] else {},
+                "usage_score": c[4],
+            }
+            for c in children
+        ]
+
+        # Step 5: Compute aggregate score
+        if segments:
+            aggregate_score = sum(s["usage_score"] for s in segments) / len(segments)
+        else:
+            aggregate_score = None
+
+        segment_count = len(segments)
+
+        parent = {
+            "id": root_row[0],
+            "uri": root_row[1],
+            "plugin": root_row[2],
+            "record_type": root_row[3],
+            "metadata": json.loads(root_row[4]) if root_row[4] else {},
+            "aggregate_score": aggregate_score,
+            "segment_count": segment_count,
+        }
+
+        return {"parent": parent, "segments": segments}
+
+    def get_parent_aggregate_score(self, parent_id: int) -> dict:
+        """Compute aggregate score for a parent from its children's weights.
+
+        Returns:
+            {
+                "parent_id": 42,
+                "aggregate_score": 2.8,   # None if no non-tombstoned children
+                "segment_count": 5,       # 0 if no non-tombstoned children
+                "min_score": -1.0,        # None if no non-tombstoned children
+                "max_score": 4.5,         # None if no non-tombstoned children
+            }
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        row = self._conn.execute(
+            """
+            SELECT
+                COUNT(s.id) AS segment_count,
+                AVG(w.usage_score) AS aggregate_score,
+                MIN(w.usage_score) AS min_score,
+                MAX(w.usage_score) AS max_score
+            FROM documents s
+            JOIN doc_weights w ON s.id = w.doc_id
+            WHERE s.parent_id = ?
+              AND COALESCE(w.tombstoned, 0) = 0
+            """,
+            (parent_id,),
+        ).fetchone()
+
+        segment_count = row[0] if row[0] is not None else 0
+        aggregate_score = row[1]
+        min_score = row[2]
+        max_score = row[3]
+
+        return {
+            "parent_id": parent_id,
+            "aggregate_score": aggregate_score,
+            "segment_count": segment_count,
+            "min_score": min_score,
+            "max_score": max_score,
+        }
 
     def close(self):
         if self._conn:

@@ -396,10 +396,11 @@ async def test_markdown_skips_unchanged_content(tmp_path):
     md_file = tmp_path / "test.md"
     md_file.write_text("Paragraph one.\n\nParagraph two.")
 
-    # First ingest
+    # First ingest — produces 2 events (markdown_source + markdown_chunk)
     bundle1 = await pipeline.ingest([md_file.as_uri()])
-    assert len(bundle1.events) == 1
-    first_doc_count = len(bundle1.events[0].doc_ids)
+    assert len(bundle1.events) == 2
+    # Total doc count: 1 parent + 2 chunks
+    first_doc_count = sum(len(e.doc_ids) for e in bundle1.events)
 
     # Second ingest — same content, same version
     bundle2 = await pipeline.ingest([md_file.as_uri()])
@@ -438,17 +439,19 @@ async def test_markdown_replaces_changed_content(tmp_path):
     # Second ingest — content changed
     bundle2 = await pipeline.ingest([md_file.as_uri()])
 
-    # Should have re-ingested
-    assert len(bundle2.events) == 1
-    assert len(bundle2.events[0].doc_ids) == 2  # 2 new chunks
+    # Should have re-ingested — 2 events (markdown_source + markdown_chunk)
+    assert len(bundle2.events) == 2
+    chunk_event = next(e for e in bundle2.events if e.record_type == "markdown_chunk")
+    assert len(chunk_event.doc_ids) == 2  # 2 new chunks
 
-    # Old chunks should be gone — only new ones remain
+    # Old docs should be gone — only new ones remain (1 parent + 2 chunks)
     with storage._conn:
         rows = storage._conn.execute("SELECT metadata FROM documents").fetchall()
-    assert len(rows) == 2
+    assert len(rows) == 3  # 1 parent + 2 chunks
     import json
 
-    chunks = [json.loads(r[0])["chunk"] for r in rows]
+    # Filter to chunk rows (those with a "chunk" key in metadata)
+    chunks = [json.loads(r[0])["chunk"] for r in rows if json.loads(r[0]).get("chunk")]
     assert "Updated content." in chunks
     assert "New paragraph." in chunks
     storage.close()
@@ -464,14 +467,13 @@ async def test_markdown_reprocesses_on_version_change(tmp_path):
     md_file = tmp_path / "test.md"
     md_file.write_text("Same content.")
 
-    # First ingest with "old" version — simulate by saving directly
+    # First ingest with "old" version — simulate by saving a parent (markdown_source) directly
     content_hash = hashlib.sha256("Same content.".encode()).hexdigest()
-    storage.save_payload(
-        md_file.as_uri(),
-        {"chunk": "Same content.", "plugin": "markdown_plugin"},
-        [0.1] * 768,
+    storage.save_parent(
+        uri=md_file.as_uri(),
         plugin="markdown_plugin",
-        record_type="markdown_chunk",
+        record_type="markdown_source",
+        metadata={"source_uri": md_file.as_uri(), "chunk_count": 1},
         content_hash=content_hash,
         plugin_version="0.9.0",  # Old version
     )
@@ -485,13 +487,15 @@ async def test_markdown_reprocesses_on_version_change(tmp_path):
     bundle = await pipeline.ingest([md_file.as_uri()])
 
     # Should re-process because version changed (0.9.0 → 1.0.0)
-    assert len(bundle.events) == 1
+    # Returns 2 events: markdown_source + markdown_chunk
+    assert len(bundle.events) == 2
 
-    # Old row deleted, new row has version 1.0.0
+    # Old parent deleted (cascade deletes children), new parent + chunk created
     with storage._conn:
         rows = storage._conn.execute("SELECT plugin_version FROM documents").fetchall()
-    assert len(rows) == 1
-    assert rows[0][0] == "1.0.0"
+    # 1 parent + 1 chunk = 2 rows, all with version 1.0.0
+    assert len(rows) == 2
+    assert all(row[0] == "1.0.0" for row in rows)
     storage.close()
 
 
@@ -512,7 +516,8 @@ async def test_markdown_fresh_ingest_stores_hash_and_version(tmp_path):
 
     bundle = await pipeline.ingest([md_file.as_uri()])
 
-    assert len(bundle.events) == 1
+    # Two events: markdown_source + markdown_chunk
+    assert len(bundle.events) == 2
 
     with storage._conn:
         row = storage._conn.execute(

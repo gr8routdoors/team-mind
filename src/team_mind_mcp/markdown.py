@@ -44,6 +44,14 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
     def record_types(self) -> list[RecordTypeSpec]:
         return [
             RecordTypeSpec(
+                name="markdown_source",
+                description="A parent document representing the source markdown file.",
+                schema={
+                    "source_uri": {"type": "string", "description": "The original file URI."},
+                    "chunk_count": {"type": "integer", "description": "Number of paragraph chunks."},
+                },
+            ),
+            RecordTypeSpec(
                 name="markdown_chunk",
                 description="A paragraph-level chunk extracted from a markdown document.",
                 schema={
@@ -53,7 +61,7 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                     },
                     "plugin": {"type": "string", "description": "Owning plugin name."},
                 },
-            )
+            ),
         ]
 
     def get_tools(self) -> list[Tool]:
@@ -121,13 +129,18 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             )
         processed_uris: list[str] = []
         doc_ids: list[int] = []
+        parent_doc_ids: list[int] = []
         semantic_type = ",".join(bundle.semantic_types)
 
         # Resolve reliability: hint wins over plugin default, default wins over zero
+        # Use the markdown_chunk record type (index 1) for default_reliability
+        chunk_record_type = next(
+            (rt for rt in self.record_types if rt.name == "markdown_chunk"), None
+        )
         initial_score = (
             bundle.reliability_hint
             if bundle.reliability_hint is not None
-            else (self.record_types[0].default_reliability or 0.0)
+            else ((chunk_record_type.default_reliability if chunk_record_type else None) or 0.0)
         )
 
         for uri in bundle.uris:
@@ -153,9 +166,9 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 ):
                     continue
 
-                # Content changed or version changed → wipe old chunks and re-ingest
+                # Content changed or version changed → wipe old parent (cascades to children)
                 bundle.storage.delete_by_uri(
-                    uri, plugin=self.name, record_type="markdown_chunk"
+                    uri, plugin=self.name, record_type="markdown_source"
                 )
             else:
                 current_hash = _content_hash(content)
@@ -166,15 +179,30 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]
 
-            for chunk in chunks:
+            # Create parent document for the source file
+            parent_id = bundle.storage.save_parent(
+                uri=uri,
+                plugin=self.name,
+                record_type="markdown_source",
+                metadata={"source_uri": uri, "chunk_count": len(chunks)},
+                content_hash=current_hash,
+                plugin_version=self.version,
+                semantic_type=semantic_type,
+                media_type=media_type,
+            )
+            parent_doc_ids.append(parent_id)
+
+            # Create segment per paragraph chunk
+            for i, chunk in enumerate(chunks):
                 vector = _mock_embed(chunk)
                 metadata = {"chunk": chunk, "plugin": self.name}
                 doc_id = bundle.storage.save_payload(
-                    uri,
+                    f"{uri}#chunk-{i}",
                     metadata,
                     vector,
                     plugin=self.name,
                     record_type="markdown_chunk",
+                    parent_id=parent_id,
                     content_hash=current_hash,
                     plugin_version=self.version,
                     semantic_type=semantic_type,
@@ -187,11 +215,19 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             return [
                 IngestionEvent(
                     plugin=self.name,
+                    record_type="markdown_source",
+                    uris=processed_uris,
+                    doc_ids=parent_doc_ids,
+                    semantic_types=bundle.semantic_types,
+                    tenant_id=bundle.tenant_id,
+                ),
+                IngestionEvent(
+                    plugin=self.name,
                     record_type="markdown_chunk",
                     uris=processed_uris,
                     doc_ids=doc_ids,
                     semantic_types=bundle.semantic_types,
                     tenant_id=bundle.tenant_id,
-                )
+                ),
             ]
         return []

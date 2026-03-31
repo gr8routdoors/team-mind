@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-03-10 (retroactive — originally designed in SPEC-001, updated 2026-03-25, updated 2026-03-29 for SPEC-008, updated 2026-03-30 for SPEC-010)
 **Spec:** SPEC-001 (Core Information Architecture, MVP), SPEC-003 (Ingestion Interface Split), SPEC-008 (Semantic Type Routing), SPEC-010 (Multi-Tenancy & Metadata Search)
-**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins; [ADR-007: Three-Type Model](ADR-007-semantic-type-routing.md) — semantic type routing and the three-type model; [ADR-008: Multi-Tenancy & Metadata Search](ADR-008-multi-tenancy-metadata-search.md) — tenancy model, metadata search; [ADR-010: Tenant Sharding](ADR-010-tenant-sharding.md) — file-level sharding, TenantStorageManager, scatter-gather
+**See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins; [ADR-007: Three-Type Model](ADR-007-semantic-type-routing.md) — semantic type routing and the three-type model; [ADR-008: Multi-Tenancy & Metadata Search](ADR-008-multi-tenancy-metadata-search.md) — tenancy model, metadata search; [ADR-010: Tenant Sharding](ADR-010-tenant-sharding.md) — file-level sharding, TenantStorageManager, scatter-gather; [ADR-009: Document Segments](ADR-009-document-segments.md) — parent-child hierarchy formalizing the plugin chunking pattern introduced here
 
 ## Context
 
@@ -210,6 +210,7 @@ One `IngestListener` interface that receives bundles and is used for both active
 - The inline Librarian concept has been retired (ADR-006). Reliability is addressed via Reliability Seeding (SPEC-007) and a future background conflict detection reaper.
 - Storage is currently SQLite but the `StorageAdapter` abstraction allows migration without plugin changes.
 - **SPEC-010 (Multi-Tenancy):** The `registered_plugins` table moved from per-tenant `StorageAdapter` to `system.sqlite` (managed by `TenantStorageManager`). Plugins are registered globally once. `IngestProcessor` plugins no longer hold a `storage` reference — the pipeline injects `bundle.storage` at call time, pointing to the correct per-tenant `StorageAdapter`. Plugins are completely tenant-unaware by design. See [ADR-008](ADR-008-multi-tenancy-metadata-search.md) and [ADR-010](ADR-010-tenant-sharding.md).
+- **SPEC-011 (Document Segments):** The plugin chunking pattern introduced here (splitting a source into multiple rows via `process_bundle`) is now formally structured with a `parent_id` column on `documents`. Plugins that chunk content use `save_parent` + `parent_id` on `save_payload` to create an explicit parent-child hierarchy. Backward compatible — existing plugins are unchanged. See [ADR-009: Document Segments](ADR-009-document-segments.md).
 
 ## Current Plugin Inventory
 
