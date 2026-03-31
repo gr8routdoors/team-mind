@@ -61,3 +61,5 @@ See `stories.yml` for current status.
 | STORY-007 | Delete Operations (Cascade + delete_by_id) | pending |
 | STORY-008 | MarkdownPlugin Segment Migration | pending |
 | STORY-009 | Update Documentation, Diagrams, and Fix Stale References | pending |
+| STORY-010 | Segment Ordering Test Coverage | pending |
+| STORY-011 | Document Segment Ordering Contract | pending |

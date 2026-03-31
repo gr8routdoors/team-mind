@@ -94,7 +94,7 @@ specs:
     slug: document-segments
     status: in_design
     created: 2026-03-29
-    stories: 9
+    stories: 11
     stories_complete: 0
 
 # Next spec number: 012

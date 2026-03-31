@@ -122,6 +122,33 @@ stories:
     status: pending
     verified_by: []
 
+  STORY-010:
+    name: Segment Ordering Test Coverage
+    description: >
+      Add test that explicitly verifies get_document_with_segments returns
+      segments in insertion order. Create a parent with N segments inserted
+      sequentially, then assert result["segments"][i] corresponds to the
+      i-th inserted segment (by id and URI). Existing tests use sets for
+      segment verification — this test must use ordered list comparison.
+      Verify that the ORDER BY d.id clause in the SQL query is the
+      mechanism guaranteeing order.
+    status: pending
+    verified_by: []
+
+  STORY-011:
+    name: Document Segment Ordering Contract
+    description: >
+      Update plugin developer guide "Working with Segments" section to
+      document the ordering contract: the order plugins call save_payload
+      is the order segments are retrievable in via get_document_with_segments.
+      Explain that this is guaranteed by ORDER BY id on autoincrement IDs
+      and synchronous save_payload. Note that retrieve_by_vector_similarity
+      and retrieve_by_weight return relevance-ranked results, not positional
+      order. Update ADR-009 section 6 (Discoverability) to note that
+      get_document_with_segments returns segments in insertion order.
+    status: pending
+    verified_by: []
+
 verification:
   criteria:
     - All pytest tests pass for every story (no regressions).
@@ -140,4 +167,8 @@ verification:
     - MarkdownPlugin emits separate IngestionEvent per record type.
     - Existing standalone documents (parent_id=NULL) continue to work identically.
     - Documentation is updated with segment patterns and stale references fixed.
+    - get_document_with_segments returns segments in insertion order (ORDER BY id).
+    - Test explicitly asserts segment ordering (ordered list, not set comparison).
+    - Plugin developer guide documents the ordering contract.
+    - ADR-009 documents ordering guarantee on get_document_with_segments.
   completed: false
