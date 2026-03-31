@@ -702,6 +702,80 @@ The URI serves as a logical identifier for `delete_by_uri` and `get_full_documen
 
 The platform has no concept of "chunks." Every row in the `documents` table is just a document — the platform doesn't know or care whether a row represents a whole file, a paragraph, a sentence, or a function signature. If your plugin splits a source file into 10 chunks, that's 10 document rows. If another plugin stores one row per file, that's fine too. The platform treats all rows identically.
 
+## Working with Segments (SPEC-011)
+
+SPEC-011 (ADR-009) formalizes the **parent-child relationship** for plugins that split a logical document into multiple independently-weighted rows. This pattern is called **document segmentation**.
+
+### When to use segments
+
+Use segments when your plugin splits a single logical source (a file, a user profile, an API response) into multiple independently-searchable and independently-ratable rows. Examples:
+
+- A markdown file split into paragraph-level chunks
+- A user's travel preferences stored as individual interest atoms
+- A code file parsed into per-function signature rows
+
+If your plugin stores one row per source, you don't need segments — standalone documents (`parent_id = NULL`) are unchanged.
+
+### Parent-child hierarchy
+
+```mermaid
+graph TD
+    P["Parent Document\n(record_type=markdown_source)\nno vector, no weight"]
+    C1["Segment 0\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-0"]
+    C2["Segment 1\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-1"]
+    P --> C1
+    P --> C2
+```
+
+- **Parent document**: Has a URI, record type, and metadata. No vector embedding — it is not searchable in KNN. No `doc_weights` row — its score is derived from its children's aggregate.
+- **Segments (children)**: Each has its own URI, vector embedding, and weight. These are the units of retrieval and rating. `parent_id` links them back to the parent.
+
+### Creating parents and segments
+
+```python
+# Create parent document for the source file
+parent_id = storage.save_parent(
+    uri=uri,
+    plugin=self.name,
+    record_type="document_source",
+    metadata={"source_uri": uri, "chunk_count": len(chunks)},
+    content_hash=content_hash,
+    plugin_version=self.version,
+)
+
+# Create child segments with parent_id
+for i, chunk in enumerate(chunks):
+    storage.save_payload(
+        uri=f"{uri}#chunk-{i}",
+        metadata={"chunk": chunk},
+        vector=embed(chunk),
+        plugin=self.name,
+        record_type="document_chunk",
+        parent_id=parent_id,   # links segment to parent
+    )
+```
+
+`save_parent` creates a document row with no vector and no weight entry. It returns the `doc_id` for segments to reference via `parent_id`.
+
+### Wipe-and-replace with segments
+
+When re-ingesting an existing source, delete by the parent's URI — the platform cascades the deletion to all child segments:
+
+```python
+# Target the parent — cascade delete handles children
+storage.delete_by_uri(uri, plugin=self.name, record_type="document_source")
+```
+
+After deletion, re-ingest as normal: create a new parent, then new segments.
+
+### Backward compatibility
+
+`parent_id` defaults to `NULL`. Plugins that do not use segments are completely unaffected — their rows are standalone documents and all existing query behavior is unchanged. Segments are opt-in.
+
+### Segment navigation
+
+Search results include a `parent_id` field. When `parent_id` is non-null, the client knows the result is a segment and can call `get_document_with_segments(doc_id)` to retrieve the parent's metadata and all sibling segments for broader context.
+
 ## Discovery: How Others Find Your Data
 
 AI clients can call the `list_record_types` MCP tool to discover what's available:
