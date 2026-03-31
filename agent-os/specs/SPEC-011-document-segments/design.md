@@ -180,10 +180,17 @@ def get_document_with_segments(self, doc_id: int) -> dict:
 Implementation:
 1. Fetch the document row for `doc_id`.
 2. If it has `parent_id` → use `parent_id` as the root. Otherwise, `doc_id` is the root.
-3. Fetch all children of the root: `SELECT ... FROM documents WHERE parent_id = ?`.
+3. Fetch all children of the root: `SELECT ... FROM documents WHERE parent_id = ? ORDER BY s.id`.
 4. Join with `doc_weights` for scores, exclude tombstoned.
 5. Compute aggregate score: `AVG(usage_score)` over non-tombstoned children.
 6. Return structured dict.
+
+**Segment ordering contract:** Segments are returned in insertion order via `ORDER BY s.id`. Since `id` is `INTEGER PRIMARY KEY AUTOINCREMENT`, sequential inserts produce monotonically increasing IDs. Plugins control segment order by inserting in the desired sequence — the order you call `save_payload` is the order segments are retrievable in. This is reliable because:
+- `save_payload` is synchronous (not async) — no race conditions on ID assignment.
+- SQLite is single-writer — no interleaving from concurrent inserts.
+- Wipe-and-replace deletes the entire parent tree and re-creates it — no partial re-insertion that would break ID ordering.
+
+Note: `retrieve_by_vector_similarity` and `retrieve_by_weight` return results ranked by relevance/weight scores, not by segment position. Segment ordering only applies to `get_document_with_segments`, which is the document reconstruction path.
 
 ### StorageAdapter.get_parent_aggregate_score
 
@@ -434,3 +441,14 @@ These are corrected as part of STORY-009 alongside the new segment documentation
 - Update README (development status).
 - Add cross-references to ADR-002, ADR-003.
 - *Stories:* STORY-009
+
+### Task 10: Segment Ordering Test
+- Add test asserting `get_document_with_segments` returns segments in insertion order.
+- Use ordered list comparison (not set) to verify sequence.
+- *Stories:* STORY-010
+
+### Task 11: Segment Ordering Documentation
+- Update plugin developer guide: document that save_payload insertion order = retrieval order.
+- Update ADR-009: note ordering guarantee on `get_document_with_segments`.
+- Clarify that `retrieve_by_vector_similarity` and `retrieve_by_weight` rank by relevance, not position.
+- *Stories:* STORY-011
