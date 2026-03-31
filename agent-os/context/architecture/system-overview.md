@@ -165,9 +165,41 @@ Metadata filter keys are validated against `^[A-Za-z0-9_]+$` before SQL interpol
 
 **The rule:** If the framework/pipeline needs it to make routing or identity decisions, it's a column. If only consumers need it at query time for filtering, it belongs in `metadata`.
 
+## Document Segments (SPEC-011)
+
+SPEC-011 (ADR-009) introduces a formal **parent-child relationship** on the `documents` table, formalizing the micro-document pattern that MarkdownPlugin and other chunking plugins already follow.
+
+### Segment Model
+
+```mermaid
+graph TD
+    P["Parent Document\n(record_type=markdown_source)\nno vector, no weight"]
+    C1["Segment 0\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-0"]
+    C2["Segment 1\n(record_type=markdown_chunk)\nuri=file://doc.md#chunk-1"]
+    P --> C1
+    P --> C2
+```
+
+- **Parent documents** (`parent_id = NULL`, no children vector/weight): logical containers that hold document-level metadata. Never appear in KNN search — no vector embedding. Score is derived as the average of non-tombstoned children's `usage_score` at query time.
+- **Segments** (`parent_id = <doc_id>`): independently searchable and ratable atoms. Each has its own URI, vector, and `doc_weights` row.
+
+### Schema Addition
+
+```sql
+ALTER TABLE documents ADD COLUMN parent_id INTEGER REFERENCES documents(id);
+CREATE INDEX idx_documents_parent_id ON documents(parent_id);
+```
+
+`parent_id = NULL` (the default) means the row is either a standalone document or a parent. All existing plugins continue to work without changes.
+
+### Cascade Deletes
+
+`delete_by_uri` on a parent automatically deletes all child segments, their vectors, and their weight rows. Deleting a single segment removes only that segment — the parent and siblings are unaffected.
+
 ## Key Architectural Decisions
 
 1. **Client-Side Orchestration:** The MCP Server does not need a heavy internal orchestrating LLM for retrieval. It exposes all plugin tools to the AI client, allowing the client (Claude/Cursor) to orchestrate its own deterministic tool calls.
 2. **Reliability Seeding (replaces Librarian):** Rather than a synchronous inline Librarian gatekeeper, reliability is seeded at ingestion time via a three-layer model (caller hint → plugin default → 0.0). High-quality sources rank higher immediately; the platform's scoring system handles refinement over time via feedback signals.
 3. **Embedded Relational/Document Storage (MVP):** Phase 1 skips flat files and avoids massive MongoDB deployments by utilizing an embedded database (e.g., SQLite with JSON/Vector extensions, or DuckDB). Modern SQLite provides native JSON document views (`JSONB`), allowing us to store and query arbitrary plugin metadata/documents just like MongoDB, alongside vector embeddings, entirely in process.
 4. **Tenant Sharding at File Level (SPEC-010):** Each tenant gets its own SQLite file. KNN vector search operates on exactly the right dataset by construction — no post-filter selectivity problem. `TenantStorageManager` owns all cross-tenant lifecycle. Plugins operate on a single `StorageAdapter` and are completely unaware of tenancy. See [ADR-010](ADRs/ADR-010-tenant-sharding.md).
+5. **Document Segments (SPEC-011):** The micro-document pattern (one row per ratable knowledge atom) is formalized with an explicit `parent_id` column. Parents provide grouping context and aggregate scoring; segments are the searchable, independently-weighted units. Backward compatible — existing plugins are unaffected. See [ADR-009](ADRs/ADR-009-document-segments.md).

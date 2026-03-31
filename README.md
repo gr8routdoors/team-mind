@@ -111,6 +111,7 @@ Want to extend Team Mind with a new plugin? See the **[Plugin Developer Guide](a
   - SPEC-009: Record type rename (`doctype` → `record_type`) throughout codebase
 - **Phase 3: Reliability & Extensibility** - **IN PROGRESS**
   - SPEC-010: Multi-tenancy & metadata search — per-tenant SQLite sharding, `TenantStorageManager`, scatter-gather cross-tenant queries, metadata filters via `json_extract`, optional vector query — **COMPLETE**
+  - SPEC-011: Document segments — explicit parent-child hierarchy via `parent_id`, `save_parent` API, cascade deletes, aggregate scoring from children — **COMPLETE**
 
 ---
 
