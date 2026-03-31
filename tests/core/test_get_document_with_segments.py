@@ -284,3 +284,42 @@ def test_ac006_raises_value_error_for_unknown_doc_id(adapter):
     # Then a ValueError is raised
     with pytest.raises(ValueError, match="No document with id=9999"):
         adapter.get_document_with_segments(9999)
+
+
+def test_story010_segments_returned_in_insertion_order(adapter):
+    """
+    SPEC-011 / STORY-010: get_document_with_segments returns segments in
+    insertion order, guaranteed by ORDER BY d.id with autoincrement IDs.
+    """
+    # Given a parent document with 5 segments inserted in a known sequence
+    parent_id = adapter.save_parent(
+        uri="file:///doc.md",
+        plugin="test_plugin",
+        record_type="document",
+        metadata={},
+    )
+    segment_ids = []
+    for i in range(5):
+        seg_id = adapter.save_payload(
+            uri=f"file:///doc.md#chunk-{i}",
+            metadata={"index": i},
+            vector=DUMMY_VECTOR,
+            plugin="test_plugin",
+            record_type="chunk",
+            parent_id=parent_id,
+        )
+        segment_ids.append(seg_id)
+
+    # When get_document_with_segments is called
+    result = adapter.get_document_with_segments(parent_id)
+
+    # Then segments are returned in exact insertion order
+    # (ORDER BY d.id guarantees this because SQLite uses autoincrement IDs
+    # that increase monotonically with each insertion)
+    segments = result["segments"]
+    assert len(segments) == 5
+
+    for i in range(5):
+        # Assert ordered list comparison — not set-based — for id and uri
+        assert segments[i]["id"] == segment_ids[i]
+        assert segments[i]["uri"] == f"file:///doc.md#chunk-{i}"
