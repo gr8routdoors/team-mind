@@ -13,7 +13,7 @@ When you build a plugin, you own:
 3. **Your storage mode per document** — For each document you ingest, you choose:
    - **Pointer mode**: Store a URI reference. The content lives externally (file, URL, API) and is fetched live on demand. Best for stable, long-lived sources.
    - **Embedded mode**: Store the full content directly in the `metadata` JSON under a `local_payload` key. Best for ephemeral content, user input, or anything without a stable external URL.
-   - You can mix both modes freely within the same doctype.
+   - You can mix both modes freely within the same record type.
 
 4. **Your MCP tools** — You define what tools AI agents can call and what those tools do. Tools are your plugin's public API.
 
@@ -212,7 +212,7 @@ class IngestionEvent:
 ```python
 # Ingest AND expose tools (like MarkdownPlugin)
 class MyFullPlugin(ToolProvider, IngestProcessor):
-    # Implement: name, doctypes, get_tools, call_tool, process_bundle
+    # Implement: name, record_types, get_tools, call_tool, process_bundle
     ...
 
 # Tools AND react to ingestion
@@ -519,7 +519,7 @@ Team Mind plugins support a wide array of integration patterns:
 | **Activation** | Available (no semantic types = idle) or enabled (specific types or `["*"]` wildcard) |
 | **Routing** | Semantic type routing — processors receive only URIs for their registered semantic types |
 | **Media type filtering** | Declare `supported_media_types`; only matching URIs are routed to your plugin |
-| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/doctype/semantic_type) |
+| **Observation mode** | Fire hose (all events) or topic-based (filtered by plugin/record_type/semantic_type) |
 | **Storage mode** | Pointer (URI reference) or embedded (`local_payload` in metadata) |
 | **Idempotent ingestion** | Content hashing, plugin versioning, `IngestionContext` per URI |
 | **Relevance weighting** | Decay policy per record type, feedback signals, tombstoning |
@@ -663,7 +663,7 @@ for chunk in new_chunks:
     bundle.storage.save_payload(uri, chunk_meta, vector, plugin=self.name, record_type="markdown_chunk")
 ```
 
-`delete_by_uri` is scoped to your plugin and doctype — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
+`delete_by_uri` is scoped to your plugin and record type — it won't touch another plugin's data for the same URI. Deletion removes the document, vector, and weight rows together.
 
 **Which to use:** If your chunks have stable identities (e.g., a user preference by ID), use `update_payload`. If the document's structure changes on update (paragraphs added/removed), use wipe-and-replace.
 
