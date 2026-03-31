@@ -331,7 +331,7 @@ Previously called `doctype`, record type is the plugin-scoped output concept. Se
 
 ## Available vs Enabled: Activation Model
 
-Registered plugins exist in one of three states:
+Registered plugins exist in one of two states:
 
 | State | Registered? | Has semantic types? | Processes content? |
 |-------|------------|--------------------|--------------------|
