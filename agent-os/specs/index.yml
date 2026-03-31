@@ -92,9 +92,17 @@ specs:
   SPEC-011:
     name: Document Segments
     slug: document-segments
-    status: in_design
+    status: complete
     created: 2026-03-29
     stories: 11
+    stories_complete: 11
+
+  SPEC-012:
+    name: Search Query Enhancements
+    slug: search-query-enhancements
+    status: in_design
+    created: 2026-03-31
+    stories: 8
     stories_complete: 0
 
-# Next spec number: 012
+# Next spec number: 013

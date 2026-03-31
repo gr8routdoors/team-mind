@@ -1,0 +1,125 @@
+# Stories for SPEC-012: Search Query Enhancements
+# Agents may only modify 'status' and 'verified_by' fields
+
+stories:
+  STORY-001:
+    name: Semantic Type Filter on retrieve_by_vector_similarity
+    description: >
+      Add semantic_types: list[str] | None parameter to
+      retrieve_by_vector_similarity. Empty-list short-circuit returns [].
+      For each requested type, generate INSTR-based WHERE clause with
+      OR semantics across the list (ANY-match). Update has_filters check
+      to include semantic_types for KNN over-fetch multiplier. Include
+      semantic_type in returned result dicts. Add tests: single type
+      filter, multi-type filter, comma-joined semantic_type matching,
+      empty-list short-circuit, None means no filter.
+    status: pending
+    verified_by: []
+
+  STORY-002:
+    name: Semantic Type Filter on retrieve_by_weight
+    description: >
+      Add semantic_types: list[str] | None parameter to
+      retrieve_by_weight. Same INSTR-based WHERE clause pattern as
+      STORY-001. Empty-list short-circuit. Include semantic_type in
+      returned result dicts. Add tests: weight-ranked results filtered
+      by semantic type, comma-joined matching, composition with
+      metadata_filters and record_types.
+    status: pending
+    verified_by: []
+
+  STORY-003:
+    name: semantic_search Tool — Semantic Type Parameter
+    description: >
+      Add semantic_types parameter (list[str], optional) to the
+      semantic_search MCP tool schema. Forward the parameter through
+      query_across_tenants to the storage adapter's retrieval methods.
+      Both vector and weight query paths must pass semantic_types.
+      Add test: semantic_search with semantic_types filters results
+      correctly across tenants.
+    status: pending
+    verified_by: []
+
+  STORY-004:
+    name: DocumentRetrievalPlugin — TenantStorageManager Conversion
+    description: >
+      Change DocumentRetrievalPlugin constructor from
+      StorageAdapter to TenantStorageManager. Update retrieve_documents
+      tool to route through query_across_tenants for both vector and
+      weight modes. Add tenant_ids parameter (list[str], optional) to
+      tool schema. Add semantic_types parameter (list[str], optional)
+      to tool schema. Forward semantic_types to storage adapter methods.
+      Trim merged results to limit after scatter-gather. Update cli.py
+      where DocumentRetrievalPlugin is initialized.
+    status: pending
+    verified_by: []
+
+  STORY-005:
+    name: get_full_document — Tenant Awareness
+    description: >
+      Add tenant_id parameter (string, default "default") to the
+      get_full_document MCP tool schema. Resolve adapter via
+      self.tenant_manager.get_adapter(tenant_id). DB lookup and
+      URI fallback both use the tenant-scoped adapter. Add test:
+      get_full_document retrieves from correct tenant shard.
+    status: pending
+    verified_by: []
+
+  STORY-006:
+    name: Tests — Cross-Tenant with Semantic Types
+    description: >
+      Add integration tests for the composition of semantic type
+      filtering with cross-tenant scatter-gather. Test scenarios:
+      two tenants with different semantic types, query filtered to
+      one type returns only matching tenant's results. Same semantic
+      type across tenants merges correctly. Semantic type filter with
+      metadata_filters and record_types composes correctly.
+      DocumentRetrievalPlugin returns tenant_id in every result dict.
+    status: pending
+    verified_by: []
+
+  STORY-007:
+    name: Return Value Enhancement — semantic_type in Results
+    description: >
+      Ensure both retrieve_by_vector_similarity and retrieve_by_weight
+      include semantic_type in their SELECT and result dict mapping.
+      Verify query_across_tenants passes through the new field.
+      Verify semantic_search and retrieve_documents MCP tools return
+      semantic_type in their JSON output. This is additive — no
+      breaking change to existing consumers.
+    status: pending
+    verified_by: []
+
+  STORY-008:
+    name: Documentation Updates
+    description: >
+      Update plugin developer guide: add "Querying by Semantic Type"
+      section with examples for both vector and weight modes. Update
+      system overview / README to mention semantic type filtering as a
+      query capability. Add cross-reference note to ADR-007 that
+      semantic types are now used at query time (SPEC-012), closing the
+      loop on the three-type model. Update retrieve_documents tool
+      description in any user-facing docs to reflect tenant_ids and
+      semantic_types parameters.
+    status: pending
+    verified_by: []
+
+verification:
+  criteria:
+    - All pytest tests pass for every story (no regressions).
+    - retrieve_by_vector_similarity accepts semantic_types parameter and filters correctly.
+    - retrieve_by_weight accepts semantic_types parameter and filters correctly.
+    - Comma-joined semantic_type values matched via INSTR (not exact IN).
+    - Empty semantic_types list returns empty results (short-circuit).
+    - None semantic_types means no filtering (all documents returned).
+    - semantic_type included in result dicts from both retrieval methods.
+    - semantic_search MCP tool accepts and forwards semantic_types.
+    - DocumentRetrievalPlugin holds TenantStorageManager (not StorageAdapter).
+    - retrieve_documents routes through query_across_tenants for all queries.
+    - retrieve_documents accepts tenant_ids and semantic_types parameters.
+    - get_full_document accepts tenant_id parameter and resolves correct shard.
+    - Every result dict includes tenant_id (via query_across_tenants).
+    - Cross-tenant queries with semantic type filters compose correctly.
+    - Plugin developer guide documents semantic type querying.
+    - ADR-007 cross-referenced with SPEC-012.
+  completed: false
