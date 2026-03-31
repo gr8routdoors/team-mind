@@ -130,6 +130,8 @@ def get_document_with_segments(self, doc_id: int) -> dict:
 
 This is the discoverability path: "I found this segment in search — what else is in its parent?" A single call returns the full context without the client needing to know the plugin's grouping conventions.
 
+Segments are returned in **insertion order** — the order `save_payload` was called during ingestion. This is guaranteed by `ORDER BY id` on the `INTEGER PRIMARY KEY AUTOINCREMENT` column, combined with the synchronous nature of `save_payload` (each call completes before the next, producing monotonically increasing ids).
+
 ### 7. Ingestion: Creating Parents and Segments
 
 Plugins create parent-child relationships during ingestion:
