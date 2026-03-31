@@ -730,6 +730,29 @@ graph TD
 - **Parent document**: Has a URI, record type, and metadata. No vector embedding — it is not searchable in KNN. No `doc_weights` row — its score is derived from its children's aggregate.
 - **Segments (children)**: Each has its own URI, vector embedding, and weight. These are the units of retrieval and rating. `parent_id` links them back to the parent.
 
+### Ingestion flow with segments
+
+```mermaid
+sequenceDiagram
+    participant Plugin
+    participant Storage as StorageAdapter
+    participant DB as Per-Tenant SQLite
+
+    Plugin->>Storage: save_parent(uri, record_type, metadata)
+    Storage->>DB: INSERT into documents (no vector, no weight)
+    DB-->>Storage: parent_id
+    Storage-->>Plugin: parent_id
+
+    loop For each chunk (in order)
+        Plugin->>Storage: save_payload(uri#chunk-N, parent_id, vector, ...)
+        Storage->>DB: INSERT documents + vec_documents + doc_weights
+        DB-->>Storage: segment_id
+        Storage-->>Plugin: segment_id
+    end
+
+    Plugin-->>Plugin: Emit IngestionEvent per record_type
+```
+
 ### Creating parents and segments
 
 ```python
@@ -776,6 +799,23 @@ After deletion, re-ingest as normal: create a new parent, then new segments.
 
 Search results include a `parent_id` field. When `parent_id` is non-null, the client knows the result is a segment and can call `get_document_with_segments(doc_id)` to retrieve the parent's metadata and all sibling segments for broader context.
 
+```mermaid
+sequenceDiagram
+    participant Client as AI Client
+    participant Search as semantic_search
+    participant Storage as StorageAdapter
+
+    Client->>Search: semantic_search(query="hiking trails")
+    Search-->>Client: [{id: 57, parent_id: 42, uri: "...#chunk-2", ...}]
+
+    Note over Client: parent_id is non-null — this is a segment
+
+    Client->>Storage: get_document_with_segments(57)
+    Storage-->>Client: {parent: {id: 42, uri, metadata, aggregate_score}, segments: [{id: 55, ...}, {id: 56, ...}, {id: 57, ...}]}
+
+    Note over Client: Full context: parent metadata + all siblings in insertion order
+```
+
 ### Segment ordering
 
 `get_document_with_segments` returns segments in **insertion order** — the order you called `save_payload` is the order segments are returned.
@@ -813,7 +853,7 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | Document | What it covers |
 |----------|---------------|
 | [ADR-002: Plugin Architecture](ADRs/ADR-002-plugin-architecture.md) | Three interfaces, two-phase pipeline, dual-mode storage, design rationale |
-| [ADR-001: Plugin-Scoped Record Types](ADRs/ADR-001-plugin-scoped-doctypes.md) | Record type namespacing, cross-plugin queries, schema contracts |
+| [ADR-001: Plugin-Scoped Record Types](ADRs/ADR-001-plugin-scoped-record-types.md) | Record type namespacing, cross-plugin queries, schema contracts |
 | [SPEC-001: Core Engine](../../specs/SPEC-001-core-engine/design.md) | MCP gateway, storage adapter, ingestion pipeline internals |
 | [SPEC-002: Plugin Data Schema](../../specs/SPEC-002-plugin-data-schema/design.md) | RecordTypeSpec model, scoped queries, discovery tool |
 | [SPEC-003: Ingestion Interface Split](../../specs/SPEC-003-ingestion-interface-split/design.md) | IngestProcessor/IngestObserver split, IngestionEvent, two-phase pipeline |

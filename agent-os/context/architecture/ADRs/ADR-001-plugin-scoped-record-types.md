@@ -1,8 +1,8 @@
-# ADR-001: Plugin-Scoped Doctypes as Cross-Plugin Data Contracts
+# ADR-001: Plugin-Scoped Record Types as Cross-Plugin Data Contracts
 
-**Status:** Accepted
+**Status:** Accepted (terminology updated: `doctype` → `record_type` per SPEC-009)
 **Date:** 2026-03-25
-**Spec:** SPEC-002 (Plugin Data Schema & Doctype System)
+**Spec:** SPEC-002 (Plugin Data Schema & Record Type System)
 **See also:** [Plugin Developer Guide](../plugin-developer-guide.md) — practical guide for building plugins
 
 ## Context

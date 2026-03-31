@@ -92,9 +92,9 @@ specs:
   SPEC-011:
     name: Document Segments
     slug: document-segments
-    status: in_design
+    status: complete
     created: 2026-03-29
     stories: 11
-    stories_complete: 0
+    stories_complete: 11
 
 # Next spec number: 012

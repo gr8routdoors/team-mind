@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-27
-**See also:** [ADR-001: Plugin-Scoped Doctypes](ADR-001-plugin-scoped-doctypes.md), [ADR-005: Plugin Lifecycle](ADR-005-plugin-lifecycle.md), [Plugin Developer Guide](../plugin-developer-guide.md)
+**See also:** [ADR-001: Plugin-Scoped Record Types](ADR-001-plugin-scoped-record-types.md), [ADR-005: Plugin Lifecycle](ADR-005-plugin-lifecycle.md), [Plugin Developer Guide](../plugin-developer-guide.md)
 
 ## Context
 
