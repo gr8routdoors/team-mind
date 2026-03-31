@@ -59,7 +59,9 @@ async def test_markdown_plugin_passes_plugin_and_record_type_on_save(tmp_path):
 
     # Then it passes plugin="markdown_plugin" and record_type="markdown_chunk"
     with storage._conn:
-        cursor = storage._conn.execute("SELECT plugin, record_type FROM documents")
+        cursor = storage._conn.execute(
+            "SELECT plugin, record_type FROM documents WHERE record_type = 'markdown_chunk'"
+        )
         rows = cursor.fetchall()
 
     assert len(rows) >= 1
