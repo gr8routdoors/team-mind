@@ -97,4 +97,20 @@ specs:
     stories: 11
     stories_complete: 11
 
-# Next spec number: 012
+  SPEC-012:
+    name: Structured Ingestion Contracts
+    slug: structured-ingestion-contracts
+    status: in_design
+    created: 2026-08-01
+    stories: 0
+    stories_complete: 0
+
+  SPEC-013:
+    name: Pluggable Content Parsing / Format Decoders
+    slug: pluggable-format-decoders
+    status: in_design
+    created: 2026-08-01
+    stories: 0
+    stories_complete: 0
+
+# Next spec number: 014
