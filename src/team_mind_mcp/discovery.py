@@ -57,6 +57,7 @@ class DoctypeDiscoveryPlugin(ToolProvider):
                 "name": dt.name,
                 "description": dt.description,
                 "schema": dt.schema,
+                "submittable": dt.submittable,
             }
             for dt in catalog
         ]

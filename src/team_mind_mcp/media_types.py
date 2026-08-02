@@ -45,6 +45,7 @@ def get_media_type(uri: str) -> str:
 def filter_uris_by_media_type(
     uris: list[str],
     supported: list[str] | None,
+    declared: dict[str, str] | None = None,
 ) -> list[str]:
     """Filter a list of URIs to those whose media type is in *supported*.
 
@@ -52,6 +53,10 @@ def filter_uris_by_media_type(
         uris: The full list of candidate URIs.
         supported: A list of accepted MIME type strings, or ``None`` to accept
             all URIs without filtering.
+        declared: Optional per-URI declared media types (e.g. for inline
+            by-value content whose URI carries no file extension). When a URI is
+            present here its declared media type is used; otherwise the media
+            type is resolved from the URI extension via :func:`get_media_type`.
 
     Returns:
         The subset of *uris* whose media type appears in *supported*, preserving
@@ -59,4 +64,7 @@ def filter_uris_by_media_type(
     """
     if supported is None:
         return list(uris)
-    return [uri for uri in uris if get_media_type(uri) in supported]
+    declared = declared or {}
+    return [
+        uri for uri in uris if (declared.get(uri) or get_media_type(uri)) in supported
+    ]

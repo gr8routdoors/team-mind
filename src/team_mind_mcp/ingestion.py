@@ -48,15 +48,37 @@ class IngestionBundle:
     reliability_hint: float | None = None
     tenant_id: str = "default"
     storage: "StorageAdapter | None" = None
+    # By-value ingestion (SPEC-012 STORY-006): inline content supplied by the
+    # caller keyed by URI. When a URI appears here the processor uses this
+    # content directly (no fetch). ``declared_media_types`` carries the caller's
+    # declared media type for such items (required when content is present),
+    # used for routing/filtering in place of the extension-based lookup.
+    contents: Dict[str, str] = field(default_factory=dict)
+    declared_media_types: Dict[str, str] = field(default_factory=dict)
 
 
 class ResourceResolver:
     """Expands URIs (like directories) into constituent valid file URIs and validates schemas."""
 
     @staticmethod
-    def resolve(uris: List[str]) -> List[str]:
+    def resolve(uris: List[str], inline_uris: set[str] | None = None) -> List[str]:
+        """Expand by-reference URIs into concrete file/http URIs.
+
+        Args:
+            uris: The URIs to resolve, in input order.
+            inline_uris: URIs that carry inline by-value content (SPEC-012
+                STORY-006). These are passed through verbatim — no scheme
+                validation, no filesystem existence check, no fetch — because
+                their content is already supplied out of band (e.g. a
+                ``mem://note/42`` URI is a valid identity key, not a location).
+        """
+        inline_uris = inline_uris or set()
         resolved = []
         for uri in uris:
+            if uri in inline_uris:
+                resolved.append(uri)
+                continue
+
             parsed = urlparse(uri)
             if parsed.scheme in ("http", "https"):
                 resolved.append(uri)
@@ -114,7 +136,9 @@ class IngestionPipeline:
             is_update = False
 
             for dt in processor_record_types:
-                existing = effective_storage.lookup_existing_docs(uri, processor_name, dt)
+                existing = effective_storage.lookup_existing_docs(
+                    uri, processor_name, dt
+                )
                 if existing:
                     is_update = True
                     all_previous_ids.extend(doc["id"] for doc in existing)
@@ -155,10 +179,29 @@ class IngestionPipeline:
         semantic_types: list[str] | None = None,
         reliability_hint: float | None = None,
         tenant_id: str = "default",
+        contents: dict[str, str] | None = None,
+        declared_media_types: dict[str, str] | None = None,
     ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
-        Returns the bundle with collected events, or None if no valid URIs."""
-        resolved_uris = ResourceResolver.resolve(uris)
+
+        Args:
+            uris: URIs to ingest (by-reference and/or by-value identity keys).
+            semantic_types: Routing types; ``None``/``[]`` reaches wildcard
+                processors only.
+            reliability_hint: Optional SPEC-007 reliability seed.
+            tenant_id: Target tenant (auto-created if missing).
+            contents: Optional inline by-value content keyed by URI (SPEC-012
+                STORY-006). URIs present here bypass resolution/fetch and their
+                content is threaded to processors via the bundle.
+            declared_media_types: Optional caller-declared media types keyed by
+                URI, used for media-type filtering of inline items (which carry
+                no file extension to infer from).
+
+        Returns the bundle with collected events, or None if no valid URIs.
+        """
+        contents = contents or {}
+        declared_media_types = declared_media_types or {}
+        resolved_uris = ResourceResolver.resolve(uris, inline_uris=set(contents.keys()))
 
         if not resolved_uris:
             return None  # No-Op
@@ -172,6 +215,8 @@ class IngestionPipeline:
             reliability_hint=reliability_hint,
             tenant_id=tenant_id,
             storage=adapter,
+            contents=contents,
+            declared_media_types=declared_media_types,
         )
 
         # Phase 1: Route to matching processors with per-processor bundle isolation.
@@ -186,7 +231,9 @@ class IngestionPipeline:
 
         for processor in processors:
             filtered_uris = filter_uris_by_media_type(
-                resolved_uris, processor.supported_media_types
+                resolved_uris,
+                processor.supported_media_types,
+                declared=declared_media_types,
             )
             if not filtered_uris:
                 continue
@@ -198,7 +245,9 @@ class IngestionPipeline:
                 record_type_names,
                 storage=adapter,
             )
-            # Create a per-processor bundle with filtered URIs — no shared state
+            # Create a per-processor bundle with filtered URIs — no shared state.
+            # Inline content / declared media types are narrowed to this
+            # processor's filtered URIs so it only sees what it received.
             proc_bundle = IngestionBundle(
                 uris=filtered_uris,
                 contexts=contexts,
@@ -206,6 +255,12 @@ class IngestionPipeline:
                 reliability_hint=bundle.reliability_hint,
                 tenant_id=tenant_id,
                 storage=adapter,
+                contents={u: contents[u] for u in filtered_uris if u in contents},
+                declared_media_types={
+                    u: declared_media_types[u]
+                    for u in filtered_uris
+                    if u in declared_media_types
+                },
             )
             processor_tasks.append(processor.process_bundle(proc_bundle))
 
@@ -219,16 +274,29 @@ class IngestionPipeline:
         bundle.events = all_events
 
         # Phase 2: Broadcast collected events to observers (with filtering)
+        await self._broadcast_events(all_events)
+
+        return bundle
+
+    async def _broadcast_events(self, events: List[IngestionEvent]) -> None:
+        """Phase 2: broadcast collected events to observers, honoring each
+        observer's ``EventFilter``.
+
+        Shared by :meth:`ingest` (raw path) and :meth:`ingest_structured`
+        (structured push) so both drive the same subscription-by-record_type
+        (plus plugin / semantic_type) filtering. A ``None`` filter is a fire
+        hose; an observer whose filter matches nothing is skipped entirely.
+        """
         observer_tasks = []
         for observer in self.registry.get_ingest_observers():
             ef = observer.event_filter
             if ef is None:
                 # Fire hose — send all events
-                filtered = all_events
+                filtered = events
             else:
                 filtered = [
                     e
-                    for e in all_events
+                    for e in events
                     if (ef.plugins is None or e.plugin in ef.plugins)
                     and (ef.record_types is None or e.record_type in ef.record_types)
                     and (
@@ -244,4 +312,112 @@ class IngestionPipeline:
         if observer_tasks:
             await asyncio.gather(*observer_tasks)
 
-        return bundle
+    async def ingest_structured(
+        self,
+        records: List[dict],
+        tenant_id: str = "default",
+    ) -> List[Dict[str, Any]]:
+        """Validated batch push of pre-refined records (SPEC-012 STORY-003).
+
+        Each record ``{record_type, payload, uri, reliability_hint?}`` is
+        validated against its record type's JSON Schema and written through the
+        canonical :func:`toolkit.write_record` — **strict per record**
+        (an invalid record writes nothing and returns its errors) and
+        **best-effort across the batch** (a failing record never rolls back a
+        sibling that already landed). After the loop the collected events are
+        broadcast to observers via the existing Phase-2 filtering, so observers
+        subscribed by ``record_type`` fire.
+
+        An empty ``records`` list is an error (parity with ``ingest_documents``).
+        Returns a per-record result list: ``{"uri", "record_type", "status":
+        "written", "doc_id"}`` on success, or ``{..., "status": "error",
+        "errors": [...]}`` for a not-submittable or schema-invalid record.
+        """
+        # Imported lazily to avoid a circular import (toolkit imports this
+        # module for IngestionContext / RecordTypeSpec).
+        from team_mind_mcp.toolkit import RecordValidationError, write_record
+
+        if not records:
+            raise ValueError("submit_structured requires at least one record.")
+
+        # The adapter is already tenant-scoped; write_record's tenant_id is the
+        # same value, passed through for signature completeness (storage
+        # tenancy is carried by the adapter, not re-resolved in write_record).
+        adapter = self._get_adapter_for_tenant(tenant_id)
+
+        results: List[Dict[str, Any]] = []
+        events: List[IngestionEvent] = []
+
+        for record in records:
+            # Records are external JSON — treat the extracted fields as dynamic.
+            record_type: Any = record.get("record_type")
+            payload: Any = record.get("payload")
+            uri: Any = record.get("uri")
+            reliability_hint: Any = record.get("reliability_hint")
+
+            spec = self.registry.get_submittable_spec(record_type)
+            if spec is None:
+                results.append(
+                    {
+                        "uri": uri,
+                        "record_type": record_type,
+                        "status": "error",
+                        "errors": [f"Record type '{record_type}' is not submittable."],
+                    }
+                )
+                continue
+
+            # Idempotency context (insert vs. update in place), reusing the
+            # existing per-URI context builder against the tenant adapter.
+            contexts = self._build_contexts(
+                [uri], spec.plugin, "0.0.0", [record_type], storage=adapter
+            )
+            ctx = contexts[uri]
+
+            try:
+                doc_id = write_record(
+                    adapter,
+                    record_type,
+                    payload,
+                    uri,
+                    tenant_id,
+                    spec=spec,
+                    reliability_hint=reliability_hint,
+                    context=ctx,
+                )
+            except RecordValidationError as exc:
+                results.append(
+                    {
+                        "uri": uri,
+                        "record_type": record_type,
+                        "status": "error",
+                        "errors": exc.errors,
+                    }
+                )
+                continue
+
+            results.append(
+                {
+                    "uri": uri,
+                    "record_type": record_type,
+                    "status": "written",
+                    "doc_id": doc_id,
+                }
+            )
+            events.append(
+                IngestionEvent(
+                    plugin=spec.plugin,
+                    record_type=record_type,
+                    uris=[uri],
+                    doc_ids=[doc_id],
+                    # A pushed record carries no input semantic_type — routing
+                    # on this path is by record_type (SPEC-012 three-type
+                    # vocabulary). Observers subscribe by record_type.
+                    semantic_types=[],
+                    tenant_id=tenant_id,
+                )
+            )
+
+        # Phase 2: same observer broadcast as ingest (record_type filtering).
+        await self._broadcast_events(events)
+        return results

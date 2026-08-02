@@ -1,0 +1,106 @@
+# Stories for SPEC-012: Structured Ingestion Contracts
+# Agents may only modify 'status' and 'verified_by' fields.
+# status: failing | passing
+
+stories:
+  STORY-001:
+    name: Mandatory schema and registration guards
+    description: >
+      RecordTypeSpec gains a mandatory `schema` plus `submittable` and
+      `embed_source`. PluginRegistry.register rejects a missing/empty schema,
+      a schema that declares envelope fields, and a second submittable declarer
+      for the same record_type.
+    # Guards scoped to submittable=True types; global enforcement deferred to STORY-005.
+    # Carried to STORY-005 (guard hardening): close intra-batch duplicate-submittable
+    # hole; name the plugin in missing-schema/envelope-field error messages.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 07a4e62)"
+
+  STORY-002:
+    name: Canonical validated write path (write_record toolkit)
+    description: >
+      toolkit.write_record validates the payload against the record type's
+      schema (reject on failure), embeds from embed_source (or writes no vector),
+      content-hashes, applies the SPEC-007 reliability ladder, writes idempotently
+      (insert vs update), and stores the payload 1:1 as the metadata sub-document.
+    # Minor nit for STORY-003 wiring: write_record's tenant_id param is unused
+    # (tenant is resolved via the storage adapter upstream) — reconcile when
+    # ingest_structured passes the tenant-scoped adapter.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit aa09c55)"
+
+  STORY-003:
+    name: submit_structured endpoint and ingest_structured pipeline
+    description: >
+      A batch MCP tool that validates and writes each record via write_record,
+      strict per record and best-effort across the batch, returns per-record
+      results, emits IngestionEvents, and lets existing observers fire.
+    # Minor (future hardening): best-effort loop catches RecordValidationError only;
+    # a storage/embedding failure on one record aborts the batch. Acceptable for v1.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 1873606)"
+
+  STORY-004:
+    name: Discovery of submittable contracts
+    description: >
+      list_record_types surfaces every record type with its schema and flags
+      which are submittable, so external callers know what they may push.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 14bf9ba)"
+
+  STORY-005:
+    name: MarkdownPlugin compliance
+    description: >
+      MarkdownPlugin declares real enforced schemas, reduces metadata to
+      payload-only (no envelope fields), and writes through write_record —
+      preserving SPEC-011 parent/segment behavior. Also extended the
+      mandatory-schema guard to ALL record types (envelope/single-declarer
+      checks stay submittable-only).
+    # Minor follow-up: markdown process_bundle mutates a transient spec's .plugin;
+    # prefer an explicit plugin= param on write_record if that code is next touched.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 3f27209)"
+
+  STORY-006:
+    name: Raw content by-value ingestion
+    description: >
+      ingest_documents items may carry {uri, content, media_type}; inline
+      content is used without a fetch, media_type is required with content,
+      and uri remains the identity key. Decoding stays in the plugin.
+    # Note: AC-002 rejection is whole-batch (fail-fast), consistent with the
+    # existing ResourceResolver contract; per-item best-effort is a future option.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 0aa36ed)"
+
+  STORY-007:
+    name: Documentation and ADR-011
+    description: >
+      Plugin developer guide, system-overview, and ingestion diagrams updated;
+      ADR-011 authored. Non-BDD story (no acceptance criteria).
+    status: passing
+    verified_by: "2026-08-02 docs authored + accuracy-checked against code (commit e189dfa)"
+
+verification:
+  criteria:
+    - All BDD tests for STORY-001..006 pass
+    - MarkdownPlugin end-to-end ingestion still produces SPEC-011 parent/segments
+    - submit_structured rejects invalid records per-record while writing valid ones
+    - No unvalidated write path exists (every write goes through write_record)
+    - Code review approved
+  completed: true
+  completed_date: 2026-08-02
+  evidence: >
+    490 tests pass; ruff clean on all SPEC-012 source. Each of STORY-001..007
+    cleared independent spec-compliance + code-quality review; a final holistic
+    review confirmed end-to-end integration and the single-write-path invariant
+    (only the deliberate SPEC-011 parent uses save_parent, preceded by
+    validate_record). Plugin developer guide migrated fully to write_record.
+  known_followups:
+    - "Guard hardening (minor edge): intra-batch duplicate-submittable name not
+       caught; missing-schema/envelope errors don't name the plugin."
+    - "ingest_structured best-effort catches only RecordValidationError; a
+       storage/embedding failure aborts the remaining batch."
+    - "write_record tenant_id param is unused (adapter is tenant-scoped)."
+    - "markdown process_bundle mutates a transient spec's .plugin instead of an
+       explicit plugin= arg."
+    - "AC-002 (raw by-value) rejects the whole call rather than per-item."

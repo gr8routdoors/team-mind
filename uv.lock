@@ -762,6 +762,7 @@ name = "team-mind-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "mcp" },
     { name = "sqlite-vec" },
 ]
@@ -776,6 +777,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "sqlite-vec", specifier = ">=0.1.1" },
 ]

@@ -1,4 +1,3 @@
-import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
@@ -6,20 +5,18 @@ from team_mind_mcp.server import ToolProvider, IngestProcessor, RecordTypeSpec
 from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 from team_mind_mcp.media_types import get_media_type
+from team_mind_mcp.toolkit import (
+    RecordValidationError,
+    validate_record,
+    write_record,
+)
 
+# Shared, single-source embedding + hashing (see team_mind_mcp.embedding).
+# Re-exported under the historic private names for existing callers/tests.
+from team_mind_mcp.embedding import mock_embed as _mock_embed
+from team_mind_mcp.embedding import content_hash as _content_hash
 
-def _mock_embed(text: str) -> list[float]:
-    """Deterministically generates a 768-d vector from text for MVP."""
-    vector = [0.0] * 768
-    h = hashlib.md5(text.encode("utf-8")).digest()
-    for i in range(min(16, len(h))):
-        vector[i] = h[i] / 255.0
-    return vector
-
-
-def _content_hash(text: str) -> str:
-    """SHA-256 hash of content for idempotent ingestion."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+__all__ = ["MarkdownPlugin", "_mock_embed", "_content_hash"]
 
 
 class MarkdownPlugin(ToolProvider, IngestProcessor):
@@ -47,20 +44,34 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 name="markdown_source",
                 description="A parent document representing the source markdown file.",
                 schema={
-                    "source_uri": {"type": "string", "description": "The original file URI."},
-                    "chunk_count": {"type": "integer", "description": "Number of paragraph chunks."},
+                    "type": "object",
+                    "properties": {
+                        "source_uri": {
+                            "type": "string",
+                            "description": "The original file URI.",
+                        },
+                        "chunk_count": {
+                            "type": "integer",
+                            "description": "Number of paragraph chunks.",
+                        },
+                    },
+                    "required": ["source_uri", "chunk_count"],
                 },
             ),
             RecordTypeSpec(
                 name="markdown_chunk",
                 description="A paragraph-level chunk extracted from a markdown document.",
                 schema={
-                    "chunk": {
-                        "type": "string",
-                        "description": "The text content of the chunk.",
+                    "type": "object",
+                    "properties": {
+                        "chunk": {
+                            "type": "string",
+                            "description": "The text content of the chunk.",
+                        },
                     },
-                    "plugin": {"type": "string", "description": "Owning plugin name."},
+                    "required": ["chunk"],
                 },
+                embed_source=["chunk"],
             ),
         ]
 
@@ -132,27 +143,36 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         parent_doc_ids: list[int] = []
         semantic_type = ",".join(bundle.semantic_types)
 
-        # Resolve reliability: hint wins over plugin default, default wins over zero
-        # Use the markdown_chunk record type (index 1) for default_reliability
-        chunk_record_type = next(
+        # Resolve the declared record type specs once. The parent is validated
+        # against its schema then persisted via save_parent (no vector, no weight
+        # — SPEC-011); segments are written through the canonical write_record
+        # path (validation + embedding + weight). Stamp the chunk spec's plugin
+        # so write_record records the correct envelope plugin even when the
+        # plugin is used un-registered (direct process_bundle in tests).
+        source_spec = next(
+            (rt for rt in self.record_types if rt.name == "markdown_source"), None
+        )
+        chunk_spec = next(
             (rt for rt in self.record_types if rt.name == "markdown_chunk"), None
         )
-        initial_score = (
-            bundle.reliability_hint
-            if bundle.reliability_hint is not None
-            else ((chunk_record_type.default_reliability if chunk_record_type else None) or 0.0)
-        )
+        if chunk_spec is not None:
+            chunk_spec.plugin = self.name
 
         for uri in bundle.uris:
-            # Fetch content (supporting file:// locally for MVP)
-            try:
-                if uri.startswith("file://"):
-                    req = urllib.request.urlopen(uri)
-                    content = req.read().decode("utf-8")
-                else:
+            # By-value content (SPEC-012 STORY-006): when the caller supplied
+            # inline content for this URI, use it directly — no fetch. Otherwise
+            # fetch by reference (supporting file:// locally for MVP).
+            if uri in bundle.contents:
+                content = bundle.contents[uri]
+            else:
+                try:
+                    if uri.startswith("file://"):
+                        req = urllib.request.urlopen(uri)
+                        content = req.read().decode("utf-8")
+                    else:
+                        continue
+                except Exception:
                     continue
-            except Exception:
-                continue
 
             # Check ingestion context for idempotent processing
             ctx = bundle.contexts.get(uri)
@@ -174,17 +194,30 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 current_hash = _content_hash(content)
 
             processed_uris.append(uri)
-            media_type = get_media_type(uri)
+            # Prefer the caller-declared media type for inline items (their URI
+            # carries no extension to infer from); fall back to extension-based
+            # resolution for by-reference items.
+            media_type = bundle.declared_media_types.get(uri) or get_media_type(uri)
 
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]
 
-            # Create parent document for the source file
+            # Create parent document for the source file. The parent payload is
+            # validated against markdown_source's schema (so it is schema-checked
+            # like every record), then persisted via save_parent — which, per
+            # SPEC-011, writes NO vector and NO weight row. The parent is
+            # deliberately NOT routed through write_record (that always creates a
+            # weight row).
+            parent_payload = {"source_uri": uri, "chunk_count": len(chunks)}
+            if source_spec is not None:
+                errors = validate_record(parent_payload, source_spec.schema)
+                if errors:
+                    raise RecordValidationError("markdown_source", errors)
             parent_id = bundle.storage.save_parent(
                 uri=uri,
                 plugin=self.name,
                 record_type="markdown_source",
-                metadata={"source_uri": uri, "chunk_count": len(chunks)},
+                metadata=parent_payload,
                 content_hash=current_hash,
                 plugin_version=self.version,
                 semantic_type=semantic_type,
@@ -192,22 +225,26 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             )
             parent_doc_ids.append(parent_id)
 
-            # Create segment per paragraph chunk
+            # Create segment per paragraph chunk via the canonical write_record
+            # path: validates against markdown_chunk's schema, embeds the chunk
+            # text (embed_source=["chunk"]) into a vector, seeds reliability
+            # (hint -> default -> 0.0), and creates the weight row. The stored
+            # metadata is the payload 1:1 ({"chunk": ...}) — no envelope fields.
             for i, chunk in enumerate(chunks):
-                vector = _mock_embed(chunk)
-                metadata = {"chunk": chunk, "plugin": self.name}
-                doc_id = bundle.storage.save_payload(
+                if chunk_spec is None:
+                    continue
+                doc_id = write_record(
+                    bundle.storage,
+                    "markdown_chunk",
+                    {"chunk": chunk},
                     f"{uri}#chunk-{i}",
-                    metadata,
-                    vector,
-                    plugin=self.name,
-                    record_type="markdown_chunk",
+                    bundle.tenant_id,
+                    spec=chunk_spec,
+                    reliability_hint=bundle.reliability_hint,
                     parent_id=parent_id,
-                    content_hash=current_hash,
-                    plugin_version=self.version,
                     semantic_type=semantic_type,
                     media_type=media_type,
-                    initial_score=initial_score,
+                    plugin_version=self.version,
                 )
                 doc_ids.append(doc_id)
 

@@ -24,7 +24,9 @@ class _Alpha(ToolProvider):
             RecordTypeSpec(
                 name="type_a", description="Alpha A", schema={"f": {"type": "string"}}
             ),
-            RecordTypeSpec(name="type_b", description="Alpha B"),
+            RecordTypeSpec(
+                name="type_b", description="Alpha B", schema={"type": "object"}
+            ),
         ]
 
 
@@ -36,8 +38,12 @@ class _Beta(IngestProcessor):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="type_a", description="Beta A"),
-            RecordTypeSpec(name="type_c", description="Beta C"),
+            RecordTypeSpec(
+                name="type_a", description="Beta A", schema={"type": "object"}
+            ),
+            RecordTypeSpec(
+                name="type_c", description="Beta C", schema={"type": "object"}
+            ),
         ]
 
 
@@ -48,7 +54,11 @@ class _Gamma(ToolProvider):
 
     @property
     def record_types(self) -> list[RecordTypeSpec]:
-        return [RecordTypeSpec(name="type_d", description="Gamma D")]
+        return [
+            RecordTypeSpec(
+                name="type_d", description="Gamma D", schema={"type": "object"}
+            )
+        ]
 
 
 @pytest.fixture
@@ -213,3 +223,123 @@ async def test_no_doctypes_registered():
     # Then an empty list is returned
     assert result == []
     # And no error is raised (implicit)
+
+
+# --- SPEC-012 / STORY-004: Discovery of submittable contracts ---
+
+
+class _Catalog(ToolProvider):
+    """Declares a submittable record type with a JSON Schema."""
+
+    @property
+    def name(self) -> str:
+        return "catalog"
+
+    @property
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [
+            RecordTypeSpec(
+                name="service_profile",
+                description="A submittable service profile",
+                schema={
+                    "type": "object",
+                    "properties": {"title": {"type": "string"}},
+                },
+                submittable=True,
+            ),
+        ]
+
+
+class _Notes(ToolProvider):
+    """Declares a non-submittable record type."""
+
+    @property
+    def name(self) -> str:
+        return "notes"
+
+    @property
+    def record_types(self) -> list[RecordTypeSpec]:
+        return [
+            RecordTypeSpec(
+                name="scratch_note",
+                description="A non-submittable note",
+                schema={"type": "object"},
+            ),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_ac_001_submittable_record_type_exposes_schema():
+    """
+    STORY-004 AC-001: Submittable record type exposes its schema.
+    """
+    # Given a submittable record type service_profile with a JSON Schema
+    registry = PluginRegistry()
+    registry.register(_Catalog())
+    plugin = DoctypeDiscoveryPlugin(registry)
+
+    # When list_record_types is called
+    response = await plugin.call_tool("list_record_types", {})
+    result = json.loads(response[0].text)
+
+    # Then the result includes service_profile with its schema, plugin, description
+    entry = next(r for r in result if r["name"] == "service_profile")
+    assert entry["schema"] == {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+    }
+    assert entry["plugin"] == "catalog"
+    assert entry["description"] == "A submittable service profile"
+    assert entry["submittable"] is True
+
+
+@pytest.mark.asyncio
+async def test_ac_002_submittable_flag_distinguishes_pushable_types():
+    """
+    STORY-004 AC-002: Submittable flag distinguishes pushable types.
+    """
+    # Given one submittable and one non-submittable record type are registered
+    registry = PluginRegistry()
+    registry.register(_Catalog())
+    registry.register(_Notes())
+    plugin = DoctypeDiscoveryPlugin(registry)
+
+    # When list_record_types is called
+    response = await plugin.call_tool("list_record_types", {})
+    result = json.loads(response[0].text)
+
+    # Then both are listed and each entry indicates whether it is submittable
+    by_name = {r["name"]: r for r in result}
+    assert by_name["service_profile"]["submittable"] is True
+    assert by_name["scratch_note"]["submittable"] is False
+
+    # And a caller can therefore tell which submit_structured will accept
+    submittable_names = {r["name"] for r in result if r["submittable"]}
+    assert submittable_names == {"service_profile"}
+
+
+@pytest.mark.asyncio
+async def test_ac_003_existing_plugin_and_record_filters_still_work():
+    """
+    STORY-004 AC-003: Existing plugin/record filters still work.
+    """
+    # Given record types from multiple plugins
+    registry = PluginRegistry()
+    registry.register(_Catalog())
+    registry.register(_Notes())
+    plugin = DoctypeDiscoveryPlugin(registry)
+
+    # When list_record_types is called with a plugins filter
+    response = await plugin.call_tool("list_record_types", {"plugins": ["catalog"]})
+    result = json.loads(response[0].text)
+
+    # Then only that plugin's record types are returned
+    assert [r["name"] for r in result] == ["service_profile"]
+    assert all(r["plugin"] == "catalog" for r in result)
+
+    # And the same holds for a record_types name filter (existing behavior)
+    response = await plugin.call_tool(
+        "list_record_types", {"record_types": ["scratch_note"]}
+    )
+    result = json.loads(response[0].text)
+    assert [r["name"] for r in result] == ["scratch_note"]

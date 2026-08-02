@@ -203,8 +203,7 @@ async def test_ingest_documents_tool_schema_has_semantic_types():
     tools = plugin.get_tools()
 
     # Then ingest_documents includes semantic_types in its schema
-    assert len(tools) == 1
-    tool = tools[0]
+    tool = next(t for t in tools if t.name == "ingest_documents")
     assert tool.name == "ingest_documents"
     props = tool.inputSchema["properties"]
     assert "semantic_types" in props
