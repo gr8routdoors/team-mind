@@ -1,4 +1,3 @@
-import hashlib
 import json
 import urllib.request
 from mcp.types import Tool, TextContent
@@ -7,19 +6,12 @@ from team_mind_mcp.storage import StorageAdapter
 from team_mind_mcp.ingestion import IngestionBundle, IngestionEvent
 from team_mind_mcp.media_types import get_media_type
 
+# Shared, single-source embedding + hashing (see team_mind_mcp.embedding).
+# Re-exported under the historic private names for existing callers/tests.
+from team_mind_mcp.embedding import mock_embed as _mock_embed
+from team_mind_mcp.embedding import content_hash as _content_hash
 
-def _mock_embed(text: str) -> list[float]:
-    """Deterministically generates a 768-d vector from text for MVP."""
-    vector = [0.0] * 768
-    h = hashlib.md5(text.encode("utf-8")).digest()
-    for i in range(min(16, len(h))):
-        vector[i] = h[i] / 255.0
-    return vector
-
-
-def _content_hash(text: str) -> str:
-    """SHA-256 hash of content for idempotent ingestion."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+__all__ = ["MarkdownPlugin", "_mock_embed", "_content_hash"]
 
 
 class MarkdownPlugin(ToolProvider, IngestProcessor):
@@ -47,8 +39,14 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 name="markdown_source",
                 description="A parent document representing the source markdown file.",
                 schema={
-                    "source_uri": {"type": "string", "description": "The original file URI."},
-                    "chunk_count": {"type": "integer", "description": "Number of paragraph chunks."},
+                    "source_uri": {
+                        "type": "string",
+                        "description": "The original file URI.",
+                    },
+                    "chunk_count": {
+                        "type": "integer",
+                        "description": "Number of paragraph chunks.",
+                    },
                 },
             ),
             RecordTypeSpec(
@@ -140,7 +138,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
         initial_score = (
             bundle.reliability_hint
             if bundle.reliability_hint is not None
-            else ((chunk_record_type.default_reliability if chunk_record_type else None) or 0.0)
+            else (
+                (chunk_record_type.default_reliability if chunk_record_type else None)
+                or 0.0
+            )
         )
 
         for uri in bundle.uris:

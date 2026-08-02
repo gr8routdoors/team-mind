@@ -327,11 +327,14 @@ class StorageAdapter:
         doc_id: int,
         metadata: dict,
         vector: list[float],
+        content_hash: str | None = None,
     ) -> None:
         """Update an existing document's metadata and vector in place.
 
         The plugin/record_type/uri are immutable — only content changes.
         Preserves the existing weight row (usage_score, tombstone, etc.).
+        When ``content_hash`` is provided the row's hash is refreshed too so
+        idempotency comparisons stay accurate; when None the hash is left as-is.
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized")
@@ -343,16 +346,111 @@ class StorageAdapter:
             if row is None:
                 raise ValueError(f"No document with id={doc_id}")
 
-            self._conn.execute(
-                "UPDATE documents SET metadata = ? WHERE id = ?",
-                (json.dumps(metadata), doc_id),
-            )
+            if content_hash is not None:
+                self._conn.execute(
+                    "UPDATE documents SET metadata = ?, content_hash = ? WHERE id = ?",
+                    (json.dumps(metadata), content_hash, doc_id),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE documents SET metadata = ? WHERE id = ?",
+                    (json.dumps(metadata), doc_id),
+                )
 
             vec_bytes = struct.pack(f"{len(vector)}f", *vector)
             self._conn.execute(
                 "UPDATE vec_documents SET embedding = ? WHERE id = ?",
                 (vec_bytes, doc_id),
             )
+
+    def save_metadata_record(
+        self,
+        uri: str,
+        metadata: dict,
+        plugin: str,
+        record_type: str,
+        parent_id: int | None = None,
+        decay_half_life_days: float | None = None,
+        content_hash: str | None = None,
+        plugin_version: str = "0.0.0",
+        semantic_type: str = "",
+        media_type: str = "",
+        initial_score: float = 0.0,
+    ) -> int:
+        """Save a metadata-only document (document row + weight row, NO vector).
+
+        Mirrors :meth:`save_payload` but writes no ``vec_documents`` row — used
+        for record types with no ``embed_source``. The record is still findable
+        via metadata search (``json_extract``) and ranked via its weight row.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        if parent_id is not None:
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (parent_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No document with id={parent_id}")
+
+        with self._conn:
+            cursor = self._conn.execute(
+                "INSERT INTO documents (uri, plugin, record_type, metadata, content_hash, "
+                "plugin_version, semantic_type, media_type, parent_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                (
+                    uri,
+                    plugin,
+                    record_type,
+                    json.dumps(metadata),
+                    content_hash,
+                    plugin_version,
+                    semantic_type,
+                    media_type,
+                    parent_id,
+                ),
+            )
+            doc_id = cursor.fetchone()[0]
+
+            # Auto-create weight row (no vector row for metadata-only records)
+            self._conn.execute(
+                "INSERT INTO doc_weights (doc_id, usage_score, decay_half_life_days) VALUES (?, ?, ?)",
+                (doc_id, initial_score, decay_half_life_days),
+            )
+
+            return doc_id
+
+    def update_metadata(
+        self,
+        doc_id: int,
+        metadata: dict,
+        content_hash: str | None = None,
+    ) -> None:
+        """Update a metadata-only document's metadata in place (no vector).
+
+        Preserves the weight row. When ``content_hash`` is provided the row's
+        hash is refreshed; when None the hash is left as-is.
+        """
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT id FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"No document with id={doc_id}")
+
+            if content_hash is not None:
+                self._conn.execute(
+                    "UPDATE documents SET metadata = ?, content_hash = ? WHERE id = ?",
+                    (json.dumps(metadata), content_hash, doc_id),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE documents SET metadata = ? WHERE id = ?",
+                    (json.dumps(metadata), doc_id),
+                )
 
     def delete_by_uri(
         self,
