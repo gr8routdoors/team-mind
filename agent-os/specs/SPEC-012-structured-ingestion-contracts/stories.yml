@@ -77,8 +77,8 @@ stories:
     description: >
       Plugin developer guide, system-overview, and ingestion diagrams updated;
       ADR-011 authored. Non-BDD story (no acceptance criteria).
-    status: failing
-    verified_by: null
+    status: passing
+    verified_by: "2026-08-02 docs authored + accuracy-checked against code (commit e189dfa)"
 
 verification:
   criteria:
