@@ -23,8 +23,11 @@ stories:
       schema (reject on failure), embeds from embed_source (or writes no vector),
       content-hashes, applies the SPEC-007 reliability ladder, writes idempotently
       (insert vs update), and stores the payload 1:1 as the metadata sub-document.
-    status: failing
-    verified_by: null
+    # Minor nit for STORY-003 wiring: write_record's tenant_id param is unused
+    # (tenant is resolved via the storage adapter upstream) — reconcile when
+    # ingest_structured passes the tenant-scoped adapter.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit aa09c55)"
 
   STORY-003:
     name: submit_structured endpoint and ingest_structured pipeline
