@@ -53,9 +53,13 @@ stories:
     description: >
       MarkdownPlugin declares real enforced schemas, reduces metadata to
       payload-only (no envelope fields), and writes through write_record —
-      preserving SPEC-011 parent/segment behavior.
-    status: failing
-    verified_by: null
+      preserving SPEC-011 parent/segment behavior. Also extended the
+      mandatory-schema guard to ALL record types (envelope/single-declarer
+      checks stay submittable-only).
+    # Minor follow-up: markdown process_bundle mutates a transient spec's .plugin;
+    # prefer an explicit plugin= param on write_record if that code is next touched.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 3f27209)"
 
   STORY-006:
     name: Raw content by-value ingestion
