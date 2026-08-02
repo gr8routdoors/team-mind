@@ -106,7 +106,12 @@ This keeps the framework able to write directly (no plugin logic needed). Push�
 }
 ```
 
-**Batch, matching `ingest_documents`.** Each record is validated and written independently; the response is a **per-record result** list (written `doc_id`, or the `jsonschema` errors for a rejected record). Valid records land even if others in the batch fail. A single record is a one-element list.
+**Batch, matching `ingest_documents`.** Each record is validated and written independently; the response is a **per-record result** list (written `doc_id`, or the `jsonschema` errors for a rejected record). A single record is a one-element list.
+
+Two batch semantics, decided and fixed (for ADR-011):
+
+- **Best-effort across the batch — no all-or-nothing rollback.** Valid records persist even when siblings fail; a rejected record never unwrites an already-written one. (Strict *per record*, best-effort *across* the batch.)
+- **An empty `records` list is an error** — at least one record is required, matching `ingest_documents` (`ingestion_plugin.py:57`). Nothing is written.
 
 ### `RecordTypeSpec` (extended)
 
@@ -192,6 +197,8 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 | `metadata` 1:1 with payload | spread vs. sub-document | Contract = payload = `metadata`; envelope on the record; clean Mongo shape. |
 | `uri` required (identity) | optional/hash-derived vs. required | Reuses SPEC-004/005 idempotency; enables updates; motivating case has a natural identity. |
 | Batch endpoint (per-record results) | single record vs. batch | `ingest_documents` already batches (array of `uris`), so `submit_structured` matches it. Strict per record, best-effort across the batch; a single record is a one-element list. |
+| Best-effort batch, no rollback | all-or-nothing vs. per-record | A sibling's failure never unwrites a valid record — matches `ingest_documents`' best-effort nature and is more useful than failing a 500-record batch on one bad row. |
+| Empty batch is an error | accept empty (no-op) vs. reject | At least one record required, mirroring `ingest_documents` (`ingestion_plugin.py:57`). |
 | No `semantic_types` param on the tool | keep vs. drop | Not routing here; observer labels come from the declarer's `semantic_type`. |
 | Keep `reliability_hint` | drop vs. keep | Thin passthrough to SPEC-007; enables confidence-tiering the Service Profile needs. |
 | Single submittable declarer per record_type | multi vs. single | Unambiguous schema/write owner; caught at registration. |
@@ -241,4 +248,4 @@ Provisional (stories/ACs to follow).
 ### Task 8: Documentation
 - Plugin developer guide (submittable record types, `write_record` toolkit, embed_source, metadata 1:1, field-naming, the three-type vocabulary).
 - System overview + ingestion diagrams; fix `record_type`/`semantic_type` conflation.
-- Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; framework write + toolkit; metadata 1:1; three-type clarification).
+- Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; framework write + toolkit; metadata 1:1; three-type clarification; batch semantics — best-effort across the batch, empty-batch rejected).
