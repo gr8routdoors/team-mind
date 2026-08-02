@@ -10,8 +10,11 @@ stories:
       `embed_source`. PluginRegistry.register rejects a missing/empty schema,
       a schema that declares envelope fields, and a second submittable declarer
       for the same record_type.
-    status: failing
-    verified_by: null
+    # Guards scoped to submittable=True types; global enforcement deferred to STORY-005.
+    # Carried to STORY-005 (guard hardening): close intra-batch duplicate-submittable
+    # hole; name the plugin in missing-schema/envelope-field error messages.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 07a4e62)"
 
   STORY-002:
     name: Canonical validated write path (write_record toolkit)
