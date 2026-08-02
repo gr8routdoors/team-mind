@@ -2,117 +2,70 @@
 
 ## Overview
 
-This spec extends the ingestion boundary from **by-reference only** (`ingest_documents(uris)` — the pipeline fetches) to **by-value**: callers may submit the content itself. Two payload shapes share the door, distinguished by whether the content still needs *decoding* or is already a *record*:
+Adds an external door for pushing a **pre-refined record** — a fully-formed instance of a declared `record_type` — directly into the catalog, validated against a schema at the boundary. The caller (an AI agent in its own harness, or a deterministic tool) has already done the refinement; the framework validates the payload, writes it, and emits an event so subscribed observers react. This is the platform's **first schema enforcement**: today `RecordTypeSpec.schema` is an advisory dict validated by nothing.
 
-1. **Inline raw content** — bytes + a declared `media_type`. The framework decodes/validates well-formedness, then hands the decoded content to a plugin that interprets it (chunk, embed, write). Same self-extract semantics as the URI path, minus the fetch.
-2. **Structured record** — a finished record (JSON). The framework validates it against the target `record_type`'s **JSON Schema contract**, then hands the validated payload to a plugin that maps it to storage.
+The scope is deliberately small because most of the machinery already exists — routing, storage, observer subscription-by-record_type, and reliability seeding are all in place. This spec adds a validated write endpoint on top of them.
 
-Both are gated at the pipeline boundary. Neither gate lives inside a plugin.
+## The three types (vocabulary — use precisely)
 
-## The two gates
+The framework already models three distinct types (SPEC-008 / ADR-007). They must not be conflated:
 
-| Gate | Applies to | Mechanism | Owner |
-|------|-----------|-----------|-------|
-| **Format / well-formedness** ("bad-data bar") | inline raw content (and, later, fetched URIs) | decode bytes as the declared `media_type`; malformed → reject | framework (trivial decoders here; SPEC-013 generalizes) |
-| **Record-schema conformance** | structured records | validate JSON payload against the record type's JSON Schema; invalid → reject | framework (this spec) |
+| Type | Meaning | Example | Role here |
+|------|---------|---------|-----------|
+| `media_type` | raw data format | `text/markdown`, `audio/wav` | not used on this path (raw ingestion — future SPEC-013) |
+| `semantic_type` | semantic identity of the *input* | `meeting`, `service_repo` | routes raw input to refining plugins; **not** used on the push path |
+| `record_type` | the *refined output* record | `service_profile`, `meeting_metrics` | **the key for this spec** — the caller sends one directly |
 
-## The decode-vs-interpret razor
-
-The boundary between framework responsibility and plugin responsibility:
-
-- **Decode / validate** — bytes+format → faithful structure; JSON record → schema-valid payload. Lossless, deterministic, no judgment. **→ framework.**
-- **Interpret** — a structure → the records we store (chunking, which text to embed, fan-out to parent + segments, derived counts). A *choice* that varies per plugin. **→ plugin.**
-
-## Interface Definition Language: JSON Schema
-
-Record contracts are expressed in **JSON Schema**, validated with the `jsonschema` library.
-
-- **JSON-native end to end.** Producers emit JSON, we validate JSON, we persist JSON in `documents.metadata` (so SPEC-010 `json_extract` search keeps working). No serialization/interchange conversion, no build step.
-- **Rich constraints in one library.** `required`, types, `minimum/maximum`, `pattern`, `enum`, `minItems`, `oneOf` — natively, no second constraint layer.
-- **MongoDB-portable enforcement.** JSON Schema is Mongo's native validator (`$jsonSchema`), so at scale the *same* contract can be pushed down to the collection as defense-in-depth. (Considered and rejected: Protobuf — typed/cross-language but not stored (we keep JSON for search), not enforceable by Mongo, and adds a toolchain + proto→JSON canonicalization. Pydantic — Python-bound.)
-- **Single IDL, one validator behind the seam.** We do not build a multi-IDL registry. The `PayloadValidator` interface exists only so the IDL is not hardwired across the codebase; it ships exactly **one** implementation (`JsonSchemaValidator`).
-
-## Components
-
-| Component | Type | Change | Purpose |
-|-----------|------|--------|---------|
-| `submit_structured` MCP tool | Tool (new) | new | External door for structured-record submission. |
-| `IngestionPlugin` | ToolProvider | modified | Hosts `submit_structured`; extends `ingest_documents` to accept inline content. |
-| `IngestionPipeline` | Service | modified | New `ingest_structured(...)` entry; wires the two gates; by-value content path. |
-| `PayloadValidator` | ABC (new) | new | The record-schema gate seam. One implementation. |
-| `JsonSchemaValidator` | Validator (new) | new | Validates a JSON payload against the record type's JSON Schema; returns the validated payload. |
-| Format/well-formedness check | Validator (new) | new | The "bad-data bar" for inline raw content (trivial decoders for now). |
-| `RecordTypeSpec` | dataclass | modified | Opt-in `submittable`; when set, `schema` becomes the enforced JSON Schema. |
-| `IngestProcessor` | ABC | modified | New `process_structured(submission)` hook; receives the validated payload. |
-| `PluginRegistry` | Service | modified | Owner-uniqueness check for submittable record types; lookup by submittable record_type. |
-| `StructuredSubmission` | dataclass (new) | new | Validated payload + envelope (record_type, uri, reliability_hint, tenant, semantic_types). |
-| `MarkdownPlugin` | Processor | modified | Consumes framework-provided content instead of fetching. |
-| `DoctypeDiscoveryPlugin` | ToolProvider | modified | Surfaces submittable record types + their JSON Schema via `list_record_types`. |
+One `semantic_type` can fan out to many `record_type`s (a `meeting` → `meeting_metrics` + `architecture_strawman`), but that fan-out is a *raw-ingestion* concern. On the **structured-push path the caller has already refined to one `record_type`**, so routing is by `record_type` — no input-semantic fan-out to resolve.
 
 ## Data Flow
 
-### Structured-record path (the primary new capability)
-
 ```
-caller → submit_structured(record_type, payload, uri, ...)
+caller → submit_structured(record_type, payload, uri, reliability_hint?, tenant_id?)
   → IngestionPlugin.call_tool
     → IngestionPipeline.ingest_structured
-       1. owner = registry.get_submittable_owner(record_type)     # exactly one, or error
-       2. spec  = owner.record_type_spec(record_type)             # must be submittable
-       3. result = JsonSchemaValidator.validate(payload, spec.schema)
-             jsonschema.validate(payload, spec.schema)            # types/required/ranges/enums/...
-          # failure → REJECT with structured errors; nothing written
-       4. ctx = build IngestionContext(uri, plugin, record_type)  # SPEC-004/005 idempotency (skip/update/replace)
-       5. submission = StructuredSubmission(record_type, payload, uri, reliability_hint, tenant, context=ctx, ...)
-       6. events = await owner.process_structured(submission)     # plugin embeds + writes (save_payload(metadata=payload))
-       7. observers react (Phase 2, unchanged)
+       1. spec = registry.get_submittable_spec(record_type)         # the one declarer, or error
+       2. JsonSchemaValidator.validate(payload, spec.schema)        # REJECT on failure; nothing written
+       3. ctx = build IngestionContext(uri, record_type)           # SPEC-004/005 idempotency (insert vs update)
+       4. doc_id = toolkit.write_record(                            # the CANONICAL write path (see below)
+             record_type, payload, uri, tenant,
+             reliability_hint=reliability_hint, context=ctx)
+       5. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
+       6. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
 ```
 
-Rejection is **strict and atomic**: a validation failure returns structured errors and writes nothing. (Contrast the URI path, which is best-effort/no-op.) This strictness is the point — the platform's first schema enforcement.
+No new subscription mechanism, no plugin write-hook. Rejection is **strict and atomic** — a schema failure returns structured errors and writes nothing.
 
-### Inline-raw path (by-value extract)
+## The canonical write path (plugin toolkit)
 
+To prevent write-sprawl (the framework writing one way, plugins another), record writes go through **one** method in a plugin toolkit/SDK, used by the framework on this path and available to plugins on other paths (raw ingestion, future meta-plugins):
+
+```python
+# team_mind_mcp.toolkit (new)
+def write_record(
+    storage, record_type: str, payload: dict, uri: str, tenant_id: str,
+    *, reliability_hint: float | None = None, spec: RecordTypeSpec,
+    context: IngestionContext | None = None, parent_id: int | None = None,
+) -> int:
+    """Canonical record write. Owns:
+       - embedding: derive text from spec.embed_source (if declared) and embed; else no vector
+       - content_hash over the payload
+       - reliability seeding ladder: reliability_hint -> spec.default_reliability -> 0.0  (SPEC-007)
+       - idempotency: insert vs update_payload based on `context`
+       - save_payload(metadata=payload, ...)  # payload stored 1:1 as the metadata sub-document
+    """
 ```
-caller → ingest_documents(documents=[{uri, content, media_type}], ...)
-  → IngestionPipeline.ingest
-     for each item:
-       if content present:
-         decode/validate well-formedness against media_type   # bad-data bar; REJECT if malformed
-         provide decoded content to matching processors        # no fetch
-       else:
-         resolve + fetch URI as today
-     → processor.process_bundle (interprets, embeds, writes)   # unchanged plugin contract
-```
 
-`uri` is the identity key for idempotency/updates (`lookup_existing_docs` keys on it), whether content is inline or fetched.
+Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable write contract. Existing plugins that call `save_payload` directly are migrated to it opportunistically (only MarkdownPlugin exists, and it stays on the raw path).
 
-## Storage & Serialization — `metadata` is 1:1 with the payload
+## Embedding on the push path
 
-The record persists through the existing `save_payload` path. The key model, confirmed:
+The record type declares an optional **embed source** — the field path(s) whose text is vectorized:
 
-- **Envelope fields** — `uri`, `id`, `record_type`, `plugin`, `content_hash`, `plugin_version`, `semantic_type`, `media_type`, `parent_id` (+ vector, weights) — live on the **containing record**: columns on `documents` today, top-level fields on the Mongo document later.
-- **`metadata`** is the **sub-document**, and it is **1:1 with the submitted payload** — the validated JSON goes in verbatim (SQLite: `json.dumps` into the `metadata` column; Mongo: a nested `metadata` sub-document).
+- `spec.embed_source` set → `write_record` embeds that text; the record is vector-searchable.
+- `spec.embed_source` absent → no vector; the record is a metadata-only document, still findable via SPEC-010 metadata search.
 
-So a submittable record type's **JSON Schema describes exactly the `metadata` sub-document** — the caller payload — and nothing else. Envelope fields are supplied out-of-band (`uri` on the call, `record_type` via routing, `id`/`plugin`/`content_hash` system-generated) and are never in the contract.
-
-At Mongo scale this is directly enforceable: `$jsonSchema` can validate the `metadata` sub-document with the same contract. No storage-schema change is required for this spec; the only binary in the store remains the embedding vector (`vec_documents.embedding`), which is orthogonal — the plugin still chooses which validated fields to embed.
-
-## Field Naming & Namespacing
-
-Two field-name namespaces; the contract owns only one.
-
-- **Envelope** (framework-owned): the record-level fields above. Not described by the contract.
-- **Payload** (contract-owned): the JSON Schema's properties = the `metadata` sub-document keys, 1:1.
-
-**Rules:**
-
-1. **`snake_case` by convention** for payload keys (matches envelope/column style and `json_extract` predicates).
-2. **1:1, no aliasing** — a schema property name *is* the stored `metadata` key.
-3. **Never flatten the payload — keep it nested under `metadata`.** In Mongo, mirror the shape (top-level envelope + nested `metadata`). `json_extract(metadata,'$.k')` → `{"metadata.k": ...}` is a mechanical remap. A payload field named `uri` is fine (`metadata.uri` ≠ envelope `uri`) and stays clear of Mongo's reserved `_id`. Flattening is the only thing that would create collisions — so we don't.
-
-**Consequence to accept:** we store and query **by name**, so payload field **names are durable contract**. Adding fields is safe; **renaming a payload field is a storage-breaking change** requiring migration.
-
-**MongoDB migration** (forward note): the nested-`metadata` shape is deliberately Mongo-portable. Envelope columns become top-level document fields (snake_case ports as-is); the one special case is Mongo's reserved **`_id`** — at migration we decide `id`→`_id` or keep a separate numeric `id`. An envelope/migration decision, independent of the IDL.
+This keeps the framework able to write directly (no plugin logic needed). Push→parent/segment fan-out is **out of scope for v1** — a pushed record is one stored record.
 
 ## API Contracts
 
@@ -121,38 +74,22 @@ Two field-name namespaces; the contract owns only one.
 ```jsonc
 {
   "name": "submit_structured",
-  "description": "Submit a pre-structured record for validated ingestion against a record type's JSON Schema.",
+  "description": "Submit a pre-refined record for validated ingestion against its record type's JSON Schema.",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "record_type":     { "type": "string", "description": "Target submittable record type (the routing key)." },
-      "payload":         { "type": "object", "description": "The record as JSON; validated against the record type's JSON Schema. Becomes the metadata sub-document 1:1." },
+      "record_type":     { "type": "string", "description": "The refined record type being submitted (routing key)." },
+      "payload":         { "type": "object", "description": "The record as JSON; validated against the record type's schema. Stored 1:1 as the metadata sub-document." },
       "uri":             { "type": "string", "description": "Identity key for idempotency / updates (required)." },
-      "semantic_types":  { "type": "array", "items": { "type": "string" }, "description": "Optional; forwarded to observers (not routing)." },
-      "reliability_hint":{ "type": "number", "description": "Optional reliability seed (0.0–1.0)." },
-      "tenant_id":       { "type": "string", "description": "Tenant to ingest into (default: 'default')." }
+      "reliability_hint":{ "type": "number", "description": "Optional confidence seed (0.0–1.0); top rung of SPEC-007 reliability seeding." },
+      "tenant_id":       { "type": "string", "description": "Tenant (default: 'default')." }
     },
     "required": ["record_type", "payload", "uri"]
   }
 }
 ```
 
-**Result:** on success, a summary (record_type, doc id(s)). On validation failure, structured errors listing offending fields/paths (from `jsonschema`). Nothing written on failure. *(Single record per call in v1; batching is a possible additive extension — decision #2.)*
-
-### `ingest_documents` (extended, backward-compatible)
-
-The flat `uris: [string]` form keeps working. A richer item form is added so callers may supply content by value:
-
-```jsonc
-{
-  "documents": [
-    { "uri": "file:///docs/a.md" },                                              // by reference (fetched) — unchanged
-    { "uri": "mem://note/42", "content": "# Title\n...", "media_type": "text/markdown" }  // by value (decoded)
-  ]
-}
-```
-
-`media_type` is **required** when `content` is present (no extension to sniff). `uri` is the identity key. (Unified `ingest_documents` per decision #1 — by-ref and by-value-raw are the same extract method.)
+Single record per call (v1). On validation failure, structured `jsonschema` errors; nothing written.
 
 ### `RecordTypeSpec` (extended)
 
@@ -161,134 +98,111 @@ The flat `uris: [string]` form keeps working. A richer item form is added so cal
 class RecordTypeSpec:
     name: str
     description: str
-    schema: dict = field(default_factory=dict)   # advisory when not submittable; ENFORCED JSON Schema when submittable
+    schema: dict = field(default_factory=dict)     # advisory when not submittable; ENFORCED JSON Schema when submittable
     plugin: str = ""
     decay_half_life_days: float | None = None
-    default_reliability: float | None = None
-    submittable: bool = False                     # NEW — opt-in structured ingestion
+    default_reliability: float | None = None        # existing — middle rung of the reliability ladder
+    submittable: bool = False                        # NEW — opt-in structured push
+    embed_source: list[str] | None = None            # NEW — field path(s) to vectorize; None = metadata-only
 ```
 
-When `submittable` is `True`, `schema` is a JSON Schema enforced against the submitted payload; it describes the `metadata` sub-document (payload) only and must not declare envelope fields (`id`, `uri`, `plugin`, `content_hash`, `vector`, `tenant`) — a registration guard rejects those. When `False` (default), `schema` is advisory and unenforced, exactly as today.
+When `submittable`, `schema` is a JSON Schema enforced against the payload; it describes the `metadata` sub-document (payload) only and must not declare envelope fields (`id`, `uri`, `plugin`, `content_hash`, `vector`, `tenant`) — a registration guard rejects those.
 
-### `IngestProcessor` (extended)
+### Validator (new)
 
 ```python
-async def process_structured(self, submission: "StructuredSubmission") -> list["IngestionEvent"]:
-    """Receive a validated payload and write it. The pipeline has already validated
-    `submission.payload` against the record type's JSON Schema and built an IngestionContext.
-    The payload IS the metadata sub-document (1:1). The plugin chooses embedding text,
-    performs any parent/segment fan-out, and calls save_payload(metadata=submission.payload, ...).
-    Default: raise NotImplementedError (a processor opts in by overriding)."""
+def validate_record(payload: dict, schema: dict) -> ValidationResult:
+    """jsonschema.validate(payload, schema); collect structured errors."""
 ```
 
-### `StructuredSubmission` (new)
+A single function — no multi-dialect registry. (A `PayloadValidator` seam is unnecessary ceremony at this scope; JSON Schema is the IDL.)
 
-```python
-@dataclass
-class StructuredSubmission:
-    record_type: str
-    payload: dict                 # validated; stored 1:1 as the metadata sub-document
-    uri: str
-    reliability_hint: float | None = None
-    tenant_id: str = "default"
-    semantic_types: list[str] = field(default_factory=list)
-    context: "IngestionContext | None" = None   # SPEC-004/005 idempotency
-    storage: "StorageAdapter | None" = None      # tenant-resolved adapter
-```
+## Reliability seeding (SPEC-007 passthrough)
 
-### Validator seam (new)
+`reliability_hint` is the top of the existing three-layer ladder, resolved in `write_record`:
 
-```python
-@dataclass
-class ValidationResult:
-    ok: bool
-    errors: list[str] = field(default_factory=list)
+1. `reliability_hint` (caller) → 2. `spec.default_reliability` → 3. `0.0` (platform).
 
-class PayloadValidator(ABC):
-    @abstractmethod
-    def validate(self, payload: dict, schema: dict) -> ValidationResult: ...
+The resolved value is `save_payload(initial_score=...)`, seeding `doc_weights.usage_score`, which feeds ranking (`WEIGHT_INFLUENCE`). Effect: a high-confidence pushed fact ranks up immediately. No new machinery — a passthrough to SPEC-007.
 
-class JsonSchemaValidator(PayloadValidator):
-    """jsonschema.validate(payload, schema); collects structured errors."""
-```
+## Storage & Serialization — `metadata` is 1:1 with the payload
 
-One implementation ships. The seam keeps the IDL from being hardwired without inviting a multi-IDL pile-up.
+- **Envelope fields** — `uri`, `id`, `record_type`, `plugin`, `content_hash`, `plugin_version`, `semantic_type`, `media_type`, `parent_id` (+ vector, weights) — live on the **containing record** (columns today, Mongo top-level fields later).
+- **`metadata`** is the **sub-document**, stored **1:1 with the validated payload** (`json.dumps` into the `metadata` column; a nested sub-document in Mongo).
+
+A submittable record type's **JSON Schema describes exactly the `metadata` sub-document**. At Mongo scale `$jsonSchema` can enforce it directly. No storage-schema change; the only binary in the store remains the embedding vector.
+
+## Field Naming & Namespacing
+
+Two namespaces; the contract owns only the payload.
+
+- **Envelope** (framework-owned): record-level fields above — not in the contract.
+- **Payload** (contract-owned): JSON Schema properties = `metadata` keys, 1:1, `snake_case`.
+
+Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property *is* the stored key; (3) never flatten — keep payload nested under `metadata`. Rule 3 prevents envelope/`_id` collisions (`metadata.uri` ≠ envelope `uri`) and makes SQLite→Mongo a query remap (`json_extract(metadata,'$.k')` → `{"metadata.k": ...}`). **Consequence:** we store/query by name, so payload **renames are storage-breaking** (adds are safe). Mongo `_id` mapping is an envelope/migration decision, IDL-independent.
 
 ## Registration & routing
 
-- A record type is **submittable** iff `RecordTypeSpec.submittable` is `True`.
-- `PluginRegistry.register` enforces **one submittable owner per record type name** (raises `ValueError`; mirrors the tool-collision check at `server.py:134`).
+- A record type is **submittable** iff `RecordTypeSpec.submittable` is `True`. Its declaring plugin is the single **declarer**.
+- `PluginRegistry.register` enforces **one submittable declarer per record_type** (raises `ValueError`; mirrors the tool-collision check at `server.py:134`).
 - Non-submittable record types are unaffected and may still be produced by multiple plugins.
-- `submit_structured` routes `record_type → the single submittable owner → process_structured`.
+- `submit_structured` routes `record_type → its declarer's spec → validate → write`. Subscribers are notified by the existing observer layer (`EventFilter.record_types`).
 
 ## Data model changes
 
-**None.** Structured records use the existing `save_payload` path (`documents.metadata` JSON + vector + weight row).
+**None.** Uses the existing `documents.metadata` + vector + weight rows via `save_payload`.
 
 ## Dependencies
 
-`pyproject.toml` gains `jsonschema` (the codebase currently declares zero validation dependencies). No build step, no codegen.
+`pyproject.toml` gains `jsonschema` (currently zero validation deps). No build step, no codegen.
 
 ## Trade-offs & Decisions
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| **JSON Schema as the IDL** | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema` enforcement at scale. Proto isn't stored (we keep JSON for search), isn't Mongo-enforceable, and adds a toolchain; Pydantic is Python-bound. |
-| **`metadata` is 1:1 with the payload** | payload spread across envelope vs. a single sub-document | Contract = payload = `metadata`; envelope fields live on the record. Clean SQLite columns / Mongo top-level + nested `metadata`. |
-| **Enforce `RecordTypeSpec.schema` when submittable** | separate input-schema artifact vs. the record's schema | Input ≡ output at the `metadata` level; reuse the existing field, opt-in. |
-| **Payload renames are storage-breaking** | — | We store/query by name; adds are safe, renames need migration. |
-| Separate `submit_structured` tool | mode flag vs. new tool | Different routing/behavior/failure semantics; the name is the method clarity. |
-| Exclude envelope fields from the contract | full-record schema vs. payload-only | Envelope is system-managed; a registration guard enforces it. |
-| Strict, atomic rejection | best-effort vs. strict | This is the enforcement milestone. |
-| Opt-in `submittable` | global vs. opt-in | Existing advisory schemas carry derived/owner fields; global enforcement would reject valid internal writes. |
-| Single submittable owner per record type | multi-owner vs. single | Structured push needs one unambiguous handoff; caught at registration. |
-| Plugin does write + embed | framework writes vs. plugin `process_structured` | Embedding is a projection choice — the decode-vs-interpret razor. |
-| `uri` required (identity) | optional/hash-derived vs. required | Reuses SPEC-004/005 idempotency; enables update semantics; motivating case has a natural identity. |
+| Scope = structured push only | one spec vs. push + raw + decoders | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint. Raw by-value → deferred SPEC-013; framework decoding → killed. |
+| JSON Schema IDL | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema`. |
+| Framework writes; plugins share the write method | plugin `process_structured` hook vs. framework write + toolkit | A pushed record is already refined; the framework writes it. One canonical `write_record` (framework + plugins) prevents write-sprawl. |
+| Declarative `embed_source` | plugin embed hook vs. declared source | Lets the framework write directly; covers the common case; complex embedding is future. |
+| Route by `record_type` | `semantic_type` vs. `record_type` | The caller sends the refined output; `semantic_type` fan-out is a raw-path concern. |
+| `metadata` 1:1 with payload | spread vs. sub-document | Contract = payload = `metadata`; envelope on the record; clean Mongo shape. |
+| `uri` required (identity) | optional/hash-derived vs. required | Reuses SPEC-004/005 idempotency; enables updates; motivating case has a natural identity. |
+| No `semantic_types` param on the tool | keep vs. drop | Not routing here; observer labels come from the declarer's `semantic_type`. |
+| Keep `reliability_hint` | drop vs. keep | Thin passthrough to SPEC-007; enables confidence-tiering the Service Profile needs. |
+| Single submittable declarer per record_type | multi vs. single | Unambiguous schema/write owner; caught at registration. |
 
 ## Backward compatibility
 
-- `ingest_documents(uris=[...])` is unchanged.
-- `RecordTypeSpec` gains `submittable` (default `False`); today's behavior preserved.
-- `IngestProcessor.process_structured` defaults to `NotImplementedError`; existing processors unaffected until they opt in.
-- No schema migration.
+- `ingest_documents(uris=[...])` unchanged.
+- `RecordTypeSpec` gains optional fields (`submittable=False`, `embed_source=None`); today's behavior preserved.
+- No schema migration; no changes to the raw/extract path.
 
 ---
 
 ## Execution Plan
 
-Provisional task breakdown (stories/ACs to be finalized in the follow-up pass).
+Provisional (stories/ACs to follow).
 
-### Task 1: Validator seam
-- Add `jsonschema`; `PayloadValidator` ABC, `ValidationResult`, `JsonSchemaValidator`.
-- Structured error surfacing from `jsonschema`.
+### Task 1: Validator + submittable declaration
+- Add `jsonschema`; `validate_record`.
+- `RecordTypeSpec.submittable` + `embed_source`; registration guard (no envelope fields in a submittable schema).
+- Registry: `get_submittable_spec(record_type)` + single-declarer uniqueness.
 
-### Task 2: RecordTypeSpec enforcement (opt-in)
-- Add `submittable`; enforce `schema` as JSON Schema when set.
-- Registry: submittable-owner uniqueness; `get_submittable_owner(record_type)`.
-- Registration guard: reject a submittable `schema` that declares envelope field names.
-- Discovery: surface submittable record types + their JSON Schema in `list_record_types`.
+### Task 2: Canonical write path (toolkit)
+- `toolkit.write_record(...)` — embedding (from `embed_source`), content_hash, reliability ladder (SPEC-007), idempotency (SPEC-004/005), `save_payload`/`update_payload`.
 
-### Task 3: `process_structured` + `StructuredSubmission`
-- Add the processor hook (default `NotImplementedError`).
-- `StructuredSubmission` dataclass; IngestionContext (SPEC-004/005) built for structured submissions; tenant-adapter resolution reuse.
+### Task 3: `submit_structured` tool + pipeline entry
+- `IngestionPipeline.ingest_structured(...)` (validate → context → write → emit event).
+- `submit_structured` on `IngestionPlugin`; strict error surfacing.
+- Confirm existing observer Phase 2 fires by `record_type`.
 
-### Task 4: `submit_structured` tool + pipeline entry
-- `IngestionPipeline.ingest_structured(...)` (validate → context → submission → dispatch → observers).
-- `submit_structured` tool on `IngestionPlugin`; strict error surfacing.
+### Task 4: Discovery
+- Surface submittable record types + their JSON Schema in `list_record_types`.
 
-### Task 5: Inline-by-value content on the extract path
-- Extend `ingest_documents` item shape (`{uri, content?, media_type?}`), backward-compatible.
-- Pipeline: use provided content when present; format well-formedness gate; fetch fallback.
-- `ResourceResolver` / bundle plumbing to carry inline content + declared media type.
+### Task 5: Reference submittable plugin (test/example)
+- A minimal plugin declaring a submittable record type + JSON Schema, exercising `submit_structured` end-to-end (pass + reject), independent of the Service Profile work.
 
-### Task 6: MarkdownPlugin migration
-- Receive framework-provided content instead of fetching (`urllib` removed from the hot path).
-- Keep chunk/embed/write; verify parity with SPEC-011 parent/segment behavior.
-
-### Task 7: Documentation
-- Update plugin developer guide (submittable record types, JSON Schema contracts, `process_structured`, inline content, field-naming rules, metadata 1:1).
-- Update system overview + ingestion diagrams.
-- Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; input≡output-at-metadata; two-gate model; metadata-1:1 + field-naming + Mongo portability).
-
-### Task 8: Reference structured plugin (test/example)
-- A minimal submittable plugin with a JSON Schema contract exercising `submit_structured` end-to-end (validation pass + reject), independent of the Service Profile work.
+### Task 6: Documentation
+- Plugin developer guide (submittable record types, `write_record` toolkit, embed_source, metadata 1:1, field-naming, the three-type vocabulary).
+- System overview + ingestion diagrams; fix `record_type`/`semantic_type` conflation.
+- Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; framework write + toolkit; metadata 1:1; three-type clarification).

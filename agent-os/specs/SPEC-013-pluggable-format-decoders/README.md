@@ -1,75 +1,53 @@
-# SPEC-013: Pluggable Content Parsing / Format Decoders
+# SPEC-013: Raw Content By-Value Ingestion
+
+> **Status: DEFERRED / future.** Captured to preserve the design decision, not scheduled. This replaces the earlier "Pluggable Content Parsing / Format Decoders" draft, whose framework-owned-decoding premise was **rejected** — see *Superseded design* below.
 
 ## Overview
 
-Generalizes the **decode seam** seeded by SPEC-012 into a first-class, pluggable **content-parsing subsystem**. Format decoding moves *out of plugins* and into a framework-owned `DecoderRegistry`: each decoder turns bytes + a declared `media_type` into a *faithful, lossless* structure and validates well-formedness (the shared "bad-data bar"). Plugins stop bundling their own parsers and instead receive a trusted structure to **interpret**. New formats onboard by registering a decoder — no big-bang parser library, no core rewrite.
+Lets a caller submit **raw content by value** — the bytes themselves plus a declared `media_type` — instead of only a URI the pipeline fetches. It is a small delta over today's raw/extract path: the framework delivers the provided bytes to the plugins that handle that input (routed by `semantic_type`), and **the plugin decodes and refines them exactly as it does for fetched URIs**. Decoding stays entirely in plugins, using standard Python libraries.
 
-## The organizing principle
+This is the *raw* counterpart to SPEC-012's *refined-record* push, and it is intentionally separate: SPEC-012 handles already-refined records; this handles raw input the plugin must still interpret.
 
-One razor governs the whole subsystem — the same one SPEC-012 introduced:
+## The three types (context)
 
-- **Decode** (this spec, framework): bytes + declared format → a faithful structure. Lossless, deterministic, no judgment. `json.loads`, markdown→AST, XML→tree, YAML, CSV.
-- **Interpret** (stays in plugins): structure → stored records. Chunking, choosing embedding text, fan-out to parent + segments, derived fields. A *choice* that varies per plugin.
+- **`media_type`** — the format of the raw bytes (`text/markdown`, `audio/wav`); required when content is supplied inline (no extension to sniff).
+- **`semantic_type`** — the input's semantic identity (`meeting`); the routing key that can fan the input out to multiple refining plugins.
+- **`record_type`** — each plugin's refined output; unchanged.
 
-Centralizing **decode** is a real win for plugin developers: no plugin re-implements a JSON or markdown parser, and a single format is parsed **once** for many consumers (e.g. a "summary" plugin and a "word-count" plugin both walk the same markdown structure). Centralizing **interpret** would be a mistake — it would force a lossy canonical that becomes a coupling and evolution bottleneck. The razor keeps the line in the right place.
-
-## Why this is its own spec
-
-SPEC-012 ships the *seam* plus the two trivial decoders it needs (JSON, text). It deliberately does **not** build a library of real parsers. SPEC-013 is where that library — and the ergonomics of registering, discovering, and evolving decoders — gets designed and populated. The split is on a **principle** (seam vs. catalog / decode-vs-interpret), not on cost. In fact the migration cost is tiny: there is exactly one real processor today (`MarkdownPlugin`), plus a test double.
-
-## Scope
+## Scope (when scheduled)
 
 **In scope:**
 
-- A `ContentDecoder` interface: a declared `media_type` it handles, a `decode(bytes) -> DecodedContent` producing a faithful structure, and well-formedness validation (the format gate).
-- A framework-owned `DecoderRegistry` keyed by `media_type`; the pipeline routes inline **and** fetched content through the matching decoder *before* handing it to a plugin.
-- A **per-format canonical representation policy**: each format has its own faithful structure; there is **no universal IR**. Raw bytes remain available to plugins for anything a decoder does not surface.
-- Real decoders beyond the trivial pair, onboarded per actual need: **markdown → block/AST structure** (migrating MarkdownPlugin's current inline parsing), and the next formats driven by real consumers (YAML, XML, CSV as they arrive).
-- Migration of `MarkdownPlugin` (and any later processors) to consume decoded structure instead of parsing raw bytes.
-- The **format well-formedness gate** as the shared "bad-data bar" for *both* ingestion paths (inline raw content and fetched URIs) — reject a supposed markdown/JSON/XML document that is not actually well-formed, before any plugin sees it.
-- Discovery of supported formats (which `media_type`s the platform can decode).
+- By-value delivery on the raw path: `ingest_documents` items may carry `{uri, content, media_type}`; when `content` is present the pipeline uses it directly (no fetch), else it fetches as today. `uri` remains the identity key.
+- A light **well-formedness bar**: if the receiving plugin's decoder rejects the bytes as the declared `media_type`, the item is rejected — but this lives in the plugin's decode, not a framework stage.
+- Routing by `semantic_type` to the matching plugins (existing SPEC-008 machinery).
 
-**Out of scope:**
+**Out of scope (explicitly rejected — see below):**
 
-- **Interpretive / lossy transformations** — chunking, summarization, symbol extraction, embedding-text selection. These stay in plugins by principle.
-- **Speculative decoders** for formats with no driving use case. Built per-need; the registry makes each addition cheap.
-- The **structured-record push path** and its schema gate — that is SPEC-012. (This spec is the *format* gate; SPEC-012 owns the *record-schema* gate.)
-- A universal intermediate representation across all formats. Explicitly rejected (JSON is a dict, XML a tree, protobuf a typed message — no faithful union exists).
+- **Framework-owned decoding / an intermediate representation / a shared decoder library.** Decoding is the plugin's job with off-the-shelf libraries.
+- Anything on the refined-record push path (SPEC-012).
 
-## Context
+## Superseded design (why the decoder subsystem was dropped)
 
-**References:**
+The earlier draft proposed a framework-owned `ContentDecoder`/`DecoderRegistry` that turned bytes into a canonical structure for plugins to consume. It was rejected for two reasons:
 
-- `agent-os/specs/SPEC-012-structured-ingestion-contracts/design.md` — the decode seam this spec generalizes, the decode-vs-interpret razor, and the sibling record-schema gate (JSON Schema) that stays in SPEC-012.
-- `src/team_mind_mcp/media_types.py` — media-type resolution; decoders key off the same media types.
-- `src/team_mind_mcp/markdown.py` — the parsing this spec pulls into a decoder; MarkdownPlugin becomes an *interpreter* of decoded blocks.
-- `src/team_mind_mcp/ingestion.py` — pipeline content path where decoders attach.
-- Roadmap Phase 3 — "Structured Ingestion Contracts" (its enabling sibling) and the Service Profile / Meta-Plugin consumers downstream.
+1. **No universal IR.** JSON is a dict, XML a tree, markdown an AST — there is no faithful union. A framework "decoded structure" is really a per-format shape every consumer must couple to, reintroducing the intermediate format we were trying to avoid.
+2. **Low value.** A framework "markdown decoder" is either a thin wrapper over an existing library (no value) or it smuggles that intermediate format back in. Formats are easy enough to decode in-plugin with standard Python libraries, so the dedup win does not justify the coupling — especially with a single existing plugin.
 
-**Standards:**
-
-- `testing` — TDD principles and coverage.
-- `bdd` — AC format and coverage patterns (deferred to the AC/BDD pass).
-- `code-style/python` — Python conventions.
-- Proposed **ADR-012: Pluggable Content Decoders** — recording the decode-vs-interpret razor, the no-universal-IR decision, and the grow-per-format policy.
-
-**Visuals:** None.
+The durable principle stands: **decode (bytes → structure) and interpret (structure → refined record) both live in the plugin; the framework only delivers bytes and routes.**
 
 ## Decisions
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| Split principle = decode vs. interpret | Blast-radius/cost vs. conceptual boundary | Cost is a heuristic, not a principle — and it is near-zero here (one plugin). Decode-vs-interpret is the durable line. |
-| Framework owns decode | Per-plugin parsing vs. shared registry | Dedup (no repeated JSON/markdown parsers), parse-once-many-consumers, and a uniform ingestion door. Also *forced* by inline-by-value: a plugin cannot fetch a URI it was never given. |
-| No universal IR | One canonical structure vs. per-format | There is no faithful union across JSON/XML/protobuf; a forced canonical is lossy and becomes a coupling bottleneck. |
-| Raw always available to plugins | Decoded-only vs. decoded + raw | A plugin needing a field the decoder dropped must not be blocked on the framework. |
-| Grow the catalog per format | Big-bang parser library vs. per-need | The next real format drives the next decoder; the registry makes each addition cheap; avoids speculative surface. |
-| Interpret stays in plugins | Centralize chunking/extraction vs. keep in plugin | Interpretation is a per-plugin choice; centralizing it recreates the bottleneck the razor avoids. |
+| Separate, deferred spec | fold into SPEC-012 vs. its own spec | SPEC-012 is refined-record push; raw by-value is a distinct, smaller, not-yet-needed capability. |
+| No framework decoding | framework decode-stage / shared library vs. in-plugin | No universal IR; wrappers add no value and risk an accidental intermediate format. |
+| Decode + interpret both in-plugin | split decode to framework vs. keep together | The value razor: interpretation is per-plugin; decode of easy formats is cheap in-plugin. |
 
 ## Stories
 
-> Stories, acceptance criteria, and BDD scaffolding are intentionally **deferred** to a follow-up shaping pass. A provisional breakdown lives in `design.md` → Execution Plan. `stories.yml` will be created then.
+> Not scheduled. No stories/ACs until this spec is picked up.
 
 ## Relationship to SPEC-012
 
-**Depends on SPEC-012.** SPEC-012 establishes the seam (framework-owned decode + validate at the boundary) and the trivial decoders. SPEC-013 turns the decode half into the `ContentDecoder` / `DecoderRegistry` subsystem, migrates real parsing out of plugins, and makes the format gate the shared bad-data bar. The two gates stay cleanly divided: **SPEC-013 = format well-formedness; SPEC-012 = record-schema conformance.**
+Independent. SPEC-012 (active) = validated push of *refined records* by `record_type`. This spec (deferred) = delivery of *raw content* by value, routed by `semantic_type`, decoded in-plugin.

@@ -106,9 +106,9 @@ specs:
     stories_complete: 0
 
   SPEC-013:
-    name: Pluggable Content Parsing / Format Decoders
+    name: Raw Content By-Value Ingestion (deferred)
     slug: pluggable-format-decoders
-    status: in_design
+    status: in_requirements
     created: 2026-08-01
     stories: 0
     stories_complete: 0
