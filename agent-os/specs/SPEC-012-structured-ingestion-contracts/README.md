@@ -84,7 +84,19 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 
 ## Stories
 
-> Stories, acceptance criteria, and BDD scaffolding are **deferred** to a follow-up pass. A provisional breakdown is in `design.md` → Execution Plan.
+See `stories.yml` for status and `acs/` for acceptance criteria.
+
+| ID | Story | Status |
+|----|-------|--------|
+| STORY-001 | Mandatory schema and registration guards | failing |
+| STORY-002 | Canonical validated write path (`write_record` toolkit) | failing |
+| STORY-003 | `submit_structured` endpoint and `ingest_structured` pipeline | failing |
+| STORY-004 | Discovery of submittable contracts | failing |
+| STORY-005 | MarkdownPlugin compliance | failing |
+| STORY-006 | Raw content by-value ingestion | failing |
+| STORY-007 | Documentation and ADR-011 (no BDD) | failing |
+
+BDD test scaffolding is the next step (`/generate-bdd-tests`) once ACs are approved.
 
 ## Note: SPEC-013 retired
 

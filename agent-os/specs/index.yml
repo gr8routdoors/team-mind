@@ -102,7 +102,7 @@ specs:
     slug: structured-ingestion-contracts
     status: in_design
     created: 2026-08-01
-    stories: 0
+    stories: 7
     stories_complete: 0
 
 # Next spec number: 013
