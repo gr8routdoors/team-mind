@@ -67,8 +67,10 @@ stories:
       ingest_documents items may carry {uri, content, media_type}; inline
       content is used without a fetch, media_type is required with content,
       and uri remains the identity key. Decoding stays in the plugin.
-    status: failing
-    verified_by: null
+    # Note: AC-002 rejection is whole-batch (fail-fast), consistent with the
+    # existing ResourceResolver contract; per-item best-effort is a future option.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 0aa36ed)"
 
   STORY-007:
     name: Documentation and ADR-011
