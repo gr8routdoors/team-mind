@@ -1,5 +1,11 @@
 # SPEC-012: Structured Ingestion Contracts
 
+## Background (for readers new to Team Mind)
+
+Team Mind is an **MCP knowledge gateway**: **plugins** feed data into a shared, searchable **catalog** (SQLite today, with vector + metadata search). Each stored item is a **record** of a declared **`record_type`** — with a schema, an optional vector embedding, and a usage-based relevance weight. An **ingestion pipeline** routes incoming data to the plugins that parse and write it; **observers** then react to what was written (this is how plugins chain). Full picture: `agent-os/context/architecture/system-overview.md`.
+
+This spec adds **one capability** to that picture: a way for an external caller to push an *already-finished* record straight into the catalog, validated on the way in — instead of only handing the pipeline a URI to fetch and parse.
+
 ## Overview
 
 Adds an external door — `submit_structured` — for pushing a **pre-refined record** (a fully-formed instance of a declared `record_type`) directly into the catalog, **validated against a JSON Schema** at the boundary. The caller (an AI agent in its own harness, or a deterministic tool) has already done the refinement; the framework validates, writes, and emits an event so subscribed observers react. This is the platform's **first schema enforcement** — today `RecordTypeSpec.schema` is an advisory dict validated by nothing.
@@ -22,7 +28,7 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 
 **In scope:**
 
-- **`submit_structured(record_type, payload, uri, reliability_hint?, tenant_id?)`** MCP tool — validated push of one pre-refined record.
+- **`submit_structured(records[], tenant_id?)`** MCP tool — validated push of a **batch** of pre-refined records (each `{record_type, payload, uri, reliability_hint?}`), matching `ingest_documents`' array shape. Each record is validated and written independently; the response is a per-record result.
 - **Mandatory schema per record type**: every `record_type` declares a JSON Schema (describing the **payload = `metadata` sub-document** only; envelope fields rejected by a registration guard, which also rejects a missing schema). `submittable` is a separate axis controlling only external push exposure.
 - **Framework writes** the validated record via a **canonical `write_record` toolkit method** shared by the framework and plugins (prevents write-sprawl). It owns embedding (from a declared `embed_source`), content-hash, the reliability ladder, and idempotency.
 - **Validation lives *inside* `write_record`** — a single choke point. So the external push *and* any plugin refining its own output are both validated against the record type's published schema for free; the endpoint carries no validation logic. **Validation is mandatory — no opt-out** (pre-release, so no legacy; Mongo `$jsonSchema` will enforce anyway). **MarkdownPlugin is made compliant in-spec** — the only existing plugin affected.
@@ -74,6 +80,7 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 | `uri` required (identity) | optional/hash-derived vs. required | Reuses SPEC-004/005 idempotency; enables updates. |
 | Keep `reliability_hint` | drop vs. keep | Thin SPEC-007 passthrough; enables the confidence-tiering the Service Profile needs. |
 | Reuse existing observers | new subscription vs. existing | `EventFilter.record_types` already fires subscribers on write. |
+| Batch endpoint (per-record results) | single vs. batch | `ingest_documents` already batches; match it. Strict per record, best-effort across the batch. |
 
 ## Stories
 

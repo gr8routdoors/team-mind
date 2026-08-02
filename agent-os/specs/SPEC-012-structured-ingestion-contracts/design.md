@@ -21,21 +21,23 @@ One `semantic_type` can fan out to many `record_type`s (a `meeting` → `meeting
 ## Data Flow
 
 ```
-caller → submit_structured(record_type, payload, uri, reliability_hint?, tenant_id?)
+caller → submit_structured(records=[{record_type, payload, uri, reliability_hint?}, ...], tenant_id?)
   → IngestionPlugin.call_tool
     → IngestionPipeline.ingest_structured
-       1. spec = registry.get_submittable_spec(record_type)         # the one declarer, or error
-       2. ctx = build IngestionContext(uri, record_type)           # SPEC-004/005 idempotency (insert vs update)
-       3. doc_id = toolkit.write_record(                            # VALIDATES then writes (single choke point)
-             storage, record_type, payload, uri, tenant, spec=spec,
-             reliability_hint=reliability_hint, context=ctx)
-             #  -> validate_record(payload, spec.schema)  # ALWAYS; REJECT on failure, nothing written
-             #  -> embed (from embed_source) + content_hash + reliability ladder + idempotent save_payload
-       4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
+       for each record (independently — best-effort across the batch):
+         1. spec = registry.get_submittable_spec(record_type)       # or per-record error
+         2. ctx = build IngestionContext(uri, record_type)          # SPEC-004/005 idempotency (insert vs update)
+         3. doc_id = toolkit.write_record(                          # VALIDATES then writes (single choke point)
+               storage, record_type, payload, uri, tenant, spec=spec,
+               reliability_hint=reliability_hint, context=ctx)
+               #  -> validate_record(payload, spec.schema)  # ALWAYS; per-record REJECT on failure, nothing written
+               #  -> embed (from embed_source) + content_hash + reliability ladder + idempotent save_payload
+         4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
        5. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
+       → return per-record results (written doc_id | validation errors)
 ```
 
-No new subscription mechanism, no plugin write-hook, **no separate validation step** — validation lives inside `write_record`. Rejection is **strict and atomic**: a schema failure returns structured errors and writes nothing. `submit_structured` is a thin external caller of `write_record`; the pipeline logic above is nearly all of it.
+No new subscription mechanism, no plugin write-hook, **no separate validation step** — validation lives inside `write_record`. Rejection is **strict per record** (an invalid record returns structured errors and writes nothing) and **best-effort across the batch** (valid records still land) — matching `ingest_documents`. `submit_structured` is a thin external caller of `write_record`; the pipeline logic above is nearly all of it.
 
 ## The canonical write path (plugin toolkit)
 
@@ -79,22 +81,32 @@ This keeps the framework able to write directly (no plugin logic needed). Push�
 ```jsonc
 {
   "name": "submit_structured",
-  "description": "Submit a pre-refined record for validated ingestion against its record type's JSON Schema.",
+  "description": "Submit one or more pre-refined records for validated ingestion against their record types' JSON Schemas.",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "record_type":     { "type": "string", "description": "The refined record type being submitted (routing key)." },
-      "payload":         { "type": "object", "description": "The record as JSON; validated against the record type's schema. Stored 1:1 as the metadata sub-document." },
-      "uri":             { "type": "string", "description": "Identity key for idempotency / updates (required)." },
-      "reliability_hint":{ "type": "number", "description": "Optional confidence seed (0.0–1.0); top rung of SPEC-007 reliability seeding." },
-      "tenant_id":       { "type": "string", "description": "Tenant (default: 'default')." }
+      "records": {
+        "type": "array",
+        "description": "Batch of records; each validated and written independently.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "record_type":     { "type": "string", "description": "The refined record type (routing key)." },
+            "payload":         { "type": "object", "description": "The record as JSON; validated against the record type's schema. Stored 1:1 as the metadata sub-document." },
+            "uri":             { "type": "string", "description": "Identity key for idempotency / updates." },
+            "reliability_hint":{ "type": "number", "description": "Optional confidence seed (0.0–1.0); top rung of SPEC-007 reliability seeding." }
+          },
+          "required": ["record_type", "payload", "uri"]
+        }
+      },
+      "tenant_id": { "type": "string", "description": "Tenant for the batch (default: 'default')." }
     },
-    "required": ["record_type", "payload", "uri"]
+    "required": ["records"]
   }
 }
 ```
 
-Single record per call (v1). On validation failure, structured `jsonschema` errors; nothing written.
+**Batch, matching `ingest_documents`.** Each record is validated and written independently; the response is a **per-record result** list (written `doc_id`, or the `jsonschema` errors for a rejected record). Valid records land even if others in the batch fail. A single record is a one-element list.
 
 ### `RecordTypeSpec` (extended)
 
@@ -179,6 +191,7 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 | Route by `record_type` | `semantic_type` vs. `record_type` | The caller sends the refined output; `semantic_type` fan-out is a raw-path concern. |
 | `metadata` 1:1 with payload | spread vs. sub-document | Contract = payload = `metadata`; envelope on the record; clean Mongo shape. |
 | `uri` required (identity) | optional/hash-derived vs. required | Reuses SPEC-004/005 idempotency; enables updates; motivating case has a natural identity. |
+| Batch endpoint (per-record results) | single record vs. batch | `ingest_documents` already batches (array of `uris`), so `submit_structured` matches it. Strict per record, best-effort across the batch; a single record is a one-element list. |
 | No `semantic_types` param on the tool | keep vs. drop | Not routing here; observer labels come from the declarer's `semantic_type`. |
 | Keep `reliability_hint` | drop vs. keep | Thin passthrough to SPEC-007; enables confidence-tiering the Service Profile needs. |
 | Single submittable declarer per record_type | multi vs. single | Unambiguous schema/write owner; caught at registration. |
