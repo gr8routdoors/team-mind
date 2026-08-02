@@ -23,9 +23,9 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 **In scope:**
 
 - **`submit_structured(record_type, payload, uri, reliability_hint?, tenant_id?)`** MCP tool — validated push of one pre-refined record.
-- **Opt-in enforcement per record type**: `RecordTypeSpec.submittable` makes its `schema` (a JSON Schema) the enforced caller contract. The schema describes the **payload = `metadata` sub-document** only; envelope fields are rejected by a registration guard.
+- **Mandatory schema per record type**: every `record_type` declares a JSON Schema (describing the **payload = `metadata` sub-document** only; envelope fields rejected by a registration guard, which also rejects a missing schema). `submittable` is a separate axis controlling only external push exposure.
 - **Framework writes** the validated record via a **canonical `write_record` toolkit method** shared by the framework and plugins (prevents write-sprawl). It owns embedding (from a declared `embed_source`), content-hash, the reliability ladder, and idempotency.
-- **Validation lives *inside* `write_record`** — a single choke point. So the external push *and* any plugin refining its own output are both validated against the record type's published schema for free; the endpoint carries no validation logic. Enforcement is opt-in per record type (legacy advisory schemas write unvalidated).
+- **Validation lives *inside* `write_record`** — a single choke point. So the external push *and* any plugin refining its own output are both validated against the record type's published schema for free; the endpoint carries no validation logic. **Validation is mandatory — no opt-out** (pre-release, so no legacy; Mongo `$jsonSchema` will enforce anyway). **MarkdownPlugin is made compliant in-spec** — the only existing plugin affected.
 - **Raw content by-value (one story)**: `ingest_documents` items may carry `{uri, content, media_type}` so a caller can supply bytes inline instead of a URL — a few lines on the existing raw path. Decoding stays in the plugin (standard Python libs); no framework decoder.
 - **`metadata` 1:1 with the payload**; envelope fields (`uri`, `id`, …) live on the containing record. JSON Schema is MongoDB-portable (`$jsonSchema`) for enforcement at scale.
 - **Reliability seeding passthrough** (SPEC-007): `reliability_hint` is the top rung of the three-layer ladder, seeding `usage_score` so high-confidence facts rank up immediately.
@@ -64,7 +64,8 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
 | Scope = one spec (push + raw-content story) | multiple specs vs. one | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint plus a small raw-by-value story. Framework decoding → rejected. |
-| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated for free; endpoint carries no validation logic. Opt-in per record type. |
+| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated for free; endpoint carries no validation logic. |
+| **Validation is mandatory — no opt-out** | opt-in per record type vs. mandatory | Pre-release, no legacy to grandfather; Mongo `$jsonSchema` will enforce at the store anyway. Every record type declares a schema; MarkdownPlugin made compliant in-spec. |
 | **JSON Schema as the IDL** | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema` at scale. |
 | **Framework writes; plugins share `write_record`** | plugin `process_structured` hook vs. framework write + toolkit | A pushed record is already refined. One canonical write method (framework + plugins) prevents sprawl and stays evolvable. |
 | Declarative `embed_source` | plugin embed hook vs. declared source | Lets the framework write directly; common case covered; complex embedding is future. |

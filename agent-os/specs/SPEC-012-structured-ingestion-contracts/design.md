@@ -29,7 +29,7 @@ caller → submit_structured(record_type, payload, uri, reliability_hint?, tenan
        3. doc_id = toolkit.write_record(                            # VALIDATES then writes (single choke point)
              storage, record_type, payload, uri, tenant, spec=spec,
              reliability_hint=reliability_hint, context=ctx)
-             #  -> validate_record(payload, spec.schema)  # if spec enforced; REJECT on failure, nothing written
+             #  -> validate_record(payload, spec.schema)  # ALWAYS; REJECT on failure, nothing written
              #  -> embed (from embed_source) + content_hash + reliability ladder + idempotent save_payload
        4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
        5. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
@@ -49,8 +49,8 @@ def write_record(
     context: IngestionContext | None = None, parent_id: int | None = None,
 ) -> int:
     """Canonical record write. Owns, in order:
-       - VALIDATION: if spec declares an enforced schema, validate_record(payload, spec.schema);
-                     REJECT on failure (nothing written). This is the single validation choke point.
+       - VALIDATION: validate_record(payload, spec.schema) ALWAYS; REJECT on failure (nothing written).
+                     The single validation choke point — every record type declares a schema.
        - embedding: derive text from spec.embed_source (if declared) and embed; else no vector
        - content_hash over the payload
        - reliability seeding ladder: reliability_hint -> spec.default_reliability -> 0.0  (SPEC-007)
@@ -61,7 +61,7 @@ def write_record(
 
 **Validation is universal, for free.** Because `write_record` is the one write path, *every* record — pushed externally via `submit_structured` **or** written by a plugin refining raw input — is validated against its record type's published schema. Plugins can't write garbage into an enforced record type, and the external endpoint needs no validation logic of its own. Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable, self-validating write contract.
 
-**Enforcement is opt-in per record type** (backward-compat): `write_record` validates when the record type declares an *enforced* schema (`submittable=True`). Legacy/advisory schemas (e.g. MarkdownPlugin's) write unvalidated, exactly as today, until they opt in.
+**Enforcement is mandatory — no opt-out.** Every record type declares a JSON Schema and every write is validated. We are pre-release with no published plugins, so there is no legacy to grandfather; and MongoDB's `$jsonSchema` will enforce at the store anyway, so enforcing at the framework now avoids a jarring change for future adopters. Registration **rejects a record type with a missing or empty schema**. The existing MarkdownPlugin is brought into compliance as part of this spec (real schemas; `metadata` aligned to payload-only). `submittable` is a *separate* axis — it controls only external push exposure, not whether validation happens.
 
 ## Embedding on the push path
 
@@ -103,15 +103,15 @@ Single record per call (v1). On validation failure, structured `jsonschema` erro
 class RecordTypeSpec:
     name: str
     description: str
-    schema: dict = field(default_factory=dict)     # advisory when not submittable; ENFORCED JSON Schema when submittable
+    schema: dict = field(default_factory=dict)     # MANDATORY JSON Schema — enforced on every write
     plugin: str = ""
     decay_half_life_days: float | None = None
     default_reliability: float | None = None        # existing — middle rung of the reliability ladder
-    submittable: bool = False                        # NEW — opt-in structured push
+    submittable: bool = False                        # NEW — exposed to external submit_structured push (does NOT gate validation)
     embed_source: list[str] | None = None            # NEW — field path(s) to vectorize; None = metadata-only
 ```
 
-When `submittable`, `schema` is a JSON Schema enforced against the payload; it describes the `metadata` sub-document (payload) only and must not declare envelope fields (`id`, `uri`, `plugin`, `content_hash`, `vector`, `tenant`) — a registration guard rejects those.
+`schema` is a **mandatory** JSON Schema, enforced on **every** write regardless of `submittable`. It describes the `metadata` sub-document (payload) only and must not declare envelope fields (`id`, `uri`, `plugin`, `content_hash`, `vector`, `tenant`). A registration guard rejects both envelope-field declarations **and** a missing/empty schema. `submittable` controls only whether external callers may push this record type via `submit_structured`; internal-only record types are still validated on every plugin write.
 
 ### Validator (new)
 
@@ -172,7 +172,8 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 | Scope = one spec (push + raw-content story) | multiple specs vs. one | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint plus a small raw-by-value story. Framework decoding → rejected. |
 | JSON Schema IDL | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema`. |
 | Framework writes; plugins share the write method | plugin `process_structured` hook vs. framework write + toolkit | A pushed record is already refined; the framework writes it. One canonical `write_record` (framework + plugins) prevents write-sprawl. |
-| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated against the published schema for free; the endpoint carries no validation logic. Enforcement opt-in per record type (backward-compat). |
+| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated against the published schema for free; the endpoint carries no validation logic. |
+| **Validation is mandatory — no opt-out** | opt-in per record type vs. mandatory | Pre-release, so no legacy to grandfather; Mongo `$jsonSchema` will enforce at the store anyway. Every record type must declare a schema; MarkdownPlugin is made compliant here. `submittable` no longer gates validation (external-exposure only). |
 | Raw content by-value = one story here | separate SPEC-013 vs. a story in this spec | Inline bytes vs. a URL is a few lines on the existing raw path; it doesn't earn a spec. SPEC-013 retired. |
 | Declarative `embed_source` | plugin embed hook vs. declared source | Lets the framework write directly; covers the common case; complex embedding is future. |
 | Route by `record_type` | `semantic_type` vs. `record_type` | The caller sends the refined output; `semantic_type` fan-out is a raw-path concern. |
@@ -182,11 +183,12 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 | Keep `reliability_hint` | drop vs. keep | Thin passthrough to SPEC-007; enables confidence-tiering the Service Profile needs. |
 | Single submittable declarer per record_type | multi vs. single | Unambiguous schema/write owner; caught at registration. |
 
-## Backward compatibility
+## Compatibility
 
-- `ingest_documents(uris=[...])` unchanged.
-- `RecordTypeSpec` gains optional fields (`submittable=False`, `embed_source=None`); today's behavior preserved.
-- No schema migration; no changes to the raw/extract path.
+- `ingest_documents(uris=[...])` unchanged (plus the folded-in inline-content story).
+- `RecordTypeSpec` gains `submittable`/`embed_source`, and `schema` becomes mandatory-and-enforced. There is **no external legacy** (pre-release), so mandatory validation is not a breaking change for adopters.
+- **MarkdownPlugin is migrated in-spec** to a compliant, enforced schema (`metadata` reduced to payload-only; envelope fields removed from `metadata`). This is the only existing plugin affected.
+- No storage-schema migration; the raw/extract path is otherwise unchanged.
 
 ---
 
@@ -194,10 +196,11 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 
 Provisional (stories/ACs to follow).
 
-### Task 1: Validator + submittable declaration
+### Task 1: Validator + mandatory schema declaration
 - Add `jsonschema`; `validate_record`.
-- `RecordTypeSpec.submittable` + `embed_source`; registration guard (no envelope fields in a submittable schema).
-- Registry: `get_submittable_spec(record_type)` + single-declarer uniqueness.
+- `RecordTypeSpec`: `schema` mandatory + `submittable` + `embed_source`.
+- Registration guard: reject a missing/empty schema **and** a schema that declares envelope fields; single submittable-declarer uniqueness.
+- Registry: `get_submittable_spec(record_type)`.
 
 ### Task 2: Canonical write path (toolkit) — with built-in validation
 - `toolkit.write_record(...)` — **validation first** (`validate_record` against the enforced schema; reject on failure), then embedding (from `embed_source`), content_hash, reliability ladder (SPEC-007), idempotency (SPEC-004/005), `save_payload`/`update_payload`.
@@ -214,11 +217,15 @@ Provisional (stories/ACs to follow).
 ### Task 5: Reference submittable plugin (test/example)
 - A minimal plugin declaring a submittable record type + JSON Schema, exercising `submit_structured` end-to-end (pass + reject), independent of the Service Profile work.
 
-### Task 6: Raw content by-value (folded-in story)
+### Task 6: MarkdownPlugin compliance
+- Give `markdown_source` / `markdown_chunk` real, enforced JSON Schemas; remove envelope fields (e.g. `plugin`) from `metadata`.
+- Route its writes through `write_record` so they are validated like everything else; verify SPEC-011 parent/segment parity.
+
+### Task 7: Raw content by-value (folded-in story)
 - Extend the `ingest_documents` item shape to `{uri, content?, media_type?}`; use inline `content` when present (no fetch), require `media_type` with it, keep `uri` as identity.
 - Thread inline content through the bundle so plugins receive it; decoding stays in-plugin.
 
-### Task 7: Documentation
+### Task 8: Documentation
 - Plugin developer guide (submittable record types, `write_record` toolkit, embed_source, metadata 1:1, field-naming, the three-type vocabulary).
 - System overview + ingestion diagrams; fix `record_type`/`semantic_type` conflation.
 - Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; framework write + toolkit; metadata 1:1; three-type clarification).
