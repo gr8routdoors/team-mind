@@ -30,11 +30,12 @@ def test_markdown_plugin_declares_record_type(tmp_path):
     assert "markdown_source" in names
     assert "markdown_chunk" in names
 
-    # And the markdown_chunk spec includes a description and schema describing the chunk metadata
+    # And the markdown_chunk spec includes a description and a non-empty JSON
+    # Schema describing the chunk metadata (payload-only: the `chunk` property)
     chunk_spec = next(s for s in specs if s.name == "markdown_chunk")
     assert isinstance(chunk_spec, RecordTypeSpec)
     assert len(chunk_spec.description) > 0
-    assert "chunk" in chunk_spec.schema
+    assert "chunk" in chunk_spec.schema["properties"]
 
     storage.close()
 

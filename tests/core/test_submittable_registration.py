@@ -67,6 +67,7 @@ class _NoteProducer(IngestProcessor):
                 name="note",
                 description=f"Note from {self._name}",
                 submittable=False,
+                schema={"type": "object"},
             )
         ]
 
@@ -278,3 +279,57 @@ def test_ac006_embed_source_is_optional():
     spec = registry.get_submittable_spec("service_profile")
     assert spec is not None
     assert spec.embed_source is None
+
+
+# ---------------------------------------------------------------------------
+# SPEC-012 STORY-005 / AC-004: Mandatory schema applies to ALL record types
+# (the guard now rejects a missing/empty schema even for non-submittable types;
+# MarkdownPlugin registers only because both its record types declare non-empty
+# schemas).
+# ---------------------------------------------------------------------------
+
+
+def test_story005_ac004_markdown_registers_with_non_empty_schemas():
+    """AC-004: MarkdownPlugin registers because both record types declare
+    non-empty schemas (neither is submittable)."""
+    from team_mind_mcp.markdown import MarkdownPlugin
+
+    # Given the real MarkdownPlugin, whose record types are non-submittable
+    registry = PluginRegistry()
+    plugin = MarkdownPlugin(storage=None)
+    assert all(not rt.submittable for rt in plugin.record_types)
+    assert all(rt.schema for rt in plugin.record_types)
+
+    # When the plugin is registered
+    # Then registration succeeds (no guard violation) and both types are cataloged
+    registry.register(plugin, semantic_types=["*"])
+    catalog = {rt.name for rt in registry.get_record_type_catalog()}
+    assert {"markdown_source", "markdown_chunk"} <= catalog
+
+
+def test_story005_ac004_missing_schema_rejected_for_non_submittable():
+    """AC-004: registration would FAIL the guard if a non-submittable record
+    type's schema were missing — the mandatory-schema rule is not limited to
+    submittable types."""
+    # Given a non-submittable record type whose schema is empty
+    registry = PluginRegistry()
+    plugin = _RecordTypePlugin(
+        "schemaless_plugin",
+        [
+            RecordTypeSpec(
+                name="markdown_chunk",
+                description="A chunk missing its schema",
+                schema={},
+                submittable=False,
+            )
+        ],
+    )
+
+    # When the plugin is registered
+    # Then registration raises, identifying the record type as missing a schema
+    with pytest.raises(ValueError, match="markdown_chunk") as exc_info:
+        registry.register(plugin)
+    assert "schema" in str(exc_info.value).lower()
+
+    # And the plugin left no partial state behind
+    assert registry.get_record_type_catalog() == []

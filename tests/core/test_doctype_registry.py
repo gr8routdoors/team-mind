@@ -18,8 +18,12 @@ class _PluginA(ToolProvider):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="type_x", description="Type X from A"),
-            RecordTypeSpec(name="type_y", description="Type Y from A"),
+            RecordTypeSpec(
+                name="type_x", description="Type X from A", schema={"type": "object"}
+            ),
+            RecordTypeSpec(
+                name="type_y", description="Type Y from A", schema={"type": "object"}
+            ),
         ]
 
 
@@ -31,7 +35,9 @@ class _PluginB(IngestProcessor):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="type_z", description="Type Z from B"),
+            RecordTypeSpec(
+                name="type_z", description="Type Z from B", schema={"type": "object"}
+            ),
         ]
 
 
@@ -45,8 +51,12 @@ class _PluginC(ToolProvider):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="type_x", description="Type X from C"),
-            RecordTypeSpec(name="type_w", description="Type W from C"),
+            RecordTypeSpec(
+                name="type_x", description="Type X from C", schema={"type": "object"}
+            ),
+            RecordTypeSpec(
+                name="type_w", description="Type W from C", schema={"type": "object"}
+            ),
         ]
 
 

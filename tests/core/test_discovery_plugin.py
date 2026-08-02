@@ -24,7 +24,9 @@ class _Alpha(ToolProvider):
             RecordTypeSpec(
                 name="type_a", description="Alpha A", schema={"f": {"type": "string"}}
             ),
-            RecordTypeSpec(name="type_b", description="Alpha B"),
+            RecordTypeSpec(
+                name="type_b", description="Alpha B", schema={"type": "object"}
+            ),
         ]
 
 
@@ -36,8 +38,12 @@ class _Beta(IngestProcessor):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="type_a", description="Beta A"),
-            RecordTypeSpec(name="type_c", description="Beta C"),
+            RecordTypeSpec(
+                name="type_a", description="Beta A", schema={"type": "object"}
+            ),
+            RecordTypeSpec(
+                name="type_c", description="Beta C", schema={"type": "object"}
+            ),
         ]
 
 
@@ -48,7 +54,11 @@ class _Gamma(ToolProvider):
 
     @property
     def record_types(self) -> list[RecordTypeSpec]:
-        return [RecordTypeSpec(name="type_d", description="Gamma D")]
+        return [
+            RecordTypeSpec(
+                name="type_d", description="Gamma D", schema={"type": "object"}
+            )
+        ]
 
 
 @pytest.fixture
@@ -250,7 +260,11 @@ class _Notes(ToolProvider):
     @property
     def record_types(self) -> list[RecordTypeSpec]:
         return [
-            RecordTypeSpec(name="scratch_note", description="A non-submittable note"),
+            RecordTypeSpec(
+                name="scratch_note",
+                description="A non-submittable note",
+                schema={"type": "object"},
+            ),
         ]
 
 

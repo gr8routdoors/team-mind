@@ -103,6 +103,9 @@ def write_record(
     reliability_hint: float | None = None,
     context: IngestionContext | None = None,
     parent_id: int | None = None,
+    semantic_type: str = "",
+    media_type: str = "",
+    plugin_version: str = "0.0.0",
 ) -> int:
     """Canonical record write. Owns, in order:
 
@@ -115,6 +118,12 @@ def write_record(
     5. Idempotency: INSERT a new doc, or UPDATE the existing one in place
        (preserving doc_id + weight row), based on ``context`` / storage lookup.
     6. Store the payload 1:1 as ``metadata``. Return the doc_id.
+
+    ``semantic_type``, ``media_type`` and ``plugin_version`` are envelope fields
+    threaded onto the row on INSERT. They default to empty/``"0.0.0"`` so the
+    structured-push path (which carries no input ``semantic_type``) is unchanged;
+    the raw-ingestion path (e.g. MarkdownPlugin) passes real values so segment
+    rows keep their ``semantic_type``/``media_type`` for scoped retrieval.
     """
     # 1. VALIDATION — always, before any write.
     errors = validate_record(payload, spec.schema)
@@ -161,6 +170,9 @@ def write_record(
             record_type=record_type,
             parent_id=parent_id,
             content_hash=payload_hash,
+            plugin_version=plugin_version,
+            semantic_type=semantic_type,
+            media_type=media_type,
             initial_score=initial_score,
         )
     return storage.save_metadata_record(
@@ -170,5 +182,8 @@ def write_record(
         record_type=record_type,
         parent_id=parent_id,
         content_hash=payload_hash,
+        plugin_version=plugin_version,
+        semantic_type=semantic_type,
+        media_type=media_type,
         initial_score=initial_score,
     )

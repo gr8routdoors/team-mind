@@ -153,29 +153,34 @@ class PluginRegistry:
         Runs before the registry mutates any state so a rejected plugin is not
         partially registered (SPEC-012 STORY-001).
 
-        For each ``submittable`` record type this enforces:
-          - a non-empty JSON Schema (missing/empty schema is rejected);
+        For **every** record type this enforces:
+          - a non-empty JSON Schema (missing/empty schema is rejected).
+
+        Additionally, for each ``submittable`` record type this enforces:
           - no envelope field declared as a schema property; and
           - a single submittable declarer per ``record_type`` name.
 
-        Note: the mandatory-schema and envelope-field guards are scoped to
-        ``submittable`` record types for now. SPEC-012 STORY-005 (MarkdownPlugin
-        compliance) will give the existing non-submittable types real schemas
-        and can then extend these guards to *all* record types.
+        The mandatory-schema guard applies to ALL record types (SPEC-012
+        STORY-005: enforcement is mandatory — every record type declares a
+        schema, validated on every write). The envelope-field and
+        single-declarer guards stay scoped to ``submittable`` types because they
+        are inherently about the external push contract.
 
         Raises:
             ValueError: if any record type violates a guard.
         """
         for spec in record_types:
-            if not spec.submittable:
-                continue
-
+            # Mandatory schema — ALL record types (submittable or not).
             if not spec.schema:
                 raise ValueError(
-                    f"Record type '{spec.name}' is submittable but declares no "
-                    "schema: a non-empty JSON Schema is required for every "
-                    "submittable record type."
+                    f"Record type '{spec.name}' declares no schema: a non-empty "
+                    "JSON Schema is required for every record type (enforcement "
+                    "is mandatory — every write is validated)."
                 )
+
+            # The remaining guards are inherent to the external push contract.
+            if not spec.submittable:
+                continue
 
             declared = set((spec.schema.get("properties") or {}).keys())
             envelope_conflicts = sorted(declared & ENVELOPE_FIELDS)

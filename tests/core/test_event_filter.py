@@ -67,7 +67,11 @@ class _EventEmittingProcessor(IngestProcessor):
 
     @property
     def record_types(self) -> list[RecordTypeSpec]:
-        return [RecordTypeSpec(name="test_type", description="test")]
+        return [
+            RecordTypeSpec(
+                name="test_type", description="test", schema={"type": "object"}
+            )
+        ]
 
     async def process_bundle(self, bundle: IngestionBundle) -> list[IngestionEvent]:
         return list(self._events)
