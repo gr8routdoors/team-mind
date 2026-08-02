@@ -159,15 +159,20 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
             chunk_spec.plugin = self.name
 
         for uri in bundle.uris:
-            # Fetch content (supporting file:// locally for MVP)
-            try:
-                if uri.startswith("file://"):
-                    req = urllib.request.urlopen(uri)
-                    content = req.read().decode("utf-8")
-                else:
+            # By-value content (SPEC-012 STORY-006): when the caller supplied
+            # inline content for this URI, use it directly — no fetch. Otherwise
+            # fetch by reference (supporting file:// locally for MVP).
+            if uri in bundle.contents:
+                content = bundle.contents[uri]
+            else:
+                try:
+                    if uri.startswith("file://"):
+                        req = urllib.request.urlopen(uri)
+                        content = req.read().decode("utf-8")
+                    else:
+                        continue
+                except Exception:
                     continue
-            except Exception:
-                continue
 
             # Check ingestion context for idempotent processing
             ctx = bundle.contexts.get(uri)
@@ -189,7 +194,10 @@ class MarkdownPlugin(ToolProvider, IngestProcessor):
                 current_hash = _content_hash(content)
 
             processed_uris.append(uri)
-            media_type = get_media_type(uri)
+            # Prefer the caller-declared media type for inline items (their URI
+            # carries no extension to infer from); fall back to extension-based
+            # resolution for by-reference items.
+            media_type = bundle.declared_media_types.get(uri) or get_media_type(uri)
 
             # Trivial chunking by paragraphs
             chunks = [p.strip() for p in content.split("\n\n") if p.strip()]

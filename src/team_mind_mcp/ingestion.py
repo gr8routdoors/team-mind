@@ -48,15 +48,37 @@ class IngestionBundle:
     reliability_hint: float | None = None
     tenant_id: str = "default"
     storage: "StorageAdapter | None" = None
+    # By-value ingestion (SPEC-012 STORY-006): inline content supplied by the
+    # caller keyed by URI. When a URI appears here the processor uses this
+    # content directly (no fetch). ``declared_media_types`` carries the caller's
+    # declared media type for such items (required when content is present),
+    # used for routing/filtering in place of the extension-based lookup.
+    contents: Dict[str, str] = field(default_factory=dict)
+    declared_media_types: Dict[str, str] = field(default_factory=dict)
 
 
 class ResourceResolver:
     """Expands URIs (like directories) into constituent valid file URIs and validates schemas."""
 
     @staticmethod
-    def resolve(uris: List[str]) -> List[str]:
+    def resolve(uris: List[str], inline_uris: set[str] | None = None) -> List[str]:
+        """Expand by-reference URIs into concrete file/http URIs.
+
+        Args:
+            uris: The URIs to resolve, in input order.
+            inline_uris: URIs that carry inline by-value content (SPEC-012
+                STORY-006). These are passed through verbatim — no scheme
+                validation, no filesystem existence check, no fetch — because
+                their content is already supplied out of band (e.g. a
+                ``mem://note/42`` URI is a valid identity key, not a location).
+        """
+        inline_uris = inline_uris or set()
         resolved = []
         for uri in uris:
+            if uri in inline_uris:
+                resolved.append(uri)
+                continue
+
             parsed = urlparse(uri)
             if parsed.scheme in ("http", "https"):
                 resolved.append(uri)
@@ -157,10 +179,29 @@ class IngestionPipeline:
         semantic_types: list[str] | None = None,
         reliability_hint: float | None = None,
         tenant_id: str = "default",
+        contents: dict[str, str] | None = None,
+        declared_media_types: dict[str, str] | None = None,
     ) -> IngestionBundle | None:
         """Process URIs in two phases: processors write data, observers react.
-        Returns the bundle with collected events, or None if no valid URIs."""
-        resolved_uris = ResourceResolver.resolve(uris)
+
+        Args:
+            uris: URIs to ingest (by-reference and/or by-value identity keys).
+            semantic_types: Routing types; ``None``/``[]`` reaches wildcard
+                processors only.
+            reliability_hint: Optional SPEC-007 reliability seed.
+            tenant_id: Target tenant (auto-created if missing).
+            contents: Optional inline by-value content keyed by URI (SPEC-012
+                STORY-006). URIs present here bypass resolution/fetch and their
+                content is threaded to processors via the bundle.
+            declared_media_types: Optional caller-declared media types keyed by
+                URI, used for media-type filtering of inline items (which carry
+                no file extension to infer from).
+
+        Returns the bundle with collected events, or None if no valid URIs.
+        """
+        contents = contents or {}
+        declared_media_types = declared_media_types or {}
+        resolved_uris = ResourceResolver.resolve(uris, inline_uris=set(contents.keys()))
 
         if not resolved_uris:
             return None  # No-Op
@@ -174,6 +215,8 @@ class IngestionPipeline:
             reliability_hint=reliability_hint,
             tenant_id=tenant_id,
             storage=adapter,
+            contents=contents,
+            declared_media_types=declared_media_types,
         )
 
         # Phase 1: Route to matching processors with per-processor bundle isolation.
@@ -188,7 +231,9 @@ class IngestionPipeline:
 
         for processor in processors:
             filtered_uris = filter_uris_by_media_type(
-                resolved_uris, processor.supported_media_types
+                resolved_uris,
+                processor.supported_media_types,
+                declared=declared_media_types,
             )
             if not filtered_uris:
                 continue
@@ -200,7 +245,9 @@ class IngestionPipeline:
                 record_type_names,
                 storage=adapter,
             )
-            # Create a per-processor bundle with filtered URIs — no shared state
+            # Create a per-processor bundle with filtered URIs — no shared state.
+            # Inline content / declared media types are narrowed to this
+            # processor's filtered URIs so it only sees what it received.
             proc_bundle = IngestionBundle(
                 uris=filtered_uris,
                 contexts=contexts,
@@ -208,6 +255,12 @@ class IngestionPipeline:
                 reliability_hint=bundle.reliability_hint,
                 tenant_id=tenant_id,
                 storage=adapter,
+                contents={u: contents[u] for u in filtered_uris if u in contents},
+                declared_media_types={
+                    u: declared_media_types[u]
+                    for u in filtered_uris
+                    if u in declared_media_types
+                },
             )
             processor_tasks.append(processor.process_bundle(proc_bundle))
 
