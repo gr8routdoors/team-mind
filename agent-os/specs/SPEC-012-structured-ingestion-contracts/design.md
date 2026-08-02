@@ -12,7 +12,7 @@ The framework already models three distinct types (SPEC-008 / ADR-007). They mus
 
 | Type | Meaning | Example | Role here |
 |------|---------|---------|-----------|
-| `media_type` | raw data format | `text/markdown`, `audio/wav` | not used on this path (raw ingestion — future SPEC-013) |
+| `media_type` | raw data format | `text/markdown`, `audio/wav` | relevant only to the raw-content story, not the push path |
 | `semantic_type` | semantic identity of the *input* | `meeting`, `service_repo` | routes raw input to refining plugins; **not** used on the push path |
 | `record_type` | the *refined output* record | `service_profile`, `meeting_metrics` | **the key for this spec** — the caller sends one directly |
 
@@ -25,16 +25,17 @@ caller → submit_structured(record_type, payload, uri, reliability_hint?, tenan
   → IngestionPlugin.call_tool
     → IngestionPipeline.ingest_structured
        1. spec = registry.get_submittable_spec(record_type)         # the one declarer, or error
-       2. JsonSchemaValidator.validate(payload, spec.schema)        # REJECT on failure; nothing written
-       3. ctx = build IngestionContext(uri, record_type)           # SPEC-004/005 idempotency (insert vs update)
-       4. doc_id = toolkit.write_record(                            # the CANONICAL write path (see below)
-             record_type, payload, uri, tenant,
+       2. ctx = build IngestionContext(uri, record_type)           # SPEC-004/005 idempotency (insert vs update)
+       3. doc_id = toolkit.write_record(                            # VALIDATES then writes (single choke point)
+             storage, record_type, payload, uri, tenant, spec=spec,
              reliability_hint=reliability_hint, context=ctx)
-       5. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
-       6. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
+             #  -> validate_record(payload, spec.schema)  # if spec enforced; REJECT on failure, nothing written
+             #  -> embed (from embed_source) + content_hash + reliability ladder + idempotent save_payload
+       4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
+       5. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
 ```
 
-No new subscription mechanism, no plugin write-hook. Rejection is **strict and atomic** — a schema failure returns structured errors and writes nothing.
+No new subscription mechanism, no plugin write-hook, **no separate validation step** — validation lives inside `write_record`. Rejection is **strict and atomic**: a schema failure returns structured errors and writes nothing. `submit_structured` is a thin external caller of `write_record`; the pipeline logic above is nearly all of it.
 
 ## The canonical write path (plugin toolkit)
 
@@ -44,10 +45,12 @@ To prevent write-sprawl (the framework writing one way, plugins another), record
 # team_mind_mcp.toolkit (new)
 def write_record(
     storage, record_type: str, payload: dict, uri: str, tenant_id: str,
-    *, reliability_hint: float | None = None, spec: RecordTypeSpec,
+    *, spec: RecordTypeSpec, reliability_hint: float | None = None,
     context: IngestionContext | None = None, parent_id: int | None = None,
 ) -> int:
-    """Canonical record write. Owns:
+    """Canonical record write. Owns, in order:
+       - VALIDATION: if spec declares an enforced schema, validate_record(payload, spec.schema);
+                     REJECT on failure (nothing written). This is the single validation choke point.
        - embedding: derive text from spec.embed_source (if declared) and embed; else no vector
        - content_hash over the payload
        - reliability seeding ladder: reliability_hint -> spec.default_reliability -> 0.0  (SPEC-007)
@@ -56,7 +59,9 @@ def write_record(
     """
 ```
 
-Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable write contract. Existing plugins that call `save_payload` directly are migrated to it opportunistically (only MarkdownPlugin exists, and it stays on the raw path).
+**Validation is universal, for free.** Because `write_record` is the one write path, *every* record — pushed externally via `submit_structured` **or** written by a plugin refining raw input — is validated against its record type's published schema. Plugins can't write garbage into an enforced record type, and the external endpoint needs no validation logic of its own. Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable, self-validating write contract.
+
+**Enforcement is opt-in per record type** (backward-compat): `write_record` validates when the record type declares an *enforced* schema (`submittable=True`). Legacy/advisory schemas (e.g. MarkdownPlugin's) write unvalidated, exactly as today, until they opt in.
 
 ## Embedding on the push path
 
@@ -115,7 +120,11 @@ def validate_record(payload: dict, schema: dict) -> ValidationResult:
     """jsonschema.validate(payload, schema); collect structured errors."""
 ```
 
-A single function — no multi-dialect registry. (A `PayloadValidator` seam is unnecessary ceremony at this scope; JSON Schema is the IDL.)
+A single function, called **inside `write_record`** — not a separate pipeline step and not a multi-dialect registry. (A `PayloadValidator` seam is unnecessary ceremony at this scope; JSON Schema is the IDL.)
+
+## Raw content by-value (one story, folded in)
+
+A small adjacent capability: let a caller supply raw bytes inline instead of a URL. `ingest_documents` items may carry `{uri, content, media_type}`; when `content` is present the pipeline uses it directly (no fetch), else it fetches as today. `media_type` is required when `content` is present. Everything downstream — decode, interpret, write — is unchanged and stays **in the plugin** (decoding uses standard Python libraries; there is no framework decoder). This is roughly a few lines threaded through the bundle, hence a story here rather than its own spec.
 
 ## Reliability seeding (SPEC-007 passthrough)
 
@@ -160,9 +169,11 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| Scope = structured push only | one spec vs. push + raw + decoders | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint. Raw by-value → deferred SPEC-013; framework decoding → killed. |
+| Scope = one spec (push + raw-content story) | multiple specs vs. one | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint plus a small raw-by-value story. Framework decoding → rejected. |
 | JSON Schema IDL | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema`. |
 | Framework writes; plugins share the write method | plugin `process_structured` hook vs. framework write + toolkit | A pushed record is already refined; the framework writes it. One canonical `write_record` (framework + plugins) prevents write-sprawl. |
+| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated against the published schema for free; the endpoint carries no validation logic. Enforcement opt-in per record type (backward-compat). |
+| Raw content by-value = one story here | separate SPEC-013 vs. a story in this spec | Inline bytes vs. a URL is a few lines on the existing raw path; it doesn't earn a spec. SPEC-013 retired. |
 | Declarative `embed_source` | plugin embed hook vs. declared source | Lets the framework write directly; covers the common case; complex embedding is future. |
 | Route by `record_type` | `semantic_type` vs. `record_type` | The caller sends the refined output; `semantic_type` fan-out is a raw-path concern. |
 | `metadata` 1:1 with payload | spread vs. sub-document | Contract = payload = `metadata`; envelope on the record; clean Mongo shape. |
@@ -188,8 +199,9 @@ Provisional (stories/ACs to follow).
 - `RecordTypeSpec.submittable` + `embed_source`; registration guard (no envelope fields in a submittable schema).
 - Registry: `get_submittable_spec(record_type)` + single-declarer uniqueness.
 
-### Task 2: Canonical write path (toolkit)
-- `toolkit.write_record(...)` — embedding (from `embed_source`), content_hash, reliability ladder (SPEC-007), idempotency (SPEC-004/005), `save_payload`/`update_payload`.
+### Task 2: Canonical write path (toolkit) — with built-in validation
+- `toolkit.write_record(...)` — **validation first** (`validate_record` against the enforced schema; reject on failure), then embedding (from `embed_source`), content_hash, reliability ladder (SPEC-007), idempotency (SPEC-004/005), `save_payload`/`update_payload`.
+- `validate_record(payload, schema)` via `jsonschema`.
 
 ### Task 3: `submit_structured` tool + pipeline entry
 - `IngestionPipeline.ingest_structured(...)` (validate → context → write → emit event).
@@ -202,7 +214,11 @@ Provisional (stories/ACs to follow).
 ### Task 5: Reference submittable plugin (test/example)
 - A minimal plugin declaring a submittable record type + JSON Schema, exercising `submit_structured` end-to-end (pass + reject), independent of the Service Profile work.
 
-### Task 6: Documentation
+### Task 6: Raw content by-value (folded-in story)
+- Extend the `ingest_documents` item shape to `{uri, content?, media_type?}`; use inline `content` when present (no fetch), require `media_type` with it, keep `uri` as identity.
+- Thread inline content through the bundle so plugins receive it; decoding stays in-plugin.
+
+### Task 7: Documentation
 - Plugin developer guide (submittable record types, `write_record` toolkit, embed_source, metadata 1:1, field-naming, the three-type vocabulary).
 - System overview + ingestion diagrams; fix `record_type`/`semantic_type` conflation.
 - Author proposed **ADR-011** (structured ingestion contracts; JSON Schema IDL; framework write + toolkit; metadata 1:1; three-type clarification).

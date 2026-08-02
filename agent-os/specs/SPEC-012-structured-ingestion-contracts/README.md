@@ -25,6 +25,8 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 - **`submit_structured(record_type, payload, uri, reliability_hint?, tenant_id?)`** MCP tool — validated push of one pre-refined record.
 - **Opt-in enforcement per record type**: `RecordTypeSpec.submittable` makes its `schema` (a JSON Schema) the enforced caller contract. The schema describes the **payload = `metadata` sub-document** only; envelope fields are rejected by a registration guard.
 - **Framework writes** the validated record via a **canonical `write_record` toolkit method** shared by the framework and plugins (prevents write-sprawl). It owns embedding (from a declared `embed_source`), content-hash, the reliability ladder, and idempotency.
+- **Validation lives *inside* `write_record`** — a single choke point. So the external push *and* any plugin refining its own output are both validated against the record type's published schema for free; the endpoint carries no validation logic. Enforcement is opt-in per record type (legacy advisory schemas write unvalidated).
+- **Raw content by-value (one story)**: `ingest_documents` items may carry `{uri, content, media_type}` so a caller can supply bytes inline instead of a URL — a few lines on the existing raw path. Decoding stays in the plugin (standard Python libs); no framework decoder.
 - **`metadata` 1:1 with the payload**; envelope fields (`uri`, `id`, …) live on the containing record. JSON Schema is MongoDB-portable (`$jsonSchema`) for enforcement at scale.
 - **Reliability seeding passthrough** (SPEC-007): `reliability_hint` is the top rung of the three-layer ladder, seeding `usage_score` so high-confidence facts rank up immediately.
 - **Notify subscribers via the existing observer layer** — emit `IngestionEvent(record_type=…)`; `EventFilter.record_types` already fires the right observers. No new subscription mechanism.
@@ -34,8 +36,7 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 
 **Out of scope:**
 
-- **Raw content by-value ingestion** (pushing bytes inline instead of a URI) → **deferred SPEC-013**.
-- **Framework-owned decoding / an intermediate format / a decode library** → **not built.** Decoding stays in plugins using standard Python libraries.
+- **Framework-owned decoding / an intermediate representation / a decode library** → **rejected, not built.** There is no universal IR (JSON=dict, XML=tree, markdown=AST), and a framework decoder is either a valueless wrapper over an existing library or a smuggled-in intermediate format. Decode *and* interpret both stay in plugins, using standard Python libraries; the framework only delivers bytes and routes.
 - **A plugin write-hook (`process_structured`)** → replaced by framework-writes + the shared `write_record` toolkit.
 - **Push → parent/segment fan-out** → a pushed record is one stored record (v1).
 - **Curation / validation-gate semantics** (the Curator) and **Meta-Plugin authoring** → separate milestones.
@@ -62,7 +63,8 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 
 | Decision | Options Considered | Rationale |
 |----------|-------------------|-----------|
-| Scope = structured push only | one spec vs. push + raw + decoders | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint. Raw by-value → deferred SPEC-013; framework decoding → killed. |
+| Scope = one spec (push + raw-content story) | multiple specs vs. one | Routing/storage/observers/seeding already exist; the milestone is a validated write endpoint plus a small raw-by-value story. Framework decoding → rejected. |
+| Validation lives inside `write_record` | validate in the endpoint vs. in the write method | Single choke point → external push AND plugin writes both validated for free; endpoint carries no validation logic. Opt-in per record type. |
 | **JSON Schema as the IDL** | Protobuf vs. Pydantic vs. JSON Schema | JSON-native end to end; rich constraints in one lib; Mongo-native `$jsonSchema` at scale. |
 | **Framework writes; plugins share `write_record`** | plugin `process_structured` hook vs. framework write + toolkit | A pushed record is already refined. One canonical write method (framework + plugins) prevents sprawl and stays evolvable. |
 | Declarative `embed_source` | plugin embed hook vs. declared source | Lets the framework write directly; common case covered; complex embedding is future. |
@@ -76,6 +78,6 @@ The driver is the **Service Profile Plugin** (Phase 4): rather than build a plug
 
 > Stories, acceptance criteria, and BDD scaffolding are **deferred** to a follow-up pass. A provisional breakdown is in `design.md` → Execution Plan.
 
-## Relationship to SPEC-013
+## Note: SPEC-013 retired
 
-Independent. **SPEC-013 (deferred)** covers *raw* content by-value ingestion (bytes inline instead of a URI, routed by `semantic_type`, decoded by plugins). This spec covers *refined-record* push only. Neither depends on the other.
+There is no SPEC-013. Its two candidate ideas resolved into this spec: raw content by-value became **one story here**, and the framework-owned decoder subsystem was **rejected** (see Out of scope). The `record_type`/`semantic_type` conflation from the earlier drafts is corrected throughout.
