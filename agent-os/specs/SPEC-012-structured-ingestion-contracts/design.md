@@ -32,7 +32,7 @@ caller → submit_structured(records=[{record_type, payload, uri, reliability_hi
                reliability_hint=reliability_hint, context=ctx)
                #  -> validate_record(payload, spec.schema)  # ALWAYS; per-record REJECT on failure, nothing written
                #  -> embed (from embed_source) + content_hash + reliability ladder + idempotent save_payload
-         4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=spec.semantic_types)
+         4. emit IngestionEvent(record_type=..., doc_ids=[doc_id], semantic_types=[])   # pushed records carry no input semantic_type
        5. existing observer Phase 2 fires subscribers (EventFilter.record_types)  # UNCHANGED
        → return per-record results (written doc_id | validation errors)
 ```
@@ -199,7 +199,7 @@ Rules: (1) `snake_case` payload keys; (2) 1:1, no aliasing — a schema property
 | Batch endpoint (per-record results) | single record vs. batch | `ingest_documents` already batches (array of `uris`), so `submit_structured` matches it. Strict per record, best-effort across the batch; a single record is a one-element list. |
 | Best-effort batch, no rollback | all-or-nothing vs. per-record | A sibling's failure never unwrites a valid record — matches `ingest_documents`' best-effort nature and is more useful than failing a 500-record batch on one bad row. |
 | Empty batch is an error | accept empty (no-op) vs. reject | At least one record required, mirroring `ingest_documents` (`ingestion_plugin.py:57`). |
-| No `semantic_types` param on the tool | keep vs. drop | Not routing here; observer labels come from the declarer's `semantic_type`. |
+| No `semantic_types` param on the tool | keep vs. drop | Not routing here (routing is by `record_type`). Pushed events carry `semantic_types=[]` — a pushed record has no input `semantic_type`; observers filter these by `record_type`. (If a semantic label on pushed events is ever wanted, it's a `RecordTypeSpec`-shape change, out of scope here.) |
 | Keep `reliability_hint` | drop vs. keep | Thin passthrough to SPEC-007; enables confidence-tiering the Service Profile needs. |
 | Single submittable declarer per record_type | multi vs. single | Unambiguous schema/write owner; caught at registration. |
 

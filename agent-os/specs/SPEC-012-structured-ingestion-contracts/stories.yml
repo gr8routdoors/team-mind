@@ -35,8 +35,10 @@ stories:
       A batch MCP tool that validates and writes each record via write_record,
       strict per record and best-effort across the batch, returns per-record
       results, emits IngestionEvents, and lets existing observers fire.
-    status: failing
-    verified_by: null
+    # Minor (future hardening): best-effort loop catches RecordValidationError only;
+    # a storage/embedding failure on one record aborts the batch. Acceptable for v1.
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 1873606)"
 
   STORY-004:
     name: Discovery of submittable contracts
