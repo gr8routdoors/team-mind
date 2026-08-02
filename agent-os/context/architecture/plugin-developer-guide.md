@@ -8,7 +8,7 @@ When you build a plugin, you own:
 
 1. **Your record types** — You declare what types of documents your plugin produces (e.g., `user_interest`, `trip_review`, `code_signature`). These are namespaced to your plugin automatically (`your_plugin:your_record_type`), so you'll never collide with other plugins.
 
-2. **Your metadata schema** — The `metadata` JSON column is yours. Store whatever structure you need per document — free-form fields, nested objects, arrays. You declare an advisory schema so other plugins can understand your data, but it's your design.
+2. **Your metadata schema** — The `metadata` JSON column is yours. Store whatever structure you need per document — free-form fields, nested objects, arrays. You declare a **JSON Schema** describing this payload; it is your design, but as of SPEC-012 it is **mandatory and enforced on every write** (see [Record Type Schemas Are Mandatory and Enforced](#record-type-schemas-are-mandatory-and-enforced)).
 
 3. **Your storage mode per document** — For each document you ingest, you choose:
    - **Pointer mode**: Store a URI reference. The content lives externally (file, URL, API) and is fetched live on demand. Best for stable, long-lived sources.
@@ -76,10 +76,17 @@ class MyPlugin(ToolProvider):
             RecordTypeSpec(
                 name="my_data_type",
                 description="What this document type represents.",
+                # A JSON Schema describing the metadata payload 1:1. Mandatory
+                # and enforced on every write (SPEC-012). Envelope fields
+                # (uri, id, plugin, ...) must NOT appear here.
                 schema={
-                    "field_a": {"type": "string", "description": "..."},
-                    "field_b": {"type": "integer", "description": "..."},
-                }
+                    "type": "object",
+                    "properties": {
+                        "field_a": {"type": "string", "description": "..."},
+                        "field_b": {"type": "integer", "description": "..."},
+                    },
+                    "required": ["field_a"],
+                },
             )
         ]
 
@@ -126,7 +133,11 @@ class MyIngestionPlugin(IngestProcessor):
             RecordTypeSpec(
                 name="processed_item",
                 description="An item extracted during ingestion.",
-                schema={"content": {"type": "string"}}
+                schema={
+                    "type": "object",
+                    "properties": {"content": {"type": "string"}},
+                    "required": ["content"],
+                },
             )
         ]
 
@@ -200,11 +211,12 @@ class AuditPlugin(IngestObserver):
 ```python
 @dataclass
 class IngestionEvent:
-    plugin: str          # Which processor wrote the data
-    record_type: str     # What record type was written
-    uris: list[str]      # Which source URIs were processed
-    doc_ids: list[int]   # IDs of the document rows created
-    tenant_id: str       # Which tenant shard was written to (default: "default")
+    plugin: str                 # Which processor wrote the data
+    record_type: str            # What record type was written
+    uris: list[str]             # Which source URIs were processed
+    doc_ids: list[int]          # IDs of the document rows created
+    semantic_types: list[str]   # Input semantic types (empty for structured push)
+    tenant_id: str              # Which tenant shard was written to (default: "default")
 ```
 
 ### Combining interfaces
@@ -261,7 +273,7 @@ The `documents` table is shared, but your data is yours:
 **Key points:**
 - The `plugin` column is always set to your plugin's `name` property. This is automatic ownership.
 - The `record_type` column is whatever you declared in your `record_types` property. One plugin can have multiple record types.
-- The `metadata` column is a JSON blob — you define its shape. Your record type's `schema` tells others what to expect, but it's not enforced (advisory only).
+- The `metadata` column is a JSON blob — you define its shape. Your record type's `schema` is a JSON Schema that both tells others what to expect **and is enforced on every write** (SPEC-012): a payload that fails it is rejected and nothing is stored. The `metadata` you store is exactly the validated payload, 1:1.
 - The `uri` column identifies the source. For embedded content, it can be any identifier you choose (e.g., `user://preferences/hiking`).
 
 ## Querying Data (Yours or Other Plugins')
@@ -328,6 +340,172 @@ SPEC-008 (ADR-007) introduces three distinct type concepts. If you're building a
 | **Record type** | "What did the plugin *produce*?" | Plugin, at write time | `markdown_chunk`, `code_signature` |
 
 Previously called `doctype`, record type is the plugin-scoped output concept. Semantic type and media type are new columns on `documents` added in SPEC-008.
+
+Keep these distinct when you author record types. **`record_type` is not `semantic_type`.** A `semantic_type` labels what raw *input* means and can fan out to many record types (`meeting` → `meeting_metrics` + `architecture_strawman`). A `record_type` is what your plugin *produced*. The structured-push path below routes purely by `record_type` — the caller has already refined the input, so there is no input-semantic fan-out to resolve.
+
+## Record Type Schemas Are Mandatory and Enforced
+
+As of SPEC-012 (ADR-011), a record type's `schema` is no longer advisory. Two rules now hold for **every** record type you declare — submittable or not:
+
+1. **The schema is mandatory.** It must be a **non-empty JSON Schema** (`{"type": "object", "properties": {...}}`). Registration rejects a plugin whose record type has a missing or empty schema.
+2. **It is enforced on every write.** Every write goes through the canonical `write_record` path (below), which validates the payload against the schema and **rejects it — writing nothing — on failure**. This holds for external pushes *and* for a plugin writing its own refined output.
+
+The schema describes the **`metadata` sub-document (the payload) 1:1** — nothing else. Envelope fields live on the containing record and **must not** appear as schema properties:
+
+```python
+# Envelope fields (framework-owned, on the record — NOT in your payload schema):
+#   id, uri, plugin, content_hash, vector, tenant
+#   (also record_type, plugin_version, semantic_type, media_type, parent_id)
+```
+
+For `submittable` record types the registration guard actively rejects a schema that declares any of `{id, uri, plugin, content_hash, vector, tenant}` as a property, and rejects a second plugin declaring the same submittable record type (one declarer per submittable `record_type`).
+
+**Payload field naming:** use `snake_case`, 1:1 with the stored key (no aliasing), and never flatten — the payload stays nested under `metadata`. Because storage and queries are by name, **renaming a payload field is storage-breaking** (it orphans existing rows and stored queries); adding a field is safe.
+
+## The Canonical Write Path: `write_record`
+
+All record writes go through one toolkit method, `team_mind_mcp.toolkit.write_record`. The framework uses it on the structured-push path, and your plugin should use it on the raw path so your writes are validated like everything else. It owns validation, embedding, hashing, reliability seeding, and idempotency in one place:
+
+```python
+from team_mind_mcp.toolkit import write_record, RecordValidationError
+
+# spec is the RecordTypeSpec for this record_type (yours, or resolved by the framework)
+try:
+    doc_id = write_record(
+        bundle.storage,                 # the per-tenant StorageAdapter
+        "processed_item",               # record_type (routing / ownership key)
+        {"content": "..."},             # payload — stored 1:1 as metadata
+        uri,                            # identity key (idempotency / updates)
+        bundle.tenant_id,
+        spec=spec,                      # keyword-only from here on
+        reliability_hint=bundle.reliability_hint,  # top rung of the SPEC-007 ladder
+        context=bundle.contexts.get(uri),          # insert vs. update-in-place
+        parent_id=parent_id,            # optional — link a segment to its parent
+        semantic_type=",".join(bundle.semantic_types),  # envelope fields, raw path only
+        media_type=media_type,
+        plugin_version=self.version,
+    )
+except RecordValidationError as exc:
+    # Payload failed the record type's JSON Schema — nothing was written.
+    # exc.errors is a list of structured "<path>: <message>" strings.
+    ...
+```
+
+What `write_record` does, in order: **(1) validate** the payload against `spec.schema` (reject on failure, write nothing); **(2) embed** the text at `spec.embed_source` if declared, else store no vector; **(3) content_hash** the payload; **(4) seed reliability** via the SPEC-007 ladder (`reliability_hint` → `spec.default_reliability` → `0.0`); **(5) idempotency** — insert a new row or update the existing one in place (preserving its `doc_id` and weight) based on `context`; **(6) store** the payload 1:1 as `metadata`. It returns the `doc_id`.
+
+> Parents are the one exception: a SPEC-011 parent (via `save_parent`) has no vector and no weight row, so it is not written through `write_record`. Validate the parent payload explicitly with `validate_record(payload, spec.schema)` (as MarkdownPlugin does), then call `save_parent`. Segments go through `write_record` as normal.
+
+## Declaring an Embed Source
+
+A record type declares which payload field(s) to vectorize via `embed_source`, a list of dotted field paths. `write_record` concatenates the text at those paths and embeds it:
+
+```python
+RecordTypeSpec(
+    name="markdown_chunk",
+    description="A paragraph-level chunk extracted from a markdown document.",
+    schema={
+        "type": "object",
+        "properties": {"chunk": {"type": "string"}},
+        "required": ["chunk"],
+    },
+    embed_source=["chunk"],          # vectorize payload["chunk"]; record is vector-searchable
+)
+```
+
+- `embed_source` set → the record gets a vector and is findable via `semantic_search`.
+- `embed_source` omitted (`None`) → no vector; the record is metadata-only, still findable via SPEC-010 metadata search.
+
+## Authoring a Submittable Record Type (Structured Push)
+
+`submittable` opens a record type to **external push** via the `submit_structured` MCP tool — a caller (an AI agent in its own harness, or a deterministic tool) that has *already refined* a record hands you the finished instance, and the framework validates and writes it. This is a **separate axis from validation**: `submittable=True` only controls external-push exposure; it does *not* change whether validation happens (every record type is validated regardless).
+
+Declare one on a `ToolProvider` or `IngestProcessor` plugin:
+
+```python
+RecordTypeSpec(
+    name="service_profile",
+    description="A refined profile of a service, pushed by an external agent.",
+    schema={                              # MANDATORY — describes the metadata payload only
+        "type": "object",
+        "properties": {
+            "service_name": {"type": "string"},
+            "language":     {"type": "string"},
+            "summary":      {"type": "string"},
+        },
+        "required": ["service_name"],
+    },
+    submittable=True,                     # exposes it to submit_structured
+    embed_source=["summary"],             # optional — vectorize the summary
+    default_reliability=0.8,              # optional — middle rung of the SPEC-007 ladder
+)
+```
+
+Registration enforces: a non-empty schema, **no envelope fields** in the schema, and a **single submittable declarer** for the name. There is **no `semantic_types` field** on `RecordTypeSpec` — pushed routing is by `record_type` alone.
+
+### What `submit_structured` accepts
+
+```json
+{
+  "tool": "submit_structured",
+  "arguments": {
+    "records": [
+      {
+        "record_type": "service_profile",
+        "payload": {"service_name": "billing", "language": "python", "summary": "..."},
+        "uri": "service://billing",
+        "reliability_hint": 0.9
+      }
+    ],
+    "tenant_id": "default"
+  }
+}
+```
+
+- **Batch, matching `ingest_documents`.** Each record `{record_type, payload, uri, reliability_hint?}` is validated and written **independently**. A single record is a one-element list.
+- **`payload`** is validated against the record type's schema and stored 1:1 as `metadata`. **`uri`** is the identity key for idempotency and updates. **`reliability_hint`** is optional (top of the SPEC-007 ladder).
+- **Strict per record, best-effort across the batch.** An invalid or not-submittable record returns its errors and writes nothing; valid siblings still land. There is no all-or-nothing rollback.
+- **An empty `records` list is an error** (at least one record required).
+
+The response is a per-record result list — `{"uri", "record_type", "status": "written", "doc_id"}` on success, or `{..., "status": "error", "errors": [...]}` on rejection.
+
+### Observers fire on pushed records too
+
+A successful push emits an `IngestionEvent(record_type=…, doc_ids=[…], semantic_types=[])` and runs the same Phase-2 observer broadcast as the raw path. Observers subscribed by `record_type` (or plugin) fire normally. **Pushed events carry `semantic_types=[]`** — a pushed record has no input `semantic_type` — so subscribe by `record_type` if you want to react to pushes.
+
+## Raw Content by Value (Inline `ingest_documents`)
+
+`ingest_documents` accepts documents **by value** as well as by reference. Alongside `uris` (fetched by reference), you may pass a `documents` array whose items carry inline content:
+
+```json
+{
+  "tool": "ingest_documents",
+  "arguments": {
+    "documents": [
+      {
+        "uri": "mem://note/42",
+        "content": "# Inline markdown\n\nSupplied directly, not fetched.",
+        "media_type": "text/markdown"
+      }
+    ],
+    "semantic_types": ["architecture_docs"]
+  }
+}
+```
+
+- When `content` is present the pipeline uses it directly — **no fetch** — and `media_type` is **required** (an inline URI has no extension to infer from). The `uri` is still the identity key.
+- Omit `content` and the item is fetched by reference as before.
+- Inline content is threaded to your processor via `bundle.contents[uri]` (and the declared media type via `bundle.declared_media_types[uri]`). **Decoding stays in your plugin** — there is no framework decoder or intermediate representation; use standard Python libraries.
+
+```python
+async def process_bundle(self, bundle):
+    for uri in bundle.uris:
+        if uri in bundle.contents:
+            content = bundle.contents[uri]        # supplied inline — no fetch
+        else:
+            content = self._fetch(uri)            # by reference
+        media_type = bundle.declared_media_types.get(uri) or get_media_type(uri)
+        ...
+```
 
 ## Available vs Enabled: Activation Model
 
@@ -455,7 +633,11 @@ class MyPlugin(IngestProcessor):
             RecordTypeSpec(
                 name="my_record_type",
                 description="A record produced by my plugin.",
-                schema={"content": {"type": "string"}},
+                schema={
+                    "type": "object",
+                    "properties": {"content": {"type": "string"}},
+                    "required": ["content"],
+                },
                 default_reliability=0.7,  # Layer 2: plugin-declared default
             )
         ]
@@ -835,18 +1017,28 @@ AI clients can call the `list_record_types` MCP tool to discover what's availabl
     "plugin": "travel_plugin",
     "name": "interest",
     "description": "A user's stated travel interest or preference.",
-    "schema": {"category": {"type": "string"}, "sentiment": {"type": "string"}}
+    "schema": {
+      "type": "object",
+      "properties": {"category": {"type": "string"}, "sentiment": {"type": "string"}},
+      "required": ["category"]
+    },
+    "submittable": false
   },
   {
     "plugin": "travel_plugin",
     "name": "dest_info",
     "description": "Information about a travel destination.",
-    "schema": {"name": {"type": "string"}, "region": {"type": "string"}}
+    "schema": {
+      "type": "object",
+      "properties": {"name": {"type": "string"}, "region": {"type": "string"}},
+      "required": ["name"]
+    },
+    "submittable": true
   }
 ]
 ```
 
-This makes the knowledge base self-describing. An AI agent can ask "what data exists?" and adapt its queries.
+This makes the knowledge base self-describing. An AI agent can ask "what data exists?" and adapt its queries. Each entry carries its full JSON Schema and a `submittable` flag — a caller reads the schema of a `submittable` record type to know exactly what payload `submit_structured` will accept (see [Authoring a Submittable Record Type](#authoring-a-submittable-record-type-structured-push)).
 
 ## Reference
 
@@ -869,4 +1061,6 @@ This makes the knowledge base self-describing. An AI agent can ask "what data ex
 | [ADR-009: Document Segments](ADRs/ADR-009-document-segments.md) | Parent-child hierarchy, segment model, aggregate scoring, `save_parent` |
 | [ADR-010: Tenant Sharding](ADRs/ADR-010-tenant-sharding.md) | File-level sharding, TenantStorageManager, scatter-gather, KNN correctness rationale |
 | [SPEC-010: Multi-Tenancy & Metadata Search](../../specs/SPEC-010-multi-tenancy-metadata-search/design.md) | Implementation details: TenantStorageManager, per-tenant lifecycle, ingestion routing, metadata filters |
+| [ADR-011: Structured Ingestion Contracts](ADRs/ADR-011-structured-ingestion-contracts.md) | JSON Schema IDL, canonical `write_record`, mandatory schemas, `submit_structured`, `metadata` 1:1, raw content by value |
+| [SPEC-012: Structured Ingestion Contracts](../../specs/SPEC-012-structured-ingestion-contracts/design.md) | Validated push endpoint, `write_record` toolkit, `submittable`/`embed_source`, batch semantics, MarkdownPlugin compliance |
 | [System Overview](system-overview.md) | High-level architecture and design philosophy, including tenant sharding diagrams |
