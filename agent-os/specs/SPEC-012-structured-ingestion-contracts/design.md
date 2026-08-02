@@ -59,7 +59,7 @@ def write_record(
     """
 ```
 
-**Validation is universal, for free.** Because `write_record` is the one write path, *every* record — pushed externally via `submit_structured` **or** written by a plugin refining raw input — is validated against its record type's published schema. Plugins can't write garbage into an enforced record type, and the external endpoint needs no validation logic of its own. Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable, self-validating write contract.
+**Validation is universal, for free.** Because `write_record` is the one write path, *every* record — pushed externally via `submit_structured` **or** written by a plugin refining raw input — is validated against its record type's published schema. Every record type has an enforced schema, so no path can write garbage, and the external endpoint needs no validation logic of its own. Both the framework (push) and any plugin (raw/meta) call `write_record` — a single, evolvable, self-validating write contract.
 
 **Enforcement is mandatory — no opt-out.** Every record type declares a JSON Schema and every write is validated. We are pre-release with no published plugins, so there is no legacy to grandfather; and MongoDB's `$jsonSchema` will enforce at the store anyway, so enforcing at the framework now avoids a jarring change for future adopters. Registration **rejects a record type with a missing or empty schema**. The existing MarkdownPlugin is brought into compliance as part of this spec (real schemas; `metadata` aligned to payload-only). `submittable` is a *separate* axis — it controls only external push exposure, not whether validation happens.
 
@@ -116,8 +116,8 @@ class RecordTypeSpec:
 ### Validator (new)
 
 ```python
-def validate_record(payload: dict, schema: dict) -> ValidationResult:
-    """jsonschema.validate(payload, schema); collect structured errors."""
+def validate_record(payload: dict, schema: dict) -> list[str]:
+    """Validate payload against a JSON Schema; return [] if valid, else structured error strings."""
 ```
 
 A single function, called **inside `write_record`** — not a separate pipeline step and not a multi-dialect registry. (A `PayloadValidator` seam is unnecessary ceremony at this scope; JSON Schema is the IDL.)
@@ -139,7 +139,7 @@ The resolved value is `save_payload(initial_score=...)`, seeding `doc_weights.us
 - **Envelope fields** — `uri`, `id`, `record_type`, `plugin`, `content_hash`, `plugin_version`, `semantic_type`, `media_type`, `parent_id` (+ vector, weights) — live on the **containing record** (columns today, Mongo top-level fields later).
 - **`metadata`** is the **sub-document**, stored **1:1 with the validated payload** (`json.dumps` into the `metadata` column; a nested sub-document in Mongo).
 
-A submittable record type's **JSON Schema describes exactly the `metadata` sub-document**. At Mongo scale `$jsonSchema` can enforce it directly. No storage-schema change; the only binary in the store remains the embedding vector.
+A record type's **JSON Schema describes exactly the `metadata` sub-document**. At Mongo scale `$jsonSchema` can enforce it directly. No storage-schema change; the only binary in the store remains the embedding vector.
 
 ## Field Naming & Namespacing
 
