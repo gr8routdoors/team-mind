@@ -45,8 +45,8 @@ stories:
     description: >
       list_record_types surfaces every record type with its schema and flags
       which are submittable, so external callers know what they may push.
-    status: failing
-    verified_by: null
+    status: passing
+    verified_by: "2026-08-02 spec-compliance + code-quality review (commit 14bf9ba)"
 
   STORY-005:
     name: MarkdownPlugin compliance
