@@ -100,9 +100,9 @@ specs:
   SPEC-012:
     name: Structured Ingestion Contracts
     slug: structured-ingestion-contracts
-    status: in_design
+    status: complete
     created: 2026-08-01
     stories: 7
-    stories_complete: 0
+    stories_complete: 7
 
 # Next spec number: 013

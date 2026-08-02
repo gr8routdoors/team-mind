@@ -87,5 +87,20 @@ verification:
     - submit_structured rejects invalid records per-record while writing valid ones
     - No unvalidated write path exists (every write goes through write_record)
     - Code review approved
-  completed: false
-  completed_date: null
+  completed: true
+  completed_date: 2026-08-02
+  evidence: >
+    490 tests pass; ruff clean on all SPEC-012 source. Each of STORY-001..007
+    cleared independent spec-compliance + code-quality review; a final holistic
+    review confirmed end-to-end integration and the single-write-path invariant
+    (only the deliberate SPEC-011 parent uses save_parent, preceded by
+    validate_record). Plugin developer guide migrated fully to write_record.
+  known_followups:
+    - "Guard hardening (minor edge): intra-batch duplicate-submittable name not
+       caught; missing-schema/envelope errors don't name the plugin."
+    - "ingest_structured best-effort catches only RecordValidationError; a
+       storage/embedding failure aborts the remaining batch."
+    - "write_record tenant_id param is unused (adapter is tenant-scoped)."
+    - "markdown process_bundle mutates a transient spec's .plugin instead of an
+       explicit plugin= arg."
+    - "AC-002 (raw by-value) rejects the whole call rather than per-item."
