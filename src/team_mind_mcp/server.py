@@ -10,7 +10,14 @@ from abc import ABC, abstractmethod
 
 @dataclass
 class RecordTypeSpec:
-    """Declares a document type that a plugin produces, with an advisory schema."""
+    """Declares a document type that a plugin produces.
+
+    The ``schema`` is a JSON Schema describing the ``metadata`` sub-document
+    (the payload) 1:1. For ``submittable`` record types it is mandatory and
+    enforced by :meth:`PluginRegistry.register` (SPEC-012). It must describe the
+    payload only — envelope fields (see :data:`ENVELOPE_FIELDS`) live on the
+    containing record and must not appear as schema properties.
+    """
 
     name: str
     description: str
@@ -18,6 +25,17 @@ class RecordTypeSpec:
     plugin: str = ""
     decay_half_life_days: float | None = None
     default_reliability: float | None = None
+    submittable: bool = False
+    embed_source: list[str] | None = None
+
+
+# Envelope fields live on the containing record (columns today, Mongo top-level
+# fields later), never inside a record type's payload schema. A submittable
+# record type declaring any of these as a JSON Schema property is rejected at
+# registration (SPEC-012 STORY-001).
+ENVELOPE_FIELDS: frozenset[str] = frozenset(
+    {"id", "uri", "plugin", "content_hash", "vector", "tenant"}
+)
 
 
 class ToolProvider(ABC):
@@ -125,9 +143,69 @@ class PluginRegistry:
         self._record_type_catalog: List[RecordTypeSpec] = []
         self._record_types_by_plugin: Dict[str, List[RecordTypeSpec]] = {}
         self._processor_semantic_types: Dict[str, list[str] | None] = {}
+        self._submittable_specs: Dict[str, RecordTypeSpec] = {}
+
+    def _guard_record_types(
+        self, record_types: List[RecordTypeSpec], plugin_name: str
+    ) -> None:
+        """Validate a plugin's record types before any registration mutation.
+
+        Runs before the registry mutates any state so a rejected plugin is not
+        partially registered (SPEC-012 STORY-001).
+
+        For each ``submittable`` record type this enforces:
+          - a non-empty JSON Schema (missing/empty schema is rejected);
+          - no envelope field declared as a schema property; and
+          - a single submittable declarer per ``record_type`` name.
+
+        Note: the mandatory-schema and envelope-field guards are scoped to
+        ``submittable`` record types for now. SPEC-012 STORY-005 (MarkdownPlugin
+        compliance) will give the existing non-submittable types real schemas
+        and can then extend these guards to *all* record types.
+
+        Raises:
+            ValueError: if any record type violates a guard.
+        """
+        for spec in record_types:
+            if not spec.submittable:
+                continue
+
+            if not spec.schema:
+                raise ValueError(
+                    f"Record type '{spec.name}' is submittable but declares no "
+                    "schema: a non-empty JSON Schema is required for every "
+                    "submittable record type."
+                )
+
+            declared = set((spec.schema.get("properties") or {}).keys())
+            envelope_conflicts = sorted(declared & ENVELOPE_FIELDS)
+            if envelope_conflicts:
+                raise ValueError(
+                    f"Record type '{spec.name}' schema declares envelope "
+                    f"field(s) {envelope_conflicts}: envelope fields "
+                    f"{sorted(ENVELOPE_FIELDS)} belong on the record, not in "
+                    "the payload schema."
+                )
+
+            existing = self._submittable_specs.get(spec.name)
+            if existing is not None:
+                raise ValueError(
+                    f"Submittable record type collision: '{spec.name}' is "
+                    f"already declared as submittable by plugin "
+                    f"'{existing.plugin}'."
+                )
 
     def register(self, plugin: Any, semantic_types: list[str] | None = None) -> None:
         """Register a new plugin (Tools, Processors, Observers, or any combination)."""
+        # Validate declared record types up front so a rejected plugin leaves no
+        # partial state behind (SPEC-012 STORY-001).
+        declared_record_types = (
+            plugin.record_types
+            if isinstance(plugin, (ToolProvider, IngestProcessor))
+            else []
+        )
+        self._guard_record_types(declared_record_types, plugin.name)
+
         if isinstance(plugin, ToolProvider):
             self._tool_providers[plugin.name] = plugin
             for tool in plugin.get_tools():
@@ -152,6 +230,9 @@ class PluginRegistry:
                 for dt in plugin_record_types:
                     dt.plugin = plugin.name
                     stamped.append(dt)
+                    if dt.submittable:
+                        # Uniqueness already checked in _guard_record_types.
+                        self._submittable_specs[dt.name] = dt
                 self._record_type_catalog.extend(stamped)
                 self._record_types_by_plugin[plugin.name] = stamped
 
@@ -176,6 +257,11 @@ class PluginRegistry:
         ]
         self._record_types_by_plugin.pop(plugin_name, None)
         self._processor_semantic_types.pop(plugin_name, None)
+        self._submittable_specs = {
+            name: spec
+            for name, spec in self._submittable_specs.items()
+            if spec.plugin != plugin_name
+        }
 
         return removed_tools
 
@@ -232,6 +318,18 @@ class PluginRegistry:
         return [
             dt.plugin for dt in self._record_type_catalog if dt.name == record_type_name
         ]
+
+    def get_submittable_spec(self, record_type: str) -> RecordTypeSpec | None:
+        """Return the sole submittable declarer's spec for a record type.
+
+        Args:
+            record_type: The record type name to look up.
+
+        Returns:
+            The single submittable ``RecordTypeSpec`` for that name, or ``None``
+            if no submittable declarer is registered.
+        """
+        return self._submittable_specs.get(record_type)
 
 
 class MCPGateway:
