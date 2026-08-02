@@ -40,7 +40,7 @@ SPEC-012 ships the *seam* plus the two trivial decoders it needs (JSON, text). I
 
 **References:**
 
-- `agent-os/specs/SPEC-012-structured-ingestion-contracts/design.md` — the decode seam and `ValidatorRegistry` this spec generalizes; the decode-vs-interpret razor.
+- `agent-os/specs/SPEC-012-structured-ingestion-contracts/design.md` — the decode seam this spec generalizes, the decode-vs-interpret razor, and the sibling record-schema gate (protobuf + protovalidate) that stays in SPEC-012.
 - `src/team_mind_mcp/media_types.py` — media-type resolution; decoders key off the same media types.
 - `src/team_mind_mcp/markdown.py` — the parsing this spec pulls into a decoder; MarkdownPlugin becomes an *interpreter* of decoded blocks.
 - `src/team_mind_mcp/ingestion.py` — pipeline content path where decoders attach.
